@@ -132,6 +132,11 @@ const featureCategories: FeatureCategory[] = [
         id: "district_population",
         name: "District Population",
         description: "Manage district user assignments"
+      },
+      {
+        id: "district_population_reset",
+        name: "District Population Reset",
+        description: "Reset district population data"
       }
     ]
   },

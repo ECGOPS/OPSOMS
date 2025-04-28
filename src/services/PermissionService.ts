@@ -77,6 +77,7 @@ export class PermissionService {
     'district_population': ['district_engineer', 'global_engineer', 'system_admin'],
     'district_population_update': ['district_engineer', 'global_engineer', 'system_admin'],
     'district_population_delete': ['global_engineer', 'system_admin'],
+    'district_population_reset': ['global_engineer', 'system_admin'],
     
     // System Administration Features
     'system_configuration': ['system_admin'],
@@ -358,6 +359,11 @@ export class PermissionService {
 
   public canManageDistrictPopulation(userRole: UserRole): boolean {
     return userRole === 'district_engineer' || userRole === 'regional_engineer' || userRole === 'global_engineer' || userRole === 'system_admin';
+  }
+
+  public canResetDistrictPopulation(userRole: UserRole | null): boolean {
+    if (!userRole) return false;
+    return this.canAccessFeature(userRole, 'district_population_reset');
   }
 
   public canEditInspection(

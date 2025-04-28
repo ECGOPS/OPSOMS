@@ -196,10 +196,10 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
   
   // Reset specific fault type when fault type changes
   useEffect(() => {
-    if (specificFaultType !== undefined) {
+    if (outageType !== "Unplanned" && outageType !== "Emergency") {
       setSpecificFaultType(undefined);
     }
-  }, [specificFaultType]);
+  }, [outageType]);
   
   // --- State for Materials Used --- 
   const [materialsUsed, setMaterialsUsed] = useState<MaterialUsed[]>([]);
@@ -211,12 +211,92 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
   const getRegionName = (id: string) => regions.find(r => r.id === id)?.name || "Unknown";
   const getDistrictName = (id: string) => districts.find(d => d.id === id)?.name || "Unknown";
 
+  // Add this function to check if district population is set
+  const isDistrictPopulationSet = () => {
+    if (!districtId) return true; // No district selected yet
+    
+    const selectedDistrict = districts.find(d => d.id === districtId);
+    if (!selectedDistrict) return true; // District not found
+    
+    // Check if any population value is set
+    return selectedDistrict.population && 
+           (selectedDistrict.population.rural > 0 || 
+            selectedDistrict.population.urban > 0 || 
+            selectedDistrict.population.metro > 0);
+  };
+
+  // Add this after the district selection dropdown
+  const renderDistrictPopulationWarning = () => {
+    if (!districtId) return null;
+    
+    const selectedDistrict = districts.find(d => d.id === districtId);
+    if (!selectedDistrict) return null;
+    
+    if (!isDistrictPopulationSet()) {
+      return (
+        <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-md text-amber-800 text-sm">
+          <p className="font-medium">Warning: No district population data</p>
+          <p>There is no district population set for {selectedDistrict.name}. Please inform your district engineer before proceeding.</p>
+        </div>
+      );
+    }
+    
+    return null;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     // Check if user has permission to report faults
     if (user && !permissionService.canAccessFeature(user.role, 'fault_reporting')) {
       navigate("/unauthorized");
+      return;
+    }
+
+    // Validate required fields
+    if (!regionId || !districtId) {
+      toast.error("Failed to create OP5 fault: Region and district are required");
+      return;
+    }
+
+    // Check if district population is set
+    if (!isDistrictPopulationSet()) {
+      const selectedDistrict = districts.find(d => d.id === districtId);
+      toast.error(`Failed to create OP5 fault: No district population set for ${selectedDistrict?.name}. Please inform your district engineer.`);
+      return;
+    }
+
+    if (!outageType) {
+      toast.error("Failed to create OP5 fault: Fault type is required");
+      return;
+    }
+
+    if (!faultLocation) {
+      toast.error("Failed to create OP5 fault: Fault location is required");
+      return;
+    }
+
+    if (!occurrenceDate) {
+      toast.error("Failed to create OP5 fault: Occurrence date is required");
+      return;
+    }
+
+    if (!repairDate) {
+      toast.error("Failed to create OP5 fault: Repair date is required");
+      return;
+    }
+
+    // Validate that at least one population type has affected customers
+    if ((!ruralAffected || ruralAffected <= 0) && 
+        (!urbanAffected || urbanAffected <= 0) && 
+        (!metroAffected || metroAffected <= 0)) {
+      toast.error("Failed to create OP5 fault: At least one population type must have affected customers");
+      return;
+    }
+
+    // Validate specific fault type for Unplanned and Emergency faults
+    if ((outageType === "Unplanned" || outageType === "Emergency") && !specificFaultType) {
+      toast.error("Failed to create OP5 fault: Specific fault type is required for " + outageType + " faults");
       return;
     }
     
@@ -429,7 +509,7 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
             </div>
             
             <div className="space-y-3">
-              <Label htmlFor="district" className="text-base font-medium">District</Label>
+              <Label htmlFor="district" className="text-base font-medium">District *</Label>
               <Select 
                 value={districtId} 
                 onValueChange={setDistrictId}
@@ -450,6 +530,7 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
                   }
                 </SelectContent>
               </Select>
+              {renderDistrictPopulationWarning()}
             </div>
           </div>
           
@@ -482,6 +563,66 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
               />
             </div>
           </div>
+          
+          {/* Show specific fault type dropdown when Unplanned or Emergency is selected */}
+          {(outageType === "Unplanned" || outageType === "Emergency") && (
+            <div className="space-y-3">
+              <Label htmlFor="specificFaultType" className="text-base font-medium">Specific Fault Type</Label>
+              <Select 
+                value={specificFaultType} 
+                onValueChange={(value) => setSpecificFaultType(
+                  outageType === "Unplanned" 
+                    ? value as UnplannedFaultType 
+                    : value as EmergencyFaultType
+                )}
+              >
+                <SelectTrigger className="h-12 text-base bg-background/50 border-muted">
+                  <SelectValue placeholder="Select specific fault type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {outageType === "Unplanned" ? (
+                    <>
+                      <SelectItem value="JUMPER CUT">Jumper Cut</SelectItem>
+                      <SelectItem value="CONDUCTOR CUT">Conductor Cut</SelectItem>
+                      <SelectItem value="MERGED CONDUCTOR">Merged Conductor</SelectItem>
+                      <SelectItem value="HV/LV LINE CONTACT">HV/LV Line Contact</SelectItem>
+                      <SelectItem value="VEGETATION">Vegetation</SelectItem>
+                      <SelectItem value="CABLE FAULT">Cable Fault</SelectItem>
+                      <SelectItem value="TERMINATION FAILURE">Termination Failure</SelectItem>
+                      <SelectItem value="BROKEN POLES">Broken Poles</SelectItem>
+                      <SelectItem value="BURNT POLE">Burnt Pole</SelectItem>
+                      <SelectItem value="FAULTY ARRESTER/INSULATOR">Faulty Arrester/Insulator</SelectItem>
+                      <SelectItem value="EQIPMENT FAILURE">Equipment Failure</SelectItem>
+                      <SelectItem value="PUNCTURED CABLE">Punctured Cable</SelectItem>
+                      <SelectItem value="ANIMAL INTERRUPTION">Animal Interruption</SelectItem>
+                      <SelectItem value="BAD WEATHER">Bad Weather</SelectItem>
+                      <SelectItem value="TRANSIENT FAULTS">Transient Faults</SelectItem>
+                    </>
+                  ) : (
+                    <>
+                      <SelectItem value="MEND CABLE">Mend Cable</SelectItem>
+                      <SelectItem value="WORK ON EQUIPMENT">Work on Equipment</SelectItem>
+                      <SelectItem value="FIRE">Fire</SelectItem>
+                      <SelectItem value="IMPROVE HV">Improve HV</SelectItem>
+                      <SelectItem value="JUMPER REPLACEMENT">Jumper Replacement</SelectItem>
+                      <SelectItem value="MEND BROKEN">Mend Broken</SelectItem>
+                      <SelectItem value="MEND JUMPER">Mend Jumper</SelectItem>
+                      <SelectItem value="MEND TERMINATION">Mend Termination</SelectItem>
+                      <SelectItem value="BROKEN POLE">Broken Pole</SelectItem>
+                      <SelectItem value="BURNT POLE">Burnt Pole</SelectItem>
+                      <SelectItem value="ANIMAL CONTACT">Animal Contact</SelectItem>
+                      <SelectItem value="VEGETATION SAFETY">Vegetation Safety</SelectItem>
+                      <SelectItem value="TRANSFER/RESTORE">Transfer/Restore</SelectItem>
+                      <SelectItem value="TROUBLE SHOOTING">Trouble Shooting</SelectItem>
+                      <SelectItem value="MEND LOOSE">Mend Loose</SelectItem>
+                      <SelectItem value="MAINTENANCE">Maintenance</SelectItem>
+                      <SelectItem value="REPLACE FUSE">Replace Fuse</SelectItem>
+                    </>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           
           <div className="space-y-3">
             <Label htmlFor="outageDescription" className="text-base font-medium">Fault Description</Label>
@@ -821,66 +962,6 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
               </div>
             </TabsContent>
           </Tabs>
-          
-          {/* Show specific fault type dropdown when Unplanned or Emergency is selected */}
-          {(outageType === "Unplanned" || outageType === "Emergency") && (
-            <div className="space-y-3">
-              <Label htmlFor="specificFaultType" className="text-base font-medium">Specific Fault Type</Label>
-              <Select 
-                value={specificFaultType} 
-                onValueChange={(value) => setSpecificFaultType(
-                  outageType === "Unplanned" 
-                    ? value as UnplannedFaultType 
-                    : value as EmergencyFaultType
-                )}
-              >
-                <SelectTrigger className="h-12 text-base bg-background/50 border-muted">
-                  <SelectValue placeholder="Select specific fault type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {outageType === "Unplanned" ? (
-                    <>
-                      <SelectItem value="JUMPER CUT">Jumper Cut</SelectItem>
-                      <SelectItem value="CONDUCTOR CUT">Conductor Cut</SelectItem>
-                      <SelectItem value="MERGED CONDUCTOR">Merged Conductor</SelectItem>
-                      <SelectItem value="HV/LV LINE CONTACT">HV/LV Line Contact</SelectItem>
-                      <SelectItem value="VEGETATION">Vegetation</SelectItem>
-                      <SelectItem value="CABLE FAULT">Cable Fault</SelectItem>
-                      <SelectItem value="TERMINATION FAILURE">Termination Failure</SelectItem>
-                      <SelectItem value="BROKEN POLES">Broken Poles</SelectItem>
-                      <SelectItem value="BURNT POLE">Burnt Pole</SelectItem>
-                      <SelectItem value="FAULTY ARRESTER/INSULATOR">Faulty Arrester/Insulator</SelectItem>
-                      <SelectItem value="EQIPMENT FAILURE">Equipment Failure</SelectItem>
-                      <SelectItem value="PUNCTURED CABLE">Punctured Cable</SelectItem>
-                      <SelectItem value="ANIMAL INTERRUPTION">Animal Interruption</SelectItem>
-                      <SelectItem value="BAD WEATHER">Bad Weather</SelectItem>
-                      <SelectItem value="TRANSIENT FAULTS">Transient Faults</SelectItem>
-                    </>
-                  ) : (
-                    <>
-                      <SelectItem value="MEND CABLE">Mend Cable</SelectItem>
-                      <SelectItem value="WORK ON EQUIPMENT">Work on Equipment</SelectItem>
-                      <SelectItem value="FIRE">Fire</SelectItem>
-                      <SelectItem value="IMPROVE HV">Improve HV</SelectItem>
-                      <SelectItem value="JUMPER REPLACEMENT">Jumper Replacement</SelectItem>
-                      <SelectItem value="MEND BROKEN">Mend Broken</SelectItem>
-                      <SelectItem value="MEND JUMPER">Mend Jumper</SelectItem>
-                      <SelectItem value="MEND TERMINATION">Mend Termination</SelectItem>
-                      <SelectItem value="BROKEN POLE">Broken Pole</SelectItem>
-                      <SelectItem value="BURNT POLE">Burnt Pole</SelectItem>
-                      <SelectItem value="ANIMAL CONTACT">Animal Contact</SelectItem>
-                      <SelectItem value="VEGETATION SAFETY">Vegetation Safety</SelectItem>
-                      <SelectItem value="TRANSFER/RESTORE">Transfer/Restore</SelectItem>
-                      <SelectItem value="TROUBLE SHOOTING">Trouble Shooting</SelectItem>
-                      <SelectItem value="MEND LOOSE">Mend Loose</SelectItem>
-                      <SelectItem value="MAINTENANCE">Maintenance</SelectItem>
-                      <SelectItem value="REPLACE FUSE">Replace Fuse</SelectItem>
-                    </>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
         </form>
       </CardContent>
       <CardFooter className="px-0 pt-4">
