@@ -1,7 +1,7 @@
-# FaultMaster - Power Distribution Asset Management System
+# ECG OMS - Power Distribution Asset Management System
 
 ## Overview
-FaultMaster is a comprehensive asset management and fault tracking system designed for power distribution networks. It provides real-time asset inspection, fault tracking, advanced analytics, and detailed reporting capabilities for utility companies and power distribution operators.
+ECG OMS is a comprehensive asset management and fault tracking system designed for power distribution networks. It provides real-time asset inspection, fault tracking, advanced analytics, and detailed reporting capabilities for utility companies and power distribution operators.
 
 ## Key Features
 
