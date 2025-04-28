@@ -97,32 +97,36 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
   
   // Filter regions and districts based on user role
   const filteredRegions = regions.filter(region => {
-    if (user?.role === "global_engineer") return true;
+    // Global engineers and system admins can see all regions
+    if (user?.role === "global_engineer" || user?.role === "system_admin") return true;
+    
+    // Regional engineers can only see their assigned region
     if (user?.role === "regional_engineer") return region.id === user.regionId;
+    
+    // District engineers and technicians can only see their assigned region
     if (user?.role === "district_engineer" || user?.role === "technician") {
-      // For district engineers and technicians, show their assigned region
       const userDistrict = districts.find(d => d.id === user.districtId);
-      console.log("[OP5Form] Filtering regions for district engineer/technician:", {
-        userDistrict,
-        regionId: region.id,
-        userDistrictRegionId: userDistrict?.regionId
-      });
       return userDistrict ? region.id === userDistrict.regionId : false;
     }
+    
     return false;
   });
 
   const filteredDistricts = districts.filter(district => {
     if (!regionId) return false;
-    if (user?.role === "global_engineer") return district.regionId === regionId;
-    if (user?.role === "regional_engineer") return district.regionId === user.regionId;
-    if (user?.role === "district_engineer" || user?.role === "technician") {
-      console.log("[OP5Form] Filtering districts for district engineer/technician:", {
-        districtId: district.id,
-        userDistrictId: user.districtId
-      });
+    
+    // Global engineers and system admins can see all districts in the selected region
+    if (user?.role === "global_engineer" || user?.role === "system_admin") 
+      return district.regionId === regionId;
+    
+    // Regional engineers can see all districts in their region
+    if (user?.role === "regional_engineer") 
+      return district.regionId === user.regionId;
+    
+    // District engineers and technicians can only see their assigned district
+    if (user?.role === "district_engineer" || user?.role === "technician") 
       return district.id === user.districtId;
-    }
+    
     return false;
   });
 

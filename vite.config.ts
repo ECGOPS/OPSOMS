@@ -54,6 +54,7 @@ export default defineConfig(({ mode }) => ({
         cleanupOutdatedCaches: true,
         sourcemap: true,
         globPatterns: ['**/*.{js,css,html,ico,png,svg,json}'],
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5MB limit
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/.*\.(png|jpg|jpeg|svg|gif)$/,

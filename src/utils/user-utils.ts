@@ -11,6 +11,12 @@ export function getUserRegionAndDistrict(
   let regionId: string | null = null;
   let districtId: string | null = null;
 
+  // For global engineers and system admins, no default region/district needed
+  // They can select any region and district
+  if (user.role === "global_engineer" || user.role === "system_admin") {
+    return { regionId: null, districtId: null };
+  }
+
   // For district engineers and technicians, find both region and district
   if ((user.role === "district_engineer" || user.role === "technician") && user.region && user.district) {
     const userRegion = regions.find(r => r.name === user.region);
