@@ -69,9 +69,6 @@ export default function UserManagementPage() {
               <TabsTrigger value="users" className="w-full sm:w-auto py-2 sm:py-0">
                 Users
               </TabsTrigger>
-              <TabsTrigger value="district-population" className="w-full sm:w-auto py-2 sm:py-0">
-                District Population
-              </TabsTrigger>
               <TabsTrigger value="staff-ids" className="w-full sm:w-auto py-2 sm:py-0">
                 Staff IDs
               </TabsTrigger>
@@ -80,12 +77,6 @@ export default function UserManagementPage() {
             <TabsContent value="users" className="mt-4">
               <AccessControlWrapper requiredRole="global_engineer">
                 <UsersList />
-              </AccessControlWrapper>
-            </TabsContent>
-            
-            <TabsContent value="district-population" className="mt-4">
-              <AccessControlWrapper type="asset">
-                <DistrictPopulationForm />
               </AccessControlWrapper>
             </TabsContent>
             
