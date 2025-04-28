@@ -42,6 +42,7 @@ import { toast } from "@/components/ui/sonner";
 import { formatDuration } from "@/utils/calculations";
 import { v4 as uuidv4 } from 'uuid';
 import { showNotification, showServiceWorkerNotification } from '@/utils/notifications';
+import { PermissionService } from "@/services/PermissionService";
 
 interface OP5FormProps {
   defaultRegionId?: string;
@@ -53,6 +54,7 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
   const { regions, districts, addOP5Fault } = useData();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const permissionService = PermissionService.getInstance();
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [regionId, setRegionId] = useState<string>(defaultRegionId);
@@ -85,58 +87,44 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
     metro: { saidi: 0, saifi: 0, caidi: 0 }
   });
   
-  // Initialize region and district based on user's assigned values
+  // Check if user has permission to report faults
   useEffect(() => {
-    if (user?.role === "district_engineer" || user?.role === "regional_engineer" || user?.role === "technician") {
-      // Find region ID based on user's assigned region name
-      const userRegion = regions.find(r => r.name === user.region);
-      if (userRegion) {
-        setRegionId(userRegion.id);
-        
-        // For district engineer and technician, also set the district
-        if ((user.role === "district_engineer" || user.role === "technician") && user.district) {
-          const userDistrict = districts.find(d => 
-            d.regionId === userRegion.id && d.name === user.district
-          );
-          if (userDistrict) {
-            setDistrictId(userDistrict.id);
-          }
-        }
-      }
+    if (user && !permissionService.canAccessFeature(user.role, 'fault_reporting')) {
+      navigate("/unauthorized");
+      return;
     }
-  }, [user, regions, districts]);
-  
-  // Update region and district when props change
-  useEffect(() => {
-    if (defaultRegionId) {
-      setRegionId(defaultRegionId);
-    }
-    
-    if (defaultDistrictId) {
-      setDistrictId(defaultDistrictId);
-    }
-  }, [defaultRegionId, defaultDistrictId]);
+  }, [user, navigate]);
   
   // Filter regions and districts based on user role
-  const filteredRegions = user?.role === "global_engineer" 
-    ? regions 
-    : regions.filter(r => user?.region ? r.name === user.region : true);
+  const filteredRegions = regions.filter(region => {
+    if (user?.role === "global_engineer") return true;
+    if (user?.role === "regional_engineer") return region.id === user.regionId;
+    if (user?.role === "district_engineer" || user?.role === "technician") {
+      // For district engineers and technicians, show their assigned region
+      const userDistrict = districts.find(d => d.id === user.districtId);
+      console.log("[OP5Form] Filtering regions for district engineer/technician:", {
+        userDistrict,
+        regionId: region.id,
+        userDistrictRegionId: userDistrict?.regionId
+      });
+      return userDistrict ? region.id === userDistrict.regionId : false;
+    }
+    return false;
+  });
 
-  // Filter districts based on region and user role  
-  const filteredDistricts = regionId
-    ? districts.filter(d => {
-        // First check if district belongs to selected region
-        if (d.regionId !== regionId) return false;
-        
-        // For district engineers and technicians, only show their assigned district
-        if (user?.role === "district_engineer" || user?.role === "technician") {
-          return d.name === user.district;
-        }
-        
-        // For other roles, show all districts in the region
-        return true;
-      })
-    : [];
+  const filteredDistricts = districts.filter(district => {
+    if (!regionId) return false;
+    if (user?.role === "global_engineer") return district.regionId === regionId;
+    if (user?.role === "regional_engineer") return district.regionId === user.regionId;
+    if (user?.role === "district_engineer" || user?.role === "technician") {
+      console.log("[OP5Form] Filtering districts for district engineer/technician:", {
+        districtId: district.id,
+        userDistrictId: user.districtId
+      });
+      return district.id === user.districtId;
+    }
+    return false;
+  });
 
   // Calculate metrics when dates change
   useEffect(() => {
@@ -216,67 +204,16 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
   // --- End State for Materials Used --- 
   
   // Add these helper functions before the handleSubmit function
-  const getRegionName = (regionId: string) => {
-    const region = regions.find(r => r.id === regionId);
-    return region?.name || regionId;
-  };
-
-  const getDistrictName = (districtId: string) => {
-    const district = districts.find(d => d.id === districtId);
-    return district?.name || districtId;
-  };
+  const getRegionName = (id: string) => regions.find(r => r.id === id)?.name || "Unknown";
+  const getDistrictName = (id: string) => districts.find(d => d.id === id)?.name || "Unknown";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validate required fields
-    if (!regionId || !districtId) {
-      toast.error("Please select region and district");
+    // Check if user has permission to report faults
+    if (user && !permissionService.canAccessFeature(user.role, 'fault_reporting')) {
+      navigate("/unauthorized");
       return;
-    }
-    if (!occurrenceDate) {
-      toast.error("Fault occurrence date and time is required");
-      return;
-    }
-    if (!repairDate) {
-      toast.error("Repair start date and time is required");
-      return;
-    }
-    if (!faultLocation) {
-      toast.error("Fault location is required");
-      return;
-    }
-    if (ruralAffected === null && urbanAffected === null && metroAffected === null) {
-       toast.error("At least one affected population type must be entered");
-       return;
-    }
-    if ((ruralAffected !== null && ruralAffected < 0) || 
-        (urbanAffected !== null && urbanAffected < 0) || 
-        (metroAffected !== null && metroAffected < 0)) {
-      toast.error("Affected population cannot be negative");
-      return;
-    }
-    
-    // Validate dates
-    if (restorationDate && occurrenceDate) {
-      if (new Date(restorationDate) <= new Date(occurrenceDate)) {
-        toast.error("Restoration date must be after occurrence date");
-        return;
-      }
-    }
-    
-    if (repairDate && occurrenceDate) {
-      if (new Date(repairDate) <= new Date(occurrenceDate)) {
-        toast.error("Repair date must be after occurrence date");
-        return;
-      }
-    }
-    
-    if (restorationDate && repairDate) {
-      if (new Date(restorationDate) <= new Date(repairDate)) {
-        toast.error("Restoration date must be after repair date");
-        return;
-      }
     }
     
     setIsSubmitting(true);
@@ -284,68 +221,52 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
     try {
       // Format dates
       const formattedOccurrenceDate = new Date(occurrenceDate).toISOString();
-      const formattedRepairDate = new Date(repairDate).toISOString();
+      const formattedRepairDate = repairDate ? new Date(repairDate).toISOString() : null;
       const formattedRestorationDate = restorationDate ? new Date(restorationDate).toISOString() : null;
-
-      // Calculate final values
-      const mttrValue = mttr ?? 0;
-      const totalIndices = {
-        saidi: (reliabilityIndices.rural.saidi + reliabilityIndices.urban.saidi + reliabilityIndices.metro.saidi) / 3,
-        saifi: (reliabilityIndices.rural.saifi + reliabilityIndices.urban.saifi + reliabilityIndices.metro.saifi) / 3,
-        caidi: (reliabilityIndices.rural.caidi + reliabilityIndices.urban.caidi + reliabilityIndices.metro.caidi) / 3
-      };
-
-      // Log materials before submission
-      console.log("[handleSubmit] Materials to submit:", materialsUsed);
 
       const formDataToSubmit: Omit<OP5Fault, "id" | "status"> = {
         regionId: regionId || "",
         districtId: districtId || "",
         occurrenceDate: formattedOccurrenceDate,
         repairDate: formattedRepairDate,
-        faultType: (outageType || "Unplanned") as FaultType,
-        specificFaultType: specificFaultType || "",
-        faultLocation: faultLocation,
         restorationDate: formattedRestorationDate,
-        affectedPopulation: {
-          rural: ruralAffected || 0, 
-          urban: urbanAffected || 0, 
-          metro: metroAffected || 0 
-        },
-        mttr: mttrValue,
-        reliabilityIndices: totalIndices,
-        materialsUsed: materialsUsed, // Include materials used
+        outageType: outageType as FaultType,
+        outageSubType: outageSubType || "",
+        specificFaultType: specificFaultType || "",
         outageDescription: outageDescription || "",
+        faultLocation: faultLocation || "",
+        customersAffected: {
+          rural: ruralAffected || 0,
+          urban: urbanAffected || 0,
+          metro: metroAffected || 0
+        },
+        outageDuration: outageDuration || 0,
+        mttr: mttr || 0,
+        customerLostHours: customerLostHours || 0,
+        reliabilityIndices: reliabilityIndices,
         createdBy: user?.id || 'unknown',
         createdAt: new Date().toISOString()
       };
 
-      // Log form data before submission
-      console.log("[handleSubmit] Submitting form data:", formDataToSubmit);
-
-      if (onSubmit) {
-        onSubmit(formDataToSubmit);
-      } else {
-        await addOP5Fault(formDataToSubmit);
-        
-        // Show notification for successful fault creation
-        const notificationTitle = 'Fault Created';
-        const notificationBody = `New ${outageType} fault created in ${getRegionName(regionId)} - ${getDistrictName(districtId)}`;
-        
-        // Show both types of notifications
-        showServiceWorkerNotification(notificationTitle, {
-          body: notificationBody,
-          data: { url: window.location.href }
-        });
-        
-        showNotification(notificationTitle, notificationBody);
-        
-        toast.success("Fault created successfully");
-        navigate("/dashboard");
-      }
+      await addOP5Fault(formDataToSubmit);
+      
+      // Show notification for successful fault creation
+      const notificationTitle = 'OP5 Fault Created';
+      const notificationBody = `New ${outageType} fault created in ${getRegionName(regionId)} - ${getDistrictName(districtId)}`;
+      
+      // Show both types of notifications
+      showServiceWorkerNotification(notificationTitle, {
+        body: notificationBody,
+        data: { url: window.location.href }
+      });
+      
+      showNotification(notificationTitle, notificationBody);
+      
+      toast.success("OP5 fault created successfully");
+      navigate("/dashboard");
     } catch (error) {
-      console.error("Error creating fault:", error);
-      toast.error("Failed to create fault");
+      console.error("Error creating OP5 fault:", error);
+      toast.error("Failed to create OP5 fault");
     } finally {
       setIsSubmitting(false);
     }
@@ -427,12 +348,56 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
   };
   // --- End Handlers for Materials --- 
   
+  // Initialize region and district based on user's assigned values
+  useEffect(() => {
+    if (!user) return;
+
+    console.log("[OP5Form] Initializing with user:", {
+      role: user.role,
+      districtId: user.districtId,
+      regionId: user.regionId
+    });
+
+    if (user.role === "district_engineer" || user.role === "regional_engineer" || user.role === "technician") {
+      // For district engineers and technicians, find their region through their district
+      if ((user.role === "district_engineer" || user.role === "technician") && user.districtId) {
+        const userDistrict = districts.find(d => d.id === user.districtId);
+        console.log("[OP5Form] Found user district:", userDistrict);
+        
+        if (userDistrict) {
+          setDistrictId(userDistrict.id);
+          setRegionId(userDistrict.regionId);
+          console.log("[OP5Form] Set district and region:", {
+            districtId: userDistrict.id,
+            regionId: userDistrict.regionId
+          });
+          return;
+        } else {
+          console.error("[OP5Form] Could not find district for user:", user.districtId);
+        }
+      }
+      
+      // For regional engineers, find region by name
+      if (user.role === "regional_engineer") {
+        const userRegion = regions.find(r => r.name === user.region);
+        console.log("[OP5Form] Found user region:", userRegion);
+        
+        if (userRegion) {
+          setRegionId(userRegion.id);
+          console.log("[OP5Form] Set region:", userRegion.id);
+        } else {
+          console.error("[OP5Form] Could not find region for user:", user.region);
+        }
+      }
+    }
+  }, [user, regions, districts]);
+  
   return (
     <Card className="border-0 shadow-none bg-transparent">
       <CardHeader className="px-0 pt-0">
         <CardTitle className="text-2xl font-serif">OP5 Fault Report</CardTitle>
         <CardDescription>
-          Report a fault in the OP5 system with detailed information
+          Report an OP5 fault with detailed information
         </CardDescription>
       </CardHeader>
       <CardContent className="px-0">
@@ -444,6 +409,7 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
                 value={regionId} 
                 onValueChange={setRegionId}
                 disabled={user?.role === "district_engineer" || user?.role === "regional_engineer" || user?.role === "technician"}
+                required
               >
                 <SelectTrigger className="h-12 text-base bg-background/50 border-muted">
                   <SelectValue placeholder="Select region" />
@@ -464,12 +430,13 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
                 value={districtId} 
                 onValueChange={setDistrictId}
                 disabled={user?.role === "district_engineer" || user?.role === "technician" || !regionId}
+                required
               >
                 <SelectTrigger className="h-12 text-base bg-background/50 border-muted">
                   <SelectValue placeholder="Select district" />
                 </SelectTrigger>
                 <SelectContent>
-                  {regionId && districts
+                  {regionId && filteredDistricts
                     .filter(d => d.regionId === regionId)
                     .map(district => (
                       <SelectItem key={district.id} value={district.id}>
@@ -497,18 +464,18 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
                   <SelectItem value="GridCo Outages">GridCo Outages</SelectItem>
                 </SelectContent>
               </Select>
-          </div>
-          
-          <div className="space-y-3">
+            </div>
+            
+            <div className="space-y-3">
               <Label htmlFor="faultLocation" className="text-base font-medium">Fault Location *</Label>
-            <Input
-              id="faultLocation"
-              value={faultLocation}
-              onChange={(e) => setFaultLocation(e.target.value)}
+              <Input
+                id="faultLocation"
+                value={faultLocation}
+                onChange={(e) => setFaultLocation(e.target.value)}
                 placeholder="Enter fault location"
                 className="h-12 text-base bg-background/50 border-muted"
-              required
-            />
+                required
+              />
             </div>
           </div>
           
@@ -913,7 +880,7 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
         </form>
       </CardContent>
       <CardFooter className="px-0 pt-4">
-        <Button onClick={handleSubmit} disabled={isSubmitting} className="w-full h-12 text-base font-medium">
+        <Button onClick={handleSubmit} disabled={isSubmitting} className="w-full h-12 text-base font-medium bg-primary hover:bg-primary/90">
           {isSubmitting ? (
             <>
               <Loader2 className="mr-2 h-5 w-5 animate-spin" />

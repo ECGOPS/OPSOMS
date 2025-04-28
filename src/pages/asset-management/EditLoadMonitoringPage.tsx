@@ -72,47 +72,62 @@ export default function EditLoadMonitoringPage() {
 
   // Fetch existing record data and set initial dropdown state
   useEffect(() => {
-    if (id && getLoadMonitoringRecord && regions && districts) {
-      const record = getLoadMonitoringRecord(id);
-      if (record) {
-        // Set form data with both IDs and names
-        const regionId = regions.find(r => r.name === record.region)?.id || "";
-        const districtId = districts.find(d => d.name === record.district && d.regionId === regionId)?.id || "";
-        
-        setFormData({
-          ...record,
-          regionId: regionId,
-          districtId: districtId
-        });
-        
-        // Pre-filter districts based on loaded record's region
-        const initialRegion = regions.find(r => r.name === record.region);
-        if (initialRegion) {
-          const initialRegionDistricts = districts.filter(d => d.regionId === initialRegion.id);
-          setFilteredDistricts(initialRegionDistricts);
-          // Ensure district is valid for the region, otherwise reset
-          if (!initialRegionDistricts.find(d => d.name === record.district)) {
-             setFormData(prev => ({ ...prev, districtId: "", district: "" }));
+    const initializeRecord = async () => {
+      if (id && getLoadMonitoringRecord && regions && districts) {
+        try {
+          const record = await getLoadMonitoringRecord(id);
+          if (record) {
+            // Find the region and district IDs based on their names
+            const existingRegion = regions.find(r => r.name === record.region);
+            const existingDistrict = districts.find(d => d.name === record.district && d.regionId === existingRegion?.id);
+            
+            if (existingRegion) {
+              // Set region and filter districts
+              setFormData(prev => ({
+                ...record,
+                regionId: existingRegion.id,
+                region: record.region
+              }));
+              
+              // Filter districts for the selected region
+              const regionDistricts = districts.filter(d => d.regionId === existingRegion.id);
+              setFilteredDistricts(regionDistricts);
+              
+              // Set district if found
+              if (existingDistrict) {
+                setFormData(prev => ({
+                  ...prev,
+                  districtId: existingDistrict.id,
+                  district: record.district
+                }));
+              }
+            } else {
+              // Region from record not found? Reset both.
+              setFormData(prev => ({ ...prev, regionId: "", region: "", districtId: "", district: "" }));
+              setFilteredDistricts([]);
+            }
+          } else {
+            toast.error("Load monitoring record not found.");
+            navigate("/asset-management/load-monitoring");
           }
-        } else {
-          // Region from record not found? Reset both.
-          setFormData(prev => ({ ...prev, regionId: "", region: "", districtId: "", district: "" }));
-          setFilteredDistricts([]);
+        } catch (error) {
+          console.error("Error loading record:", error);
+          toast.error("Failed to load record. Please try again.");
+          navigate("/asset-management/load-monitoring");
         }
-      } else {
-        toast.error("Load monitoring record not found.");
-        navigate("/asset-management/load-monitoring");
+        setIsLoading(false);
+      } else if (!isLoading && (!regions || !districts)) {
+          toast.error("Region/District data not loaded. Cannot edit.");
+          navigate("/asset-management/load-monitoring");
+          setIsLoading(false);
+      } else if (!isLoading && !id) { // Added check for missing ID after loading
+          toast.error("Invalid record ID.");
+          navigate("/asset-management/load-monitoring");
+          setIsLoading(false);
       }
-      setIsLoading(false);
-    } else if (!isLoading && (!regions || !districts)) {
-        toast.error("Region/District data not loaded. Cannot edit.");
-        navigate("/asset-management/load-monitoring");
-        setIsLoading(false);
-    } else if (!isLoading && !id) { // Added check for missing ID after loading
-        toast.error("Invalid record ID.");
-        navigate("/asset-management/load-monitoring");
-        setIsLoading(false);
-    }
+    };
+
+    initializeRecord();
   }, [id, getLoadMonitoringRecord, regions, districts, navigate, isLoading]);
 
   // --- Form Handling Functions ---

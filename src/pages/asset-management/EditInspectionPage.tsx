@@ -41,14 +41,23 @@ export default function EditInspectionPage() {
     if (id) {
       const inspection = getSavedInspection(id);
       if (inspection) {
-        // Combine all items from both the general items array and specific category arrays
-        const allItems = [
+        // Combine items from all potential sources
+        const combinedItems = [
           ...(inspection.items || []),
           ...(inspection.generalBuilding || []),
           ...(inspection.controlEquipment || []),
           ...(inspection.powerTransformer || []),
           ...(inspection.outdoorEquipment || [])
         ];
+        
+        // Deduplicate items based on their ID
+        const uniqueItemsMap = new Map<string, InspectionItem>();
+        combinedItems.forEach(item => {
+          if (item && item.id) { // Ensure item and item.id exist
+            uniqueItemsMap.set(item.id, item);
+          }
+        });
+        const allItems = Array.from(uniqueItemsMap.values());
 
         // Ensure all required fields are properly initialized
         setFormData({
@@ -269,39 +278,42 @@ export default function EditInspectionPage() {
                   
                   {/* General Building */}
                   <TabsContent value="general" className="space-y-4">
-                    {getItemsByCategory("general").map((item) => (
-                      <div key={item.id} className="border rounded-lg p-4">
-                        <div className="flex justify-between items-start">
-                          <div className="space-y-1">
-                            <h4 className="font-medium">{item.name}</h4>
+                    {getItemsByCategory("general").map((item) => {
+                      console.log(`Rendering item ${item.id} (${item.name}) with status:`, item.status);
+                      return (
+                        <div key={item.id} className="border rounded-lg p-4">
+                          <div className="flex justify-between items-start">
+                            <div className="space-y-1">
+                              <h4 className="font-medium">{item.name}</h4>
+                            </div>
+                            <RadioGroup
+                              value={item.status}
+                              onValueChange={(value) => updateInspectionItem(item.id, 'status', value as ConditionStatus)}
+                              className="flex items-center space-x-4"
+                            >
+                              <div className="flex items-center space-x-2">
+                                <RadioGroupItem value="good" id={`${item.id}-good`} />
+                                <Label htmlFor={`${item.id}-good`}>Good</Label>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <RadioGroupItem value="bad" id={`${item.id}-bad`} />
+                                <Label htmlFor={`${item.id}-bad`}>Bad</Label>
+                              </div>
+                            </RadioGroup>
                           </div>
-                          <RadioGroup
-                            value={item.status}
-                            onValueChange={(value) => updateInspectionItem(item.id, 'status', value as ConditionStatus)}
-                            className="flex items-center space-x-4"
-                          >
-                            <div className="flex items-center space-x-2">
-                              <RadioGroupItem value="good" id={`${item.id}-good`} />
-                              <Label htmlFor={`${item.id}-good`}>Good</Label>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <RadioGroupItem value="bad" id={`${item.id}-bad`} />
-                              <Label htmlFor={`${item.id}-bad`}>Bad</Label>
-                            </div>
-                          </RadioGroup>
+                          <div className="mt-4">
+                            <Label htmlFor={`remarks-${item.id}`}>Remarks</Label>
+                            <Textarea
+                              id={`remarks-${item.id}`}
+                              value={item.remarks || ''}
+                              onChange={(e) => updateInspectionItem(item.id, 'remarks', e.target.value)}
+                              placeholder="Add remarks about this item"
+                              className="mt-1"
+                            />
+                          </div>
                         </div>
-                        <div className="mt-4">
-                          <Label htmlFor={`remarks-${item.id}`}>Remarks</Label>
-                          <Textarea
-                            id={`remarks-${item.id}`}
-                            value={item.remarks || ''}
-                            onChange={(e) => updateInspectionItem(item.id, 'remarks', e.target.value)}
-                            placeholder="Add remarks about this item"
-                            className="mt-1"
-                          />
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </TabsContent>
 
                   {/* Control Equipment */}

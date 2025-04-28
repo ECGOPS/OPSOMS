@@ -9,9 +9,10 @@ interface ProtectedRouteProps {
   requiredRole?: UserRole | UserRole[];
   allowedRegion?: string;
   allowedDistrict?: string;
+  requiredFeature?: string;
 }
 
-const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredRole, allowedRegion, allowedDistrict }) => {
+const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredRole, allowedRegion, allowedDistrict, requiredFeature }) => {
   const { isAuthenticated, user } = useAuth();
   const location = useLocation();
   const permissionService = PermissionService.getInstance();
@@ -19,6 +20,11 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredRole,
   // Check if user is authenticated
   if (!isAuthenticated) {
     return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  // Check feature-based access
+  if (requiredFeature && !permissionService.canAccessFeature(user.role, requiredFeature)) {
+    return <Navigate to="/unauthorized" replace />;
   }
 
   // Check role-based access

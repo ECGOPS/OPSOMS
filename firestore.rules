@@ -1,0 +1,134 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isSystemAdmin() {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'system_admin';
+    }
+    
+    function isGlobalEngineer() {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'global_engineer';
+    }
+    
+    function isRegionalEngineer() {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'regional_engineer';
+    }
+    
+    function isDistrictEngineer() {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'district_engineer';
+    }
+    
+    function isTechnician() {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'technician';
+    }
+    
+    function isValidEmail(email) {
+      return email.matches('^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$');
+    }
+    
+    function isValidPhone(phone) {
+      return phone.matches('^\\+?[0-9]{10,15}$');
+    }
+    
+    function isValidDate(date) {
+      return date is timestamp;
+    }
+    
+    function isValidRegionId(regionId) {
+      return exists(/databases/$(database)/documents/regions/$(regionId));
+    }
+    
+    function isValidDistrictId(districtId) {
+      return exists(/databases/$(database)/documents/districts/$(districtId));
+    }
+    
+    // Helper function to check if staff ID is already in use
+    function isStaffIdInUse(staffId) {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.staffId == staffId;
+    }
+    
+    // System collection
+    match /system/{documentId} {
+      allow read, write: if true;  // Allow public access
+    }
+
+    // Regions collection
+    match /regions/{regionId} {
+      allow read, write: if true;  // Allow public access
+    }
+
+    // Districts collection
+    match /districts/{districtId} {
+      allow read, write: if true;  // Allow public access
+    }
+
+    // Staff IDs collection
+    match /staffIds/{staffId} {
+      allow read, write: if true;  // Allow public access
+    }
+
+    // Users collection
+    match /users/{userId} {
+      allow read: if true;  // Allow public read
+      allow create: if true;  // Allow public create for signup
+      allow update: if true;  // Allow public update
+      allow delete: if isSystemAdmin();
+    }
+
+    // Permissions collection
+    match /permissions/{permissionId} {
+      allow read, write: if true;  // Allow public access
+    }
+
+    // OP5 Faults collection
+    match /op5Faults/{faultId} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    // Control Outages collection
+    match /controlOutages/{outageId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // VIT Assets collection
+    match /vitAssets/{assetId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // VIT Inspections collection
+    match /vitInspections/{inspectionId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Load Monitoring collection
+    match /loadMonitoring/{document=**} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Substation Inspection collection
+    match /substationInspections/{inspectionId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Overhead Line Inspections collection
+    match /overheadLineInspections/{inspectionId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Security Events collection
+    match /securityEvents/{eventId} {
+      allow read, write: if isAuthenticated();
+    }
+  }
+} 

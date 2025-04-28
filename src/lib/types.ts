@@ -9,7 +9,9 @@ export type User = {
   email: string;
   role: UserRole;
   region?: string;
+  regionId?: string;
   district?: string;
+  districtId?: string;
   tempPassword?: string;
   mustChangePassword?: boolean;
   password?: string;
@@ -101,44 +103,41 @@ export type FilterBarProps = {
   isRefreshing: boolean;
 };
 
-export interface OP5Fault {
+export interface BaseAsset {
   id: string;
-  regionId: string;
-  districtId: string;
-  occurrenceDate: string;
-  restorationDate: string | null;
-  repairDate: string | null;
-  status: "active" | "resolved";
-  faultType: FaultType;
-  specificFaultType: string;
-  faultLocation: string;
-  outageDescription?: string;
-  affectedPopulation: AffectedPopulation;
-  mttr: number;
-  reliabilityIndices: ReliabilityIndices;
-  materialsUsed?: MaterialUsed[];
   createdAt: string;
   createdBy: string;
 }
 
-export type ControlSystemOutage = {
-  id: string;
+export interface OP5Fault extends BaseAsset {
   regionId: string;
   districtId: string;
+  description: string;
   occurrenceDate: string;
-  restorationDate: string;
-  faultType: FaultType;
-  specificFaultType?: UnplannedFaultType | EmergencyFaultType;
+  restorationDate: string | null;
   status: "active" | "resolved";
-  reason?: string;
-  controlPanelIndications?: string;
-  areaAffected?: string;
+  faultType: FaultType;
+  specificFaultType: string;
+  faultLocation: string;
+  affectedPopulation: {
+    rural: number;
+    urban: number;
+    metro: number;
+  };
+}
+
+export interface ControlSystemOutage extends BaseAsset {
+  regionId: string;
+  districtId: string;
+  outageDescription: string;
+  occurrenceDate: string;
+  restorationDate: string | null;
+  status: "active" | "resolved";
+  system: string;
+  faultType: FaultType;
   loadMW: number;
   unservedEnergyMWh: number;
-  customersAffected: RegionPopulation;
-  createdBy: string;
-  createdAt: string;
-};
+}
 
 // VIT Asset Types
 export type VoltageLevel = "11KV" | "33KV";
@@ -153,8 +152,8 @@ export type ConditionStatus = "good" | "bad";
 
 export type VITAsset = {
   id: string;
-  regionId: string;
-  districtId: string;
+  region: string;
+  district: string;
   voltageLevel: VoltageLevel;
   typeOfUnit: string;
   serialNumber: string;
@@ -361,8 +360,8 @@ export interface OverheadLineInspection {
   updatedAt: string;
   date?: string;
   time?: string;
-  regionId: string;
-  districtId: string;
+  region: string;
+  district: string;
   feederName: string;
   voltageLevel: string;
   referencePole: string;
@@ -380,6 +379,7 @@ export interface OverheadLineInspection {
   poleHeight: "8m" | "9m" | "10m" | "11m" | "14m" | "others";
   poleType: "CP" | "WP" | "SP" | "ST";
   poleLocation: string;
+  items: InspectionItem[];
   
   // Head Gears Information
   poleCondition: {
@@ -469,4 +469,15 @@ export interface OverheadLineInspection {
   
   additionalNotes: string;
   images: string[];
+}
+
+export interface SecurityEvent {
+  id: string;
+  timestamp: string;
+  eventType: string;
+  details: string;
+  severity: "low" | "medium" | "high" | "critical";
+  status: "new" | "investigating" | "resolved" | "dismissed";
+  userId?: string;
+  metadata?: Record<string, any>;
 }

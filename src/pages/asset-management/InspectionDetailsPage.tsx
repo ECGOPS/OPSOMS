@@ -75,6 +75,13 @@ export default function InspectionDetailsPage() {
     }
   }, [inspection]);
 
+  // Log items array for debugging whenever inspection data changes
+  useEffect(() => {
+    if (inspection?.items) {
+      console.log('Items for summary calculation:', inspection.items);
+    }
+  }, [inspection]);
+
   if (!inspection) {
     return (
       <Layout>
@@ -148,7 +155,11 @@ export default function InspectionDetailsPage() {
               </div>
               <div className="bg-muted/50 p-4 rounded-lg">
                 <p className="text-sm font-medium text-muted-foreground mb-1">Date</p>
-                <p className="text-lg font-semibold">{inspection.date ? format(new Date(inspection.date), "PPP") : "N/A"}</p>
+                <p className="text-lg font-semibold">
+                  {inspection.date && !isNaN(new Date(inspection.date).getTime()) 
+                    ? format(new Date(inspection.date), "PPP") 
+                    : "N/A"}
+                </p>
               </div>
               <div className="bg-muted/50 p-4 rounded-lg">
                 <p className="text-sm font-medium text-muted-foreground mb-1">Created By</p>
@@ -156,7 +167,11 @@ export default function InspectionDetailsPage() {
               </div>
               <div className="bg-muted/50 p-4 rounded-lg">
                 <p className="text-sm font-medium text-muted-foreground mb-1">Created At</p>
-                <p className="text-lg font-semibold">{inspection.createdAt ? format(new Date(inspection.createdAt), "PPP") : "N/A"}</p>
+                <p className="text-lg font-semibold">
+                  {inspection.createdAt && !isNaN(new Date(inspection.createdAt).getTime()) 
+                    ? format(new Date(inspection.createdAt), "PPP") 
+                    : "N/A"}
+                </p>
               </div>
             </div>
 
@@ -170,12 +185,7 @@ export default function InspectionDetailsPage() {
                     </div>
                     <div>
                       <p className="text-2xl font-bold text-green-700">
-                        {[
-                          ...(inspection.generalBuilding || []),
-                          ...(inspection.controlEquipment || []),
-                          ...(inspection.powerTransformer || []),
-                          ...(inspection.outdoorEquipment || [])
-                        ].filter(item => item.status === "good").length}
+                        {inspection.items?.filter(item => item.status === "good").length || 0}
                       </p>
                       <p className="text-sm text-green-600">Good Items</p>
                     </div>
@@ -188,12 +198,7 @@ export default function InspectionDetailsPage() {
                     </div>
                     <div>
                       <p className="text-2xl font-bold text-red-700">
-                        {[
-                          ...(inspection.generalBuilding || []),
-                          ...(inspection.controlEquipment || []),
-                          ...(inspection.powerTransformer || []),
-                          ...(inspection.outdoorEquipment || [])
-                        ].filter(item => item.status === "bad").length}
+                        {inspection.items?.filter(item => item.status === "bad").length || 0}
                       </p>
                       <p className="text-sm text-red-600">Items Requiring Attention</p>
                     </div>
@@ -206,10 +211,7 @@ export default function InspectionDetailsPage() {
                     </div>
                     <div>
                       <p className="text-2xl font-bold text-blue-700">
-                        {(inspection.generalBuilding?.length || 0) +
-                         (inspection.controlEquipment?.length || 0) +
-                         (inspection.powerTransformer?.length || 0) +
-                         (inspection.outdoorEquipment?.length || 0)}
+                        {inspection.items?.length || 0}
                       </p>
                       <p className="text-sm text-blue-600">Total Items</p>
                     </div>

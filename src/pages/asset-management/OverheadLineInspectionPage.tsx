@@ -13,6 +13,15 @@ import { toast } from "@/components/ui/sonner";
 import { OverheadLineInspection } from "@/lib/types";
 import { OverheadLineInspectionDetails } from "@/components/overhead-line/OverheadLineInspectionDetails";
 import { AccessControlWrapper } from "@/components/access-control/AccessControlWrapper";
+import { DatePicker } from "@/components/ui/date-picker";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export default function OverheadLineInspectionPage() {
   const { user } = useAuth();
@@ -22,22 +31,70 @@ export default function OverheadLineInspectionPage() {
   const [selectedInspection, setSelectedInspection] = useState<OverheadLineInspection | null>(null);
   const [editingInspection, setEditingInspection] = useState<OverheadLineInspection | null>(null);
   const { overheadLineInspections, updateOverheadLineInspection, deleteOverheadLineInspection, addOverheadLineInspection, districts, regions } = useData();
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState<Date | null>(null);
+  const [selectedRegion, setSelectedRegion] = useState<string | null>(null);
+  const [selectedDistrict, setSelectedDistrict] = useState<string | null>(null);
+
+  // Filter districts based on selected region
+  const filteredDistricts = useMemo(() => {
+    if (!selectedRegion) return districts;
+    return districts.filter(d => d.regionId === selectedRegion);
+  }, [districts, selectedRegion]);
 
   // Filter inspections based on user's role and assigned district/region
   const filteredInspections = useMemo(() => {
     if (!overheadLineInspections) return [];
     
-    return overheadLineInspections.filter(inspection => {
-      if (user?.role === 'district_engineer' || user?.role === 'technician') {
-        const userDistrict = districts.find(d => d.name === user.district);
-        return userDistrict && inspection.districtId === userDistrict.id;
-      } else if (user?.role === 'regional_engineer') {
-        const userRegion = regions.find(r => r.name === user.region);
-        return userRegion && inspection.regionId === userRegion.id;
-      }
-      return true; // Global engineers can see all inspections
-    });
-  }, [overheadLineInspections, user, districts, regions]);
+    let filtered = overheadLineInspections;
+    
+    // Apply role-based filtering
+    if (user?.role === 'district_engineer' || user?.role === 'technician') {
+      filtered = filtered.filter(inspection => inspection.district === user.district);
+    } else if (user?.role === 'regional_engineer') {
+      filtered = filtered.filter(inspection => inspection.region === user.region);
+    }
+    
+    // Apply date filter
+    if (selectedDate) {
+      filtered = filtered.filter(inspection => {
+        const inspectionDate = new Date(inspection.date || inspection.createdAt);
+        return inspectionDate.toDateString() === selectedDate.toDateString();
+      });
+    }
+    
+    // Apply month filter
+    if (selectedMonth) {
+      filtered = filtered.filter(inspection => {
+        const inspectionDate = new Date(inspection.date || inspection.createdAt);
+        return inspectionDate.getMonth() === selectedMonth.getMonth() && 
+               inspectionDate.getFullYear() === selectedMonth.getFullYear();
+      });
+    }
+    
+    // Apply region filter (for global engineer and admin)
+    if (selectedRegion && (user?.role === 'global_engineer' || user?.role === 'system_admin')) {
+      filtered = filtered.filter(inspection => inspection.region === selectedRegion);
+    }
+    
+    // Apply district filter (for regional engineer and above)
+    if (selectedDistrict && 
+        (user?.role === 'global_engineer' || 
+         user?.role === 'system_admin' || 
+         user?.role === 'regional_engineer')) {
+      filtered = filtered.filter(inspection => inspection.district === selectedDistrict);
+    }
+    
+    return filtered;
+  }, [overheadLineInspections, user, selectedDate, selectedMonth, selectedRegion, selectedDistrict]);
+
+  // Reset all filters
+  const handleResetFilters = () => {
+    setSelectedDate(null);
+    setSelectedMonth(null);
+    setSelectedRegion(null);
+    setSelectedDistrict(null);
+  };
 
   const handleAddInspection = () => {
     setEditingInspection(null);
@@ -103,6 +160,86 @@ export default function OverheadLineInspectionPage() {
             )}
           </div>
 
+          {/* Filters */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div className="space-y-2">
+              <Label>Date</Label>
+              <DatePicker
+                value={selectedDate}
+                onChange={setSelectedDate}
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label>Month</Label>
+              <DatePicker
+                value={selectedMonth}
+                onChange={setSelectedMonth}
+                picker="month"
+              />
+            </div>
+            
+            {(user?.role === 'global_engineer' || user?.role === 'system_admin') && (
+              <div className="space-y-2">
+                <Label>Region</Label>
+                <div className="w-full">
+                  <Select
+                    value={selectedRegion}
+                    onValueChange={setSelectedRegion}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select region" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {regions.map(region => (
+                        <SelectItem key={region.id} value={region.id}>
+                          {region.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+            
+            {(user?.role === 'global_engineer' || 
+              user?.role === 'system_admin' || 
+              user?.role === 'regional_engineer') && (
+              <div className="space-y-2">
+                <Label>District</Label>
+                <div className="w-full">
+                  <Select
+                    value={selectedDistrict}
+                    onValueChange={setSelectedDistrict}
+                    disabled={!selectedRegion && user?.role !== 'regional_engineer'}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select district" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {filteredDistricts.map(district => (
+                        <SelectItem key={district.id} value={district.id}>
+                          {district.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Reset Filters Button */}
+          <div className="flex justify-end mb-4">
+            <Button
+              variant="outline"
+              onClick={handleResetFilters}
+              disabled={!selectedDate && !selectedMonth && !selectedRegion && !selectedDistrict}
+            >
+              Reset Filters
+            </Button>
+          </div>
+
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
             <TabsList className="grid w-full max-w-md grid-cols-1">
               <TabsTrigger value="inspections">Inspection Records</TabsTrigger>
@@ -146,7 +283,13 @@ export default function OverheadLineInspectionPage() {
               <DialogHeader>
                 <DialogTitle>Overhead Line Inspection Details</DialogTitle>
                 <DialogDescription>
-                  Inspection performed on {selectedInspection ? new Date(selectedInspection.createdAt).toLocaleDateString() : ""}
+                  Inspection performed on {selectedInspection 
+                    ? (selectedInspection.date 
+                       ? selectedInspection.date
+                       : selectedInspection.createdAt && !isNaN(new Date(selectedInspection.createdAt).getTime())
+                         ? new Date(selectedInspection.createdAt).toLocaleDateString()
+                         : "today")
+                    : ""}
                 </DialogDescription>
               </DialogHeader>
               {selectedInspection && <OverheadLineInspectionDetails inspection={selectedInspection} />}

@@ -21,7 +21,11 @@ import {
   CardTitle 
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, InfoIcon, Users, Clock, ActivityIcon, FileText, Calculator, PlusCircle, X } from "lucide-react";
+import { 
+  Loader2, InfoIcon, Users, Clock, ActivityIcon, FileText, Calculator, 
+  PlusCircle, X, ChevronLeft, Save, Calendar, MapPin, AlertTriangle, Layers, 
+  CheckCircle, Building, Zap
+} from "lucide-react";
 import { FaultType, OP5Fault, AffectedPopulation, ReliabilityIndices, MaterialUsed } from "@/lib/types";
 import { 
   calculateOutageDuration, 
@@ -34,6 +38,8 @@ import { Layout } from "@/components/layout/Layout";
 import { formatDuration } from "@/utils/calculations";
 import { Textarea } from "@/components/ui/textarea";
 import { v4 as uuidv4 } from "uuid";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from "@/components/ui/badge";
 
 // Enhanced Helper function to format date for input field safely
 const formatDateForInput = (dateString: string | null | undefined): string => {
@@ -68,6 +74,26 @@ interface CalculatedState {
     total: ReliabilityIndices;
   };
 }
+
+// Helper function to get badge color for fault type
+const getFaultTypeBadgeColor = (type: string | undefined) => {
+  if (!type) return "bg-gray-100 text-gray-800";
+  
+  switch (type) {
+    case "Planned":
+      return "bg-blue-100 text-blue-800 border-blue-200";
+    case "Unplanned":
+      return "bg-red-100 text-red-800 border-red-200";
+    case "Emergency":
+      return "bg-orange-100 text-orange-800 border-orange-200";
+    case "Load Shedding":
+      return "bg-purple-100 text-purple-800 border-purple-200";
+    case "GridCo Outage":
+      return "bg-emerald-100 text-emerald-800 border-emerald-200";
+    default:
+      return "bg-gray-100 text-gray-800 border-gray-200";
+  }
+};
 
 export default function EditOP5FaultPage() {
   const { id } = useParams<{ id: string }>();
@@ -436,24 +462,33 @@ export default function EditOP5FaultPage() {
     }));
   };
 
-  // Loading state display
+  // Get region and district names for display
+  const regionName = regions.find(r => r.id === formData.regionId)?.name || "Unknown Region";
+  const districtName = districts.find(d => d.id === formData.districtId)?.name || "Unknown District";
+  const faultTypeBadgeClass = getFaultTypeBadgeColor(formData.faultType);
+  
+  // Fault not found state (should have been handled by useEffect navigation, but good fallback)
   if (isLoading) {
     return (
       <Layout>
-        <div className="flex items-center justify-center h-[calc(100vh-4rem)]">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <div className="flex flex-col items-center justify-center h-[calc(100vh-4rem)]">
+          <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+          <p className="text-lg text-muted-foreground">Loading fault details...</p>
         </div>
       </Layout>
     );
   }
   
-  // Fault not found state (should have been handled by useEffect navigation, but good fallback)
   if (!fault) {
     return (
       <Layout>
         <div className="flex flex-col items-center justify-center h-[calc(100vh-4rem)]">
+          <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
           <p className="text-lg text-muted-foreground mb-4">Fault not found.</p>
-           <Button onClick={() => navigate("/dashboard")} variant="outline">Go to Dashboard</Button>
+           <Button onClick={() => navigate("/dashboard")} variant="outline">
+             <ChevronLeft className="mr-2 h-4 w-4" />
+             Return to Dashboard
+           </Button>
         </div>
       </Layout>
     );
@@ -462,323 +497,267 @@ export default function EditOP5FaultPage() {
   // Main component render
   return (
     <Layout>
-      <div className="container mx-auto py-6 space-y-6 max-w-4xl"> {/* Added max-width */} 
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-3xl font-bold">Edit OP5 Fault Report</h1>
-          <Button variant="outline" onClick={() => navigate(-1)}>
-            Back
-          </Button>
+      <div className="container mx-auto py-4 sm:py-6 md:py-8 space-y-4 sm:space-y-6 md:space-y-8 max-w-[90rem] px-4 sm:px-6 md:px-8">
+        {/* Page header with breadcrumb */}
+        <div className="flex flex-col space-y-3 sm:flex-row sm:justify-between sm:items-center">
+          <div>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-8 gap-1 px-2 text-muted-foreground" 
+                onClick={() => navigate("/dashboard")}
+              >
+                Dashboard
+              </Button>
+              <span>/</span>
+              <span className="text-foreground">Edit OP5 Fault Report</span>
             </div>
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight flex items-center gap-3">
+              Edit OP5 Fault Report
+              {formData.faultType && (
+                <Badge className={`${faultTypeBadgeClass} ml-2`}>
+                  {formData.faultType}
+                </Badge>
+              )}
+            </h1>
+          </div>
+          <div className="flex items-center gap-3">
+            <Button 
+              variant="outline" 
+              onClick={() => navigate(-1)}
+              className="h-9 sm:h-10 gap-1"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Back
+            </Button>
+          </div>
+        </div>
+        
+        {/* Summary card with key information */}
+        <Card className="overflow-hidden border-0 bg-muted/50 text-foreground shadow-sm">
+          <CardHeader className="bg-muted/30 pb-3">
+            <CardTitle className="text-lg sm:text-xl font-medium flex justify-between items-center">
+              <span className="flex items-center gap-2">
+                <Zap className="h-5 w-5 text-primary" />
+                Fault Summary
+              </span>
+              <span className="text-sm font-normal text-muted-foreground">ID: {id?.substring(0, 8)}...</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4 sm:pt-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8 text-sm">
+              <div className="flex items-start gap-3">
+                <MapPin className="h-5 w-5 text-muted-foreground mt-0.5" />
+                <div>
+                  <div className="font-medium text-base">Location</div>
+                  <div className="text-muted-foreground mt-1">{regionName}, {districtName}</div>
+                  <div className="text-sm mt-2">{formData.faultLocation || "No specific location"}</div>
+                </div>
+              </div>
+              
+              <div className="flex items-start gap-3">
+                <Calendar className="h-5 w-5 text-muted-foreground mt-0.5" />
+                <div>
+                  <div className="font-medium text-base">Occurred</div>
+                  <div className="text-muted-foreground mt-1">
+                    {formData.occurrenceDate ? new Date(formData.occurrenceDate).toLocaleString() : "Not specified"}
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex items-start gap-3 sm:col-span-2 lg:col-span-1">
+                <Users className="h-5 w-5 text-muted-foreground mt-0.5" />
+                <div>
+                  <div className="font-medium text-base">Affected Customers</div>
+                  <div className="text-muted-foreground mt-1">
+                    {formData.affectedPopulation ? 
+                      Object.values(formData.affectedPopulation).reduce((a, b) => a + b, 0) : 
+                      0} total
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
-        <Card>
-          <CardContent className="pt-6">
-            <form onSubmit={handleSubmit} className="space-y-8"> {/* Increased spacing */} 
-              {/* --- Section 1: Identification --- */}
-              <div className="space-y-4 p-4 border rounded-md bg-background/30"> 
-                 <h2 className="text-lg font-semibold border-b pb-2">Identification</h2>
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
-                  <div className="space-y-2">
-                      <Label htmlFor="region">Region</Label>
+        {/* Main form card */}
+        <Card className="shadow-sm">
+          <CardContent className="pt-6 sm:pt-8">
+            <form onSubmit={handleSubmit}>
+              <div className="space-y-6 sm:space-y-8 md:space-y-10">
+                {/* --- Section 1: Identification --- */}
+                <div className="space-y-4 rounded-md">
+                  <div className="flex items-center gap-2 pb-2 border-b">
+                    <Building className="h-5 w-5 text-primary" />
+                    <h2 className="text-lg font-semibold">Location Information</h2>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 pt-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="region" className="text-sm font-medium">Region</Label>
                       <Select
                         value={formData.regionId || ''} 
                         onValueChange={(value) => handleSelectChange('regionId', value)}
                         disabled={user?.role === "district_engineer" || user?.role === "regional_engineer"}
                       >
-                      <SelectTrigger className="h-10">
-                        <SelectValue placeholder="Select region" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {regions.map(region => (
-                          <SelectItem key={region.id} value={region.id}>
-                            {region.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  <div className="space-y-2">
-                      <Label htmlFor="district">District</Label>
-                    <Select 
+                        <SelectTrigger id="region" className="h-10">
+                          <SelectValue placeholder="Select region" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {regions.map(region => (
+                            <SelectItem key={region.id} value={region.id}>
+                              {region.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="district" className="text-sm font-medium">District</Label>
+                      <Select 
                         value={formData.districtId || ''} 
                         onValueChange={(value) => handleSelectChange('districtId', value)}
                         disabled={user?.role === "district_engineer" || !formData.regionId}
-                    >
-                      <SelectTrigger className="h-10">
-                        <SelectValue placeholder="Select district" />
-                      </SelectTrigger>
-                      <SelectContent>
+                      >
+                        <SelectTrigger id="district" className="h-10">
+                          <SelectValue placeholder="Select district" />
+                        </SelectTrigger>
+                        <SelectContent>
                           {filteredDistricts.map(district => (
                             <SelectItem key={district.id} value={district.id}>
                               {district.name}
                             </SelectItem>
                           ))}
-                      </SelectContent>
-                    </Select>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label htmlFor="faultLocation" className="text-sm font-medium">Specific Fault Location</Label>
+                      <Input
+                        id="faultLocation"
+                        value={formData.faultLocation || ""} 
+                        onChange={handleInputChange}
+                        placeholder="E.g., Near transformer XYZ, Pole #123, or specific address"
+                        className="h-10"
+                      />
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                       <Label htmlFor="faultLocation">Fault Location</Label>
-                    <Input
-                         id="faultLocation"
-                         value={formData.faultLocation || ""} 
-                         onChange={handleInputChange}
-                         placeholder="E.g., Near transformer XYZ, Pole #123"
-                      className="h-10"
-                    />
-                     </div>
-                 </div>
+                </div>
+                  
+                {/* --- Section 2: Fault Details --- */}
+                <div className="space-y-4 rounded-md">
+                  <div className="flex items-center gap-2 pb-2 border-b">
+                    <AlertTriangle className="h-5 w-5 text-primary" />
+                    <h2 className="text-lg font-semibold">Fault Details</h2>
                   </div>
                   
-               {/* --- Section 2: Fault Details --- */}
-               <div className="space-y-4 p-4 border rounded-md bg-background/30">
-                  <h2 className="text-lg font-semibold border-b pb-2">Fault Details</h2>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
-                  <div className="space-y-2">
-                      <Label htmlFor="faultType">Fault Type</Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 pt-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="faultType" className="text-sm font-medium">Fault Type</Label>
                       <Select
                         value={formData.faultType || ''} 
                         onValueChange={(value) => handleSelectChange('faultType', value as FaultType)}
                       >
-                      <SelectTrigger className="h-10">
-                        <SelectValue placeholder="Select fault type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Planned">Planned</SelectItem>
-                        <SelectItem value="Unplanned">Unplanned</SelectItem>
-                        <SelectItem value="Emergency">Emergency</SelectItem>
-                        <SelectItem value="Load Shedding">Load Shedding</SelectItem>
-                        <SelectItem value="GridCo Outages">GridCo Outages</SelectItem>
-                      </SelectContent>
-                    </Select>
+                        <SelectTrigger id="faultType" className="h-10">
+                          <SelectValue placeholder="Select fault type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Planned">Planned</SelectItem>
+                          <SelectItem value="Unplanned">Unplanned</SelectItem>
+                          <SelectItem value="Emergency">Emergency</SelectItem>
+                          <SelectItem value="Load Shedding">Load Shedding</SelectItem>
+                          <SelectItem value="GridCo Outages">GridCo Outages</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {(formData.faultType === "Unplanned" || formData.faultType === "Emergency") && (
+                      <div className="space-y-2">
+                        <Label htmlFor="specificFaultType" className="text-sm font-medium">Specific Fault Type</Label>
+                        <Select
+                          value={formData.specificFaultType || ''}
+                          onValueChange={(value) => handleSelectChange('specificFaultType', value)}
+                        >
+                          <SelectTrigger id="specificFaultType" className="h-10">
+                            <SelectValue placeholder="Select specific fault type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {/* Options based on faultType */}
+                            {formData.faultType === "Unplanned" ? (
+                              <>
+                                <SelectItem value="JUMPER CUT">Jumper Cut</SelectItem>
+                                <SelectItem value="CONDUCTOR CUT">Conductor Cut</SelectItem>
+                                <SelectItem value="MERGED CONDUCTOR">Merged Conductor</SelectItem>
+                                <SelectItem value="HV/LV LINE CONTACT">HV/LV Line Contact</SelectItem>
+                                <SelectItem value="VEGETATION">Vegetation</SelectItem>
+                                <SelectItem value="CABLE FAULT">Cable Fault</SelectItem>
+                                <SelectItem value="TERMINATION FAILURE">Termination Failure</SelectItem>
+                                <SelectItem value="BROKEN POLES">Broken Poles</SelectItem>
+                                <SelectItem value="BURNT POLE">Burnt Pole</SelectItem>
+                                <SelectItem value="FAULTY ARRESTER/INSULATOR">Faulty Arrester/Insulator</SelectItem>
+                                <SelectItem value="EQIPMENT FAILURE">Equipment Failure</SelectItem>
+                                <SelectItem value="PUNCTURED CABLE">Punctured Cable</SelectItem>
+                                <SelectItem value="ANIMAL INTERRUPTION">Animal Interruption</SelectItem>
+                                <SelectItem value="BAD WEATHER">Bad Weather</SelectItem>
+                                <SelectItem value="TRANSIENT FAULTS">Transient Faults</SelectItem>
+                              </>
+                            ) : formData.faultType === "Emergency" ? (
+                              <>
+                                <SelectItem value="MEND CABLE">Mend Cable</SelectItem>
+                                <SelectItem value="WORK ON EQUIPMENT">Work on Equipment</SelectItem>
+                                <SelectItem value="FIRE">Fire</SelectItem>
+                                <SelectItem value="IMPROVE HV">Improve HV</SelectItem>
+                                <SelectItem value="JUMPER REPLACEMENT">Jumper Replacement</SelectItem>
+                                <SelectItem value="MEND BROKEN">Mend Broken</SelectItem>
+                                <SelectItem value="MEND JUMPER">Mend Jumper</SelectItem>
+                                <SelectItem value="MEND TERMINATION">Mend Termination</SelectItem>
+                                <SelectItem value="BROKEN POLE">Broken Pole</SelectItem>
+                                <SelectItem value="BURNT POLE">Burnt Pole</SelectItem>
+                                <SelectItem value="ANIMAL CONTACT">Animal Contact</SelectItem>
+                                <SelectItem value="VEGETATION SAFETY">Vegetation Safety</SelectItem>
+                                <SelectItem value="TRANSFER/RESTORE">Transfer/Restore</SelectItem>
+                                <SelectItem value="TROUBLE SHOOTING">Trouble Shooting</SelectItem>
+                                <SelectItem value="MEND LOOSE">Mend Loose</SelectItem>
+                                <SelectItem value="MAINTENANCE">Maintenance</SelectItem>
+                                <SelectItem value="REPLACE FUSE">Replace Fuse</SelectItem>
+                              </>
+                            ) : null}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
                   </div>
 
-                   {(formData.faultType === "Unplanned" || formData.faultType === "Emergency") && (
-                     <div className="space-y-2">
-                       <Label htmlFor="specificFaultType">Specific Fault Type</Label>
-                       <Select
-                         value={formData.specificFaultType || ''}
-                         onValueChange={(value) => handleSelectChange('specificFaultType', value)}
-                       >
-                         <SelectTrigger className="h-10">
-                           <SelectValue placeholder="Select specific fault type" />
-                         </SelectTrigger>
-                         <SelectContent>
-                           {/* Options based on faultType */}
-                           {formData.faultType === "Unplanned" ? (
-                             <>
-                               <SelectItem value="JUMPER CUT">Jumper Cut</SelectItem>
-                               <SelectItem value="CONDUCTOR CUT">Conductor Cut</SelectItem>
-                               <SelectItem value="MERGED CONDUCTOR">Merged Conductor</SelectItem>
-                               <SelectItem value="HV/LV LINE CONTACT">HV/LV Line Contact</SelectItem>
-                               <SelectItem value="VEGETATION">Vegetation</SelectItem>
-                               <SelectItem value="CABLE FAULT">Cable Fault</SelectItem>
-                               <SelectItem value="TERMINATION FAILURE">Termination Failure</SelectItem>
-                               <SelectItem value="BROKEN POLES">Broken Poles</SelectItem>
-                               <SelectItem value="BURNT POLE">Burnt Pole</SelectItem>
-                               <SelectItem value="FAULTY ARRESTER/INSULATOR">Faulty Arrester/Insulator</SelectItem>
-                               <SelectItem value="EQIPMENT FAILURE">Equipment Failure</SelectItem>
-                               <SelectItem value="PUNCTURED CABLE">Punctured Cable</SelectItem>
-                               <SelectItem value="ANIMAL INTERRUPTION">Animal Interruption</SelectItem>
-                               <SelectItem value="BAD WEATHER">Bad Weather</SelectItem>
-                               <SelectItem value="TRANSIENT FAULTS">Transient Faults</SelectItem>
-                             </>
-                           ) : formData.faultType === "Emergency" ? (
-                             <>
-                               <SelectItem value="MEND CABLE">Mend Cable</SelectItem>
-                               <SelectItem value="WORK ON EQUIPMENT">Work on Equipment</SelectItem>
-                               <SelectItem value="FIRE">Fire</SelectItem>
-                               <SelectItem value="IMPROVE HV">Improve HV</SelectItem>
-                               <SelectItem value="JUMPER REPLACEMENT">Jumper Replacement</SelectItem>
-                               <SelectItem value="MEND BROKEN">Mend Broken</SelectItem>
-                               <SelectItem value="MEND JUMPER">Mend Jumper</SelectItem>
-                               <SelectItem value="MEND TERMINATION">Mend Termination</SelectItem>
-                               <SelectItem value="BROKEN POLE">Broken Pole</SelectItem>
-                               <SelectItem value="BURNT POLE">Burnt Pole</SelectItem>
-                               <SelectItem value="ANIMAL CONTACT">Animal Contact</SelectItem>
-                               <SelectItem value="VEGETATION SAFETY">Vegetation Safety</SelectItem>
-                               <SelectItem value="TRANSFER/RESTORE">Transfer/Restore</SelectItem>
-                               <SelectItem value="TROUBLE SHOOTING">Trouble Shooting</SelectItem>
-                               <SelectItem value="MEND LOOSE">Mend Loose</SelectItem>
-                               <SelectItem value="MAINTENANCE">Maintenance</SelectItem>
-                               <SelectItem value="REPLACE FUSE">Replace Fuse</SelectItem>
-                             </>
-                           ) : null}
-                         </SelectContent>
-                       </Select>
-                     </div>
-                   )}
-                 </div>
+                  <div className="pt-2">
+                    <Label htmlFor="outageDescription" className="text-sm font-medium">Fault Description</Label>
+                    <Textarea
+                      id="outageDescription"
+                      value={formData.outageDescription || ''}
+                      onChange={handleInputChange}
+                      placeholder="Provide a detailed description of the fault incident, including cause if known"
+                      className="mt-1 h-24 resize-none"
+                    />
+                  </div>
+                </div>
 
-                 <div className="space-y-2">
-                   <Label htmlFor="outageDescription">Fault Description</Label>
-                   <Textarea
-                     id="outageDescription"
-                     value={formData.outageDescription || ''}
-                     onChange={handleInputChange}
-                     placeholder="Describe the fault"
-                     className="h-20"
-                   />
-                 </div>
-               </div>
-
-               {/* --- Materials Used Section --- */}
-               <div className="space-y-4 p-4 border rounded-md bg-background/30">
-                 <h2 className="text-lg font-semibold border-b pb-2">Materials Used</h2>
-                 
-                 {/* Material Input Row */}
-                 <div className="flex flex-col sm:flex-row gap-4 items-end">
-                   {/* Material Type Select */}
-                   <div className="space-y-1 flex-1">
-                     <Label htmlFor="materialType">Material Type</Label>
-                     <Select 
-                       value={currentMaterialType} 
-                       onValueChange={handleMaterialTypeChange}
-                     >
-                       <SelectTrigger className="h-10">
-                         <SelectValue placeholder="Select Type" />
-                       </SelectTrigger>
-                       <SelectContent>
-                         <SelectItem value="Fuse">Fuse</SelectItem>
-                         <SelectItem value="Conductor">Conductor</SelectItem>
-                         <SelectItem value="Others">Others</SelectItem>
-                       </SelectContent>
-                     </Select>
-                   </div>
-                   
-                   {/* Conditional Detail Inputs */}
-                   {currentMaterialType === "Fuse" && (
-                     <>
-                       <div className="space-y-1 flex-1">
-                         <Label htmlFor="fuseRating">Rating</Label>
-                         <Input 
-                           id="fuseRating" 
-                           type="number"
-                           min="0"
-                           step="1"
-                           value={currentMaterialDetails.rating || ""} 
-                           onChange={(e) => handleMaterialDetailChange('rating', e.target.value)} 
-                           placeholder="e.g., 100" 
-                           className="h-10" 
-                         />
-                       </div>
-                       <div className="space-y-1" style={{ flexBasis: '100px' }}>
-                         <Label htmlFor="fuseQuantity">Quantity</Label>
-                         <Input 
-                           id="fuseQuantity" 
-                           type="number" 
-                           value={currentMaterialDetails.quantity || ""} 
-                           onChange={(e) => handleMaterialDetailChange('quantity', e.target.value)} 
-                           placeholder="Qty" 
-                           min="1" 
-                           className="h-10" 
-                         />
-                       </div>
-                     </>
-                   )}
-                   
-                   {currentMaterialType === "Conductor" && (
-                     <>
-                       <div className="space-y-1 flex-1">
-                         <Label htmlFor="conductorType">Conductor Type</Label>
-                         <Input 
-                           id="conductorType" 
-                           value={currentMaterialDetails.conductorType || ""} 
-                           onChange={(e) => handleMaterialDetailChange('conductorType', e.target.value)} 
-                           placeholder="e.g., ACSR 150mm²" 
-                           className="h-10" 
-                         />
-                       </div>
-                       <div className="space-y-1" style={{ flexBasis: '120px' }}>
-                         <Label htmlFor="conductorLength">Length (m)</Label>
-                         <Input 
-                           id="conductorLength" 
-                           type="number" 
-                           value={currentMaterialDetails.length || ""} 
-                           onChange={(e) => handleMaterialDetailChange('length', e.target.value)} 
-                           placeholder="Length" 
-                           min="0.1" 
-                           step="0.1" 
-                           className="h-10" 
-                         />
-                       </div>
-                     </>
-                   )}
-                   
-                   {currentMaterialType === "Others" && (
-                     <>
-                       <div className="space-y-1 flex-1">
-                         <Label htmlFor="otherDescription">Description</Label>
-                         <Input 
-                           id="otherDescription" 
-                           value={currentMaterialDetails.description || ""} 
-                           onChange={(e) => handleMaterialDetailChange('description', e.target.value)} 
-                           placeholder="Material description" 
-                           className="h-10" 
-                         />
-                       </div>
-                       <div className="space-y-1" style={{ flexBasis: '100px' }}>
-                         <Label htmlFor="otherQuantity">Quantity</Label>
-                         <Input 
-                           id="otherQuantity" 
-                           type="number" 
-                           value={currentMaterialDetails.quantity || ""} 
-                           onChange={(e) => handleMaterialDetailChange('quantity', e.target.value)} 
-                           placeholder="Qty" 
-                           min="1" 
-                           className="h-10" 
-                         />
-                       </div>
-                     </>
-                   )}
-
-                   {/* Add Button */}
-                   <Button 
-                     type="button" 
-                     onClick={handleAddMaterial} 
-                     disabled={!currentMaterialType}
-                     variant="outline"
-                     size="icon"
-                     className="h-10 w-10 flex-shrink-0"
-                     title="Add Material"
-                   >
-                     <PlusCircle className="h-5 w-5" />
-                   </Button>
-                 </div>
-
-                 {/* Display Added Materials */}
-                 {formData.materialsUsed && formData.materialsUsed.length > 0 && (
-                   <div className="mt-4 space-y-2 border-t pt-4">
-                     <h4 className="text-sm font-medium text-muted-foreground">Added Materials:</h4>
-                     <ul className="list-none space-y-1">
-                       {formData.materialsUsed.map((material) => (
-                         <li key={material.id} className="flex items-center justify-between bg-muted/30 p-2 rounded text-sm">
-                           <span>
-                             {material.type === "Fuse" && `Fuse: ${material.rating}, Qty: ${material.quantity}`}
-                             {material.type === "Conductor" && `Conductor: ${material.conductorType}, Length: ${material.length}m`}
-                             {material.type === "Others" && `Other: ${material.description}, Qty: ${material.quantity}`}
-                           </span>
-                           <Button 
-                             type="button" 
-                             onClick={() => handleRemoveMaterial(material.id)} 
-                             variant="ghost"
-                             size="icon"
-                             className="h-6 w-6"
-                           >
-                             <X className="h-4 w-4 text-destructive" />
-                           </Button>
-                         </li>
-                       ))}
-                     </ul>
-                   </div>
-                 )}
-               </div>
-
-               {/* --- Section 3: Timing --- */}
-               <div className="space-y-4 p-4 border rounded-md bg-background/30">
-                  <h2 className="text-lg font-semibold border-b pb-2">Timing</h2>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
+                {/* --- Section 3: Timing --- */}
+                <div className="space-y-4 rounded-md">
+                  <div className="flex items-center gap-2 pb-2 border-b">
+                    <Clock className="h-5 w-5 text-primary" />
+                    <h2 className="text-lg font-semibold">Timing Information</h2>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 pt-4">
                     <div className="space-y-2">
-                      <Label htmlFor="occurrenceDate">Occurrence Date & Time</Label>
+                      <Label htmlFor="occurrenceDate" className="text-sm font-medium">
+                        <span className="flex items-center gap-1.5">
+                          <span className="h-2 w-2 rounded-full bg-red-500"></span>
+                          Occurrence Date & Time
+                        </span>
+                      </Label>
                       <Input
                         id="occurrenceDate"
                         type="datetime-local"
@@ -786,194 +765,280 @@ export default function EditOP5FaultPage() {
                         onChange={handleInputChange}
                         className="w-full h-10"
                       />
-                 </div>
-
-                <div className="space-y-2">
-                     <Label htmlFor="repairDate">Repair Start Date & Time</Label>
-                  <Input
-                       id="repairDate"
-                       type="datetime-local"
-                       value={formData.repairDate || ""} 
-                       onChange={handleInputChange}
-                       className="w-full h-10"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                     <Label htmlFor="restorationDate">Restoration Date & Time</Label>
-                  <Input
-                    id="restorationDate"
-                    type="datetime-local"
-                       value={formData.restorationDate || ""} 
-                       onChange={handleInputChange}
-                       className="w-full h-10"
-                     />
-                  </div>
-                </div>
-              </div>
-
-              {/* --- Section 4: Impact & Calculations (Tabs) --- */} 
-              <Tabs defaultValue="affected" className="w-full">
-                 <TabsList className="grid w-full grid-cols-2 gap-1"> 
-                   <TabsTrigger value="affected" className="flex items-center justify-center gap-1 text-sm py-2">
-                     <Users className="h-4 w-4" />
-                     <span>Affected Population</span>
-                   </TabsTrigger>
-                   <TabsTrigger value="calculations" className="flex items-center justify-center gap-1 text-sm py-2">
-                     <Calculator className="h-4 w-4" />
-                     <span>Calculations</span>
-                   </TabsTrigger>
-                 </TabsList>
-
-                 {/* Affected Population Tab */}
-                 <TabsContent value="affected" className="space-y-6 pt-6 border rounded-b-md p-4">
-                    <div className="space-y-4">
-                       {/* <Label className="font-medium text-lg">Affected Population</Label> */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="space-y-2">
-                           <Label htmlFor="ruralAffected">Rural Population</Label>
-                    <Input
-                      id="ruralAffected"
-                      type="number"
-                      min="0"
-                             value={formData.affectedPopulation?.rural ?? ''} 
-                             onChange={(e) => handleAffectedPopulationChange('rural', e.target.value)}
-                             placeholder="Number affected"
-                      className="h-10"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                           <Label htmlFor="urbanAffected">Urban Population</Label>
-                    <Input
-                      id="urbanAffected"
-                      type="number"
-                      min="0"
-                             value={formData.affectedPopulation?.urban ?? ''}
-                             onChange={(e) => handleAffectedPopulationChange('urban', e.target.value)}
-                             placeholder="Number affected"
-                      className="h-10"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                           <Label htmlFor="metroAffected">Metro Population</Label>
-                    <Input
-                      id="metroAffected"
-                      type="number"
-                      min="0"
-                             value={formData.affectedPopulation?.metro ?? ''}
-                             onChange={(e) => handleAffectedPopulationChange('metro', e.target.value)}
-                             placeholder="Number affected"
-                      className="h-10"
-                    />
-                  </div>
-                </div>
-              </div>
-                 </TabsContent>
-
-                 {/* Calculations Tab */}
-                 <TabsContent value="calculations" className="pt-6 space-y-6 border rounded-b-md p-4">
-              <div className="space-y-6">
-                     {/* Row 1: Duration & MTTR */} 
-                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                       <div className="space-y-2">
-                         <Label htmlFor="outageDuration" className="font-medium text-sm flex items-center gap-1">
-                            <Clock className="h-4 w-4 text-muted-foreground"/> Outage Duration
-                         </Label>
-                         <div className="bg-muted/50 rounded-md p-3 text-sm border border-muted min-h-[44px] flex items-center">
-                           {calculatedValues.outageDuration !== null 
-                             ? formatDuration(calculatedValues.outageDuration)
-                             : <span className="text-muted-foreground italic text-xs">Requires valid Occurrence & Restoration Dates</span>}
-                         </div>
-                       </div>
-                  <div className="space-y-2">
-                         <Label htmlFor="mttr" className="font-medium text-sm flex items-center gap-1">
-                            <ActivityIcon className="h-4 w-4 text-muted-foreground"/> MTTR
-                    </Label>
-                         <div className="bg-muted/50 rounded-md p-3 text-sm border border-muted min-h-[44px] flex items-center">
-                           {calculatedValues.mttr !== null 
-                             ? formatDuration(calculatedValues.mttr)
-                             : <span className="text-muted-foreground italic text-xs">Requires valid Occurrence & Repair Dates</span>}
-                         </div>
+                      <p className="text-xs text-muted-foreground mt-1">When the fault first occurred</p>
                     </div>
-                  </div>
-                  
-                      {/* Row 2: Customer Lost Hours */} 
-                  <div className="space-y-2">
-                       <Label htmlFor="customerLostHours" className="font-medium text-sm flex items-center gap-1">
-                          <Users className="h-4 w-4 text-muted-foreground"/> Customer Lost Hours
-                    </Label>
-                       <div className="bg-muted/50 rounded-md p-3 text-sm border border-muted min-h-[44px] flex items-center">
-                         {calculatedValues.customerLostHours !== null 
-                           ? `${calculatedValues.customerLostHours.toFixed(2)} Cshr`
-                           : <span className="text-muted-foreground italic text-xs">Requires valid Duration & Affected Pop.</span>}
+
+                    <div className="space-y-2">
+                      <Label htmlFor="repairDate" className="text-sm font-medium">
+                        <span className="flex items-center gap-1.5">
+                          <span className="h-2 w-2 rounded-full bg-amber-500"></span>
+                          Repair Start Date & Time
+                        </span>
+                      </Label>
+                      <Input
+                        id="repairDate"
+                        type="datetime-local"
+                        value={formData.repairDate || ""} 
+                        onChange={handleInputChange}
+                        className="w-full h-10"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">When repair work began</p>
                     </div>
-                  </div>
-                  
-                     {/* Row 3: Reliability Indices */} 
-                     <div className="space-y-4">
-                       <Label className="font-medium text-sm">Reliability Indices</Label>
-                       <div className="text-xs text-muted-foreground italic mb-2">Calculated based on selected district population, valid duration, and affected population.</div>
-                       
-                       {/* Combined Indices Table-like structure */} 
-                       <div className="border rounded-md overflow-hidden">
-                         <table className="w-full text-sm">
-                           <thead className="bg-muted/50">
-                             <tr className="text-left">
-                               <th className="p-2 font-medium">Population</th>
-                               <th className="p-2 font-medium">SAIDI</th>
-                               <th className="p-2 font-medium">SAIFI</th>
-                               <th className="p-2 font-medium">CAIDI</th>
-                             </tr>
-                           </thead>
-                           <tbody>
-                             {/* Rural */}
-                             <tr className="border-b">
-                               <td className="p-2 font-medium">Rural</td>
-                               <td className="p-2">{(calculatedValues.reliabilityIndices.rural.saidi ?? 0).toFixed(3)}</td>
-                               <td className="p-2">{(calculatedValues.reliabilityIndices.rural.saifi ?? 0).toFixed(3)}</td>
-                               <td className="p-2">{(calculatedValues.reliabilityIndices.rural.caidi ?? 0).toFixed(3)}</td>
-                             </tr>
-                              {/* Urban */}
-                             <tr className="border-b">
-                               <td className="p-2 font-medium">Urban</td>
-                               <td className="p-2">{(calculatedValues.reliabilityIndices.urban.saidi ?? 0).toFixed(3)}</td>
-                               <td className="p-2">{(calculatedValues.reliabilityIndices.urban.saifi ?? 0).toFixed(3)}</td>
-                               <td className="p-2">{(calculatedValues.reliabilityIndices.urban.caidi ?? 0).toFixed(3)}</td>
-                             </tr>
-                              {/* Metro */}
-                             <tr className="border-b">
-                               <td className="p-2 font-medium">Metro</td>
-                               <td className="p-2">{(calculatedValues.reliabilityIndices.metro.saidi ?? 0).toFixed(3)}</td>
-                               <td className="p-2">{(calculatedValues.reliabilityIndices.metro.saifi ?? 0).toFixed(3)}</td>
-                               <td className="p-2">{(calculatedValues.reliabilityIndices.metro.caidi ?? 0).toFixed(3)}</td>
-                             </tr>
-                             {/* Total */}
-                             <tr className="bg-muted/50 font-semibold">
-                               <td className="p-2">Total (District)</td>
-                               <td className="p-2">{(calculatedValues.reliabilityIndices.total.saidi ?? 0).toFixed(3)}</td>
-                               <td className="p-2">{(calculatedValues.reliabilityIndices.total.saifi ?? 0).toFixed(3)}</td>
-                               <td className="p-2">{(calculatedValues.reliabilityIndices.total.caidi ?? 0).toFixed(3)}</td>
-                             </tr>
-                           </tbody>
-                         </table>
+
+                    <div className="space-y-2 sm:col-span-2 lg:col-span-1">
+                      <Label htmlFor="restorationDate" className="text-sm font-medium">
+                        <span className="flex items-center gap-1.5">
+                          <span className="h-2 w-2 rounded-full bg-green-500"></span>
+                          Restoration Date & Time
+                        </span>
+                      </Label>
+                      <Input
+                        id="restorationDate"
+                        type="datetime-local"
+                        value={formData.restorationDate || ""} 
+                        onChange={handleInputChange}
+                        className="w-full h-10"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">When service was fully restored</p>
                     </div>
                   </div>
                 </div>
-                 </TabsContent>
-              </Tabs>
 
-              {/* Submit Button */}
-              <div className="pt-4"> {/* Add padding top */} 
-                  <Button type="submit" disabled={isSubmitting} className="w-full h-11 text-base font-medium">
-                    {isSubmitting ? (
-                        <>
-                         <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                         Updating...
-                        </>
-                     ) : (
-                        "Update Fault Report"
-                     )}
+                {/* --- Section 4: Impact & Calculations (Tabs) --- */} 
+                <div className="space-y-4 rounded-md">
+                  <div className="flex items-center gap-2 pb-2 border-b">
+                    <Users className="h-5 w-5 text-primary" />
+                    <h2 className="text-lg font-semibold">Impact & Analysis</h2>
+                  </div>
+                
+                  <Tabs defaultValue="affected" className="w-full pt-4">
+                    <TabsList className="grid w-full grid-cols-2 h-11"> 
+                      <TabsTrigger value="affected" className="flex items-center justify-center gap-1.5 text-sm py-2 rounded-l-md">
+                        <Users className="h-4 w-4" />
+                        <span>Affected Population</span>
+                      </TabsTrigger>
+                      <TabsTrigger value="calculations" className="flex items-center justify-center gap-1.5 text-sm py-2 rounded-r-md">
+                        <Calculator className="h-4 w-4" />
+                        <span>Calculations & Metrics</span>
+                      </TabsTrigger>
+                    </TabsList>
+
+                    {/* Affected Population Tab */}
+                    <TabsContent value="affected" className="pt-6 border rounded-md p-4 sm:p-6 shadow-sm mt-2">
+                      <div className="space-y-6">
+                        <div className="flex items-center gap-2 mb-4">
+                          <Badge variant="outline" className="bg-primary/10 border-primary/20 text-primary px-3 py-1">
+                            Customer Impact
+                          </Badge>
+                          <p className="text-sm text-muted-foreground">Enter the number of customers affected in each category</p>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+                          <div className="space-y-2">
+                            <Label htmlFor="ruralAffected" className="text-sm font-medium">Rural Population</Label>
+                            <div className="relative">
+                              <Input
+                                id="ruralAffected"
+                                type="number"
+                                min="0"
+                                value={formData.affectedPopulation?.rural ?? ''} 
+                                onChange={(e) => handleAffectedPopulationChange('rural', e.target.value)}
+                                placeholder="Number affected"
+                                className="h-10 pl-9"
+                              />
+                              <Users className="h-4 w-4 text-muted-foreground absolute left-3 top-3" />
+                            </div>
+                          </div>
+                          
+                          <div className="space-y-2">
+                            <Label htmlFor="urbanAffected" className="text-sm font-medium">Urban Population</Label>
+                            <div className="relative">
+                              <Input
+                                id="urbanAffected"
+                                type="number"
+                                min="0"
+                                value={formData.affectedPopulation?.urban ?? ''}
+                                onChange={(e) => handleAffectedPopulationChange('urban', e.target.value)}
+                                placeholder="Number affected"
+                                className="h-10 pl-9"
+                              />
+                              <Users className="h-4 w-4 text-muted-foreground absolute left-3 top-3" />
+                            </div>
+                          </div>
+                          
+                          <div className="space-y-2 sm:col-span-2 lg:col-span-1">
+                            <Label htmlFor="metroAffected" className="text-sm font-medium">Metro Population</Label>
+                            <div className="relative">
+                              <Input
+                                id="metroAffected"
+                                type="number"
+                                min="0"
+                                value={formData.affectedPopulation?.metro ?? ''}
+                                onChange={(e) => handleAffectedPopulationChange('metro', e.target.value)}
+                                placeholder="Number affected"
+                                className="h-10 pl-9"
+                              />
+                              <Users className="h-4 w-4 text-muted-foreground absolute left-3 top-3" />
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center justify-between bg-muted/30 p-3 rounded-md mt-4">
+                          <span className="text-sm font-medium">Total Affected:</span>
+                          <span className="text-lg font-semibold">
+                            {(formData.affectedPopulation ? 
+                              (formData.affectedPopulation.rural || 0) + 
+                              (formData.affectedPopulation.urban || 0) + 
+                              (formData.affectedPopulation.metro || 0) : 0).toLocaleString()} customers
+                          </span>
+                        </div>
+                      </div>
+                    </TabsContent>
+
+                    {/* Calculations Tab */}
+                    <TabsContent value="calculations" className="pt-6 border rounded-md p-4 sm:p-6 shadow-sm mt-2">
+                      <div className="space-y-6">
+                        <div className="flex items-center gap-2 mb-4">
+                          <Badge variant="outline" className="bg-primary/10 border-primary/20 text-primary px-3 py-1">
+                            Calculated Metrics
+                          </Badge>
+                          <p className="text-sm text-muted-foreground">Automatically calculated based on your inputs</p>
+                        </div>
+                        
+                        {/* Row 1: Duration & MTTR */} 
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+                          <div className="space-y-2">
+                            <Label htmlFor="outageDuration" className="text-sm font-medium flex items-center gap-1.5">
+                              <Clock className="h-4 w-4 text-primary"/> 
+                              <span>Outage Duration</span>
+                            </Label>
+                            <div className="bg-muted/30 rounded-md p-3 text-sm border min-h-[44px] flex items-center">
+                              {calculatedValues.outageDuration !== null 
+                                ? <span className="font-medium">{formatDuration(calculatedValues.outageDuration)}</span>
+                                : <span className="text-muted-foreground italic text-xs">Requires valid Occurrence & Restoration Dates</span>}
+                            </div>
+                          </div>
+                          
+                          <div className="space-y-2">
+                            <Label htmlFor="mttr" className="text-sm font-medium flex items-center gap-1.5">
+                              <ActivityIcon className="h-4 w-4 text-primary"/> 
+                              <span>Mean Time To Repair (MTTR)</span>
+                            </Label>
+                            <div className="bg-muted/30 rounded-md p-3 text-sm border min-h-[44px] flex items-center">
+                              {calculatedValues.mttr !== null 
+                                ? <span className="font-medium">{formatDuration(calculatedValues.mttr)}</span>
+                                : <span className="text-muted-foreground italic text-xs">Requires valid Occurrence & Repair Dates</span>}
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {/* Row 2: Customer Lost Hours */} 
+                        <div className="space-y-2">
+                          <Label htmlFor="customerLostHours" className="text-sm font-medium flex items-center gap-1.5">
+                            <Users className="h-4 w-4 text-primary"/> 
+                            <span>Customer Lost Hours</span>
+                          </Label>
+                          <div className="bg-muted/30 rounded-md p-3 text-sm border min-h-[44px] flex items-center">
+                            {calculatedValues.customerLostHours !== null 
+                              ? <span className="font-medium">{calculatedValues.customerLostHours.toFixed(2)} Cshr</span>
+                              : <span className="text-muted-foreground italic text-xs">Requires valid Duration & Affected Pop.</span>}
+                          </div>
+                        </div>
+                        
+                        {/* Row 3: Reliability Indices */}
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-sm font-medium flex items-center gap-1.5">
+                              <ActivityIcon className="h-4 w-4 text-primary"/> 
+                              <span>Reliability Indices</span>
+                            </Label>
+                            <InfoIcon className="h-4 w-4 text-muted-foreground" title="Calculated based on district population data"/>
+                          </div>
+                          
+                          {/* Combined Indices Table */} 
+                          <div className="border rounded-md overflow-hidden shadow-sm">
+                            <table className="w-full text-sm">
+                              <thead className="bg-muted/50">
+                                <tr className="text-left">
+                                  <th className="p-2.5 font-medium">Population</th>
+                                  <th className="p-2.5 font-medium">SAIDI</th>
+                                  <th className="p-2.5 font-medium">SAIFI</th>
+                                  <th className="p-2.5 font-medium">CAIDI</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {/* Rural */}
+                                <tr className="border-b hover:bg-muted/20">
+                                  <td className="p-2.5 font-medium">Rural</td>
+                                  <td className="p-2.5">{(calculatedValues.reliabilityIndices.rural.saidi ?? 0).toFixed(3)}</td>
+                                  <td className="p-2.5">{(calculatedValues.reliabilityIndices.rural.saifi ?? 0).toFixed(3)}</td>
+                                  <td className="p-2.5">{(calculatedValues.reliabilityIndices.rural.caidi ?? 0).toFixed(3)}</td>
+                                </tr>
+                                {/* Urban */}
+                                <tr className="border-b hover:bg-muted/20">
+                                  <td className="p-2.5 font-medium">Urban</td>
+                                  <td className="p-2.5">{(calculatedValues.reliabilityIndices.urban.saidi ?? 0).toFixed(3)}</td>
+                                  <td className="p-2.5">{(calculatedValues.reliabilityIndices.urban.saifi ?? 0).toFixed(3)}</td>
+                                  <td className="p-2.5">{(calculatedValues.reliabilityIndices.urban.caidi ?? 0).toFixed(3)}</td>
+                                </tr>
+                                {/* Metro */}
+                                <tr className="border-b hover:bg-muted/20">
+                                  <td className="p-2.5 font-medium">Metro</td>
+                                  <td className="p-2.5">{(calculatedValues.reliabilityIndices.metro.saidi ?? 0).toFixed(3)}</td>
+                                  <td className="p-2.5">{(calculatedValues.reliabilityIndices.metro.saifi ?? 0).toFixed(3)}</td>
+                                  <td className="p-2.5">{(calculatedValues.reliabilityIndices.metro.caidi ?? 0).toFixed(3)}</td>
+                                </tr>
+                                {/* Total */}
+                                <tr className="bg-primary/5 font-semibold">
+                                  <td className="p-2.5">Total (District)</td>
+                                  <td className="p-2.5">{(calculatedValues.reliabilityIndices.total.saidi ?? 0).toFixed(3)}</td>
+                                  <td className="p-2.5">{(calculatedValues.reliabilityIndices.total.saifi ?? 0).toFixed(3)}</td>
+                                  <td className="p-2.5">{(calculatedValues.reliabilityIndices.total.caidi ?? 0).toFixed(3)}</td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                          
+                          <div className="text-xs text-muted-foreground mt-2">
+                            <span className="font-medium">Legend:</span> SAIDI = System Average Interruption Duration Index, 
+                            SAIFI = System Average Interruption Frequency Index, 
+                            CAIDI = Customer Average Interruption Duration Index
+                          </div>
+                        </div>
+                      </div>
+                    </TabsContent>
+                  </Tabs>
+                </div>
+
+                {/* Submit Button */}
+                <div className="pt-6 flex flex-col sm:flex-row gap-4 items-center justify-end border-t">
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    onClick={() => navigate(-1)} 
+                    className="w-full sm:w-auto order-2 sm:order-1"
+                  >
+                    Cancel
                   </Button>
+                  
+                  <Button 
+                    type="submit" 
+                    disabled={isSubmitting} 
+                    className="w-full sm:w-auto h-11 gap-2 order-1 sm:order-2 bg-primary text-white"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                        <span>Updating Report...</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="h-5 w-5" />
+                        <span>Save Changes</span>
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
             </form>
           </CardContent>

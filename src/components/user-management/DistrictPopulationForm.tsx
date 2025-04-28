@@ -53,9 +53,10 @@ export function DistrictPopulationForm() {
           
           if (userDistrict) {
             setSelectedDistrict(userDistrict.id);
-            setRuralPopulation(userDistrict.population.rural || 0);
-            setUrbanPopulation(userDistrict.population.urban || 0);
-            setMetroPopulation(userDistrict.population.metro || 0);
+            // Add null checks and default values for population data
+            setRuralPopulation(userDistrict.population?.rural ?? 0);
+            setUrbanPopulation(userDistrict.population?.urban ?? 0);
+            setMetroPopulation(userDistrict.population?.metro ?? 0);
           }
         }
       }
@@ -68,9 +69,10 @@ export function DistrictPopulationForm() {
       const userDistrict = districts.find(d => d.name === user.district);
       if (userDistrict) {
         setSelectedDistrict(userDistrict.id);
-        setRuralPopulation(userDistrict.population.rural || 0);
-        setUrbanPopulation(userDistrict.population.urban || 0);
-        setMetroPopulation(userDistrict.population.metro || 0);
+        // Add null checks and default values for population data
+        setRuralPopulation(userDistrict.population?.rural ?? 0);
+        setUrbanPopulation(userDistrict.population?.urban ?? 0);
+        setMetroPopulation(userDistrict.population?.metro ?? 0);
       }
     }
   }, [user, selectedRegion, selectedDistrict, districts]);
@@ -79,10 +81,11 @@ export function DistrictPopulationForm() {
   useEffect(() => {
     if (selectedDistrict) {
       const district = districts.find(d => d.id === selectedDistrict);
-      if (district && district.population) {
-        setRuralPopulation(district.population.rural || 0);
-        setUrbanPopulation(district.population.urban || 0);
-        setMetroPopulation(district.population.metro || 0);
+      if (district) {
+        // Add null checks and default values for population data
+        setRuralPopulation(district.population?.rural ?? 0);
+        setUrbanPopulation(district.population?.urban ?? 0);
+        setMetroPopulation(district.population?.metro ?? 0);
       } else {
         setRuralPopulation(0);
         setUrbanPopulation(0);
@@ -106,7 +109,7 @@ export function DistrictPopulationForm() {
     setIsSubmitting(true);
     
     try {
-      updateDistrict(selectedDistrict, {
+      await updateDistrict(selectedDistrict, {
         population: {
           rural: ruralPopulation,
           urban: urbanPopulation,
@@ -131,13 +134,12 @@ export function DistrictPopulationForm() {
   // Filter districts for district engineers
   const filteredDistricts = selectedRegion
     ? districts.filter(d => {
-      const region = regions.find(r => r.id === selectedRegion);
-      return region?.districts.some(rd => rd.id === d.id) && (
-        user?.role === "district_engineer" 
-          ? d.name === user.district 
-          : true
-      );
-    })
+        return d.regionId === selectedRegion && (
+          user?.role === "district_engineer" 
+            ? d.name === user.district 
+            : true
+        );
+      })
     : [];
   
   return (

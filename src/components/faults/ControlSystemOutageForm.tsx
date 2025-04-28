@@ -30,6 +30,7 @@ import {
 } from "@/utils/calculations";
 import { toast } from "@/components/ui/sonner";
 import { showNotification, showServiceWorkerNotification } from '@/utils/notifications';
+import { PermissionService } from "@/services/PermissionService";
 
 interface ControlSystemOutageFormProps {
   defaultRegionId?: string;
@@ -40,6 +41,7 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
   const { regions, districts, addControlOutage } = useData();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const permissionService = PermissionService.getInstance();
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [regionId, setRegionId] = useState<string>(defaultRegionId);
@@ -60,22 +62,53 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
   const [unservedEnergyMWh, setUnservedEnergyMWh] = useState<number | null>(null);
   const [specificFaultType, setSpecificFaultType] = useState<UnplannedFaultType | EmergencyFaultType | undefined>(undefined);
   
+  // Check if user has permission to report faults
+  useEffect(() => {
+    if (user && !permissionService.canAccessFeature(user.role, 'fault_reporting')) {
+      navigate("/unauthorized");
+      return;
+    }
+  }, [user, navigate]);
+  
   // Initialize region and district based on user's assigned values
   useEffect(() => {
-    if (user?.role === "district_engineer" || user?.role === "regional_engineer" || user?.role === "technician") {
-      // Find region ID based on user's assigned region name
-      const userRegion = regions.find(r => r.name === user.region);
-      if (userRegion) {
-        setRegionId(userRegion.id);
+    if (!user) return;
+
+    console.log("[ControlSystemOutageForm] Initializing with user:", {
+      role: user.role,
+      districtId: user.districtId,
+      regionId: user.regionId
+    });
+
+    if (user.role === "district_engineer" || user.role === "regional_engineer" || user.role === "technician") {
+      // For district engineers and technicians, find their region through their district
+      if ((user.role === "district_engineer" || user.role === "technician") && user.districtId) {
+        const userDistrict = districts.find(d => d.id === user.districtId);
+        console.log("[ControlSystemOutageForm] Found user district:", userDistrict);
         
-        // For district engineer and technician, also set the district
-        if ((user.role === "district_engineer" || user.role === "technician") && user.district) {
-          const userDistrict = districts.find(d => 
-            d.regionId === userRegion.id && d.name === user.district
-          );
-          if (userDistrict) {
-            setDistrictId(userDistrict.id);
-          }
+        if (userDistrict) {
+          setDistrictId(userDistrict.id);
+          setRegionId(userDistrict.regionId);
+          console.log("[ControlSystemOutageForm] Set district and region:", {
+            districtId: userDistrict.id,
+            regionId: userDistrict.regionId
+          });
+          return;
+        } else {
+          console.error("[ControlSystemOutageForm] Could not find district for user:", user.districtId);
+        }
+      }
+      
+      // For regional engineers, find region by name
+      if (user.role === "regional_engineer") {
+        const userRegion = regions.find(r => r.name === user.region);
+        console.log("[ControlSystemOutageForm] Found user region:", userRegion);
+        
+        if (userRegion) {
+          setRegionId(userRegion.id);
+          console.log("[ControlSystemOutageForm] Set region:", userRegion.id);
+        } else {
+          console.error("[ControlSystemOutageForm] Could not find region for user:", user.region);
         }
       }
     }
@@ -93,25 +126,35 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
   }, [defaultRegionId, defaultDistrictId]);
   
   // Filter regions and districts based on user role
-  const filteredRegions = user?.role === "global_engineer" 
-    ? regions 
-    : regions.filter(r => user?.region ? r.name === user.region : true);
+  const filteredRegions = regions.filter(region => {
+    if (user?.role === "global_engineer") return true;
+    if (user?.role === "regional_engineer") return region.id === user.regionId;
+    if (user?.role === "district_engineer" || user?.role === "technician") {
+      // For district engineers and technicians, show their assigned region
+      const userDistrict = districts.find(d => d.id === user.districtId);
+      console.log("[ControlSystemOutageForm] Filtering regions for district engineer/technician:", {
+        userDistrict,
+        regionId: region.id,
+        userDistrictRegionId: userDistrict?.regionId
+      });
+      return userDistrict ? region.id === userDistrict.regionId : false;
+    }
+    return false;
+  });
 
-  // Filter districts based on region and user role  
-  const filteredDistricts = regionId
-    ? districts.filter(d => {
-        // First check if district belongs to selected region
-        if (d.regionId !== regionId) return false;
-        
-        // For district engineers and technicians, only show their assigned district
-        if (user?.role === "district_engineer" || user?.role === "technician") {
-          return d.name === user.district;
-        }
-        
-        // For other roles, show all districts in the region
-        return true;
-      })
-    : [];
+  const filteredDistricts = districts.filter(district => {
+    if (!regionId) return false;
+    if (user?.role === "global_engineer") return district.regionId === regionId;
+    if (user?.role === "regional_engineer") return district.regionId === user.regionId;
+    if (user?.role === "district_engineer" || user?.role === "technician") {
+      console.log("[ControlSystemOutageForm] Filtering districts for district engineer/technician:", {
+        districtId: district.id,
+        userDistrictId: user.districtId
+      });
+      return district.id === user.districtId;
+    }
+    return false;
+  });
   
   // Calculate metrics when dates or load changes
   useEffect(() => {
@@ -131,18 +174,17 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
   }, [occurrenceDate, restorationDate, loadMW]);
   
   // Add these helper functions before the handleSubmit function
-  const getRegionName = (regionId: string) => {
-    const region = regions.find(r => r.id === regionId);
-    return region?.name || regionId;
-  };
-
-  const getDistrictName = (districtId: string) => {
-    const district = districts.find(d => d.id === districtId);
-    return district?.name || districtId;
-  };
+  const getRegionName = (id: string) => regions.find(r => r.id === id)?.name || "Unknown";
+  const getDistrictName = (id: string) => districts.find(d => d.id === id)?.name || "Unknown";
   
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Check if user has permission to report faults
+    if (user && !permissionService.canAccessFeature(user.role, 'fault_reporting')) {
+      navigate("/unauthorized");
+      return;
+    }
     
     if (!occurrenceDate || !faultType || !regionId || !districtId || !loadMW) {
       toast.error("Please fill all required fields");
@@ -270,7 +312,7 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
                   <SelectValue placeholder="Select district" />
                 </SelectTrigger>
                 <SelectContent>
-                  {regionId && districts
+                  {regionId && filteredDistricts
                     .filter(d => d.regionId === regionId)
                     .map(district => (
                       <SelectItem key={district.id} value={district.id}>
@@ -375,21 +417,18 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
           )}
           
           <Tabs defaultValue="affected" className="w-full">
-            <TabsList className="grid w-full grid-cols-3 gap-1">
-              <TabsTrigger value="affected" className="flex items-center gap-1 text-xs sm:text-sm">
-                <Users className="h-3 w-3 sm:h-4 sm:w-4" />
-                <span className="hidden sm:inline">Affected</span>
-                <span className="sm:hidden">Aff.</span>
+            <TabsList className="mb-8 w-full grid grid-cols-3 bg-muted/50 p-1 rounded-md">
+              <TabsTrigger value="affected" className="flex items-center gap-1 text-[11px] leading-tight sm:text-sm data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 data-[state=active]:shadow-sm">
+                <Users className="h-3 w-3 sm:h-4 sm:w-4 text-primary shrink-0" />
+                <span className="truncate">Affected Customers</span>
               </TabsTrigger>
-              <TabsTrigger value="details" className="flex items-center gap-1 text-xs sm:text-sm">
-                <FileText className="h-3 w-3 sm:h-4 sm:w-4" />
-                <span className="hidden sm:inline">Details</span>
-                <span className="sm:hidden">Det.</span>
+              <TabsTrigger value="details" className="flex items-center gap-1 text-[11px] leading-tight sm:text-sm data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 data-[state=active]:shadow-sm">
+                <FileText className="h-3 w-3 sm:h-4 sm:w-4 text-primary shrink-0" />
+                <span className="truncate">Outage Details</span>
               </TabsTrigger>
-              <TabsTrigger value="calculations" className="flex items-center gap-1 text-xs sm:text-sm">
-                <Calculator className="h-3 w-3 sm:h-4 sm:w-4" />
-                <span className="hidden sm:inline">Calculations</span>
-                <span className="sm:hidden">Calc.</span>
+              <TabsTrigger value="calculations" className="flex items-center gap-1 text-[11px] leading-tight sm:text-sm data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 data-[state=active]:shadow-sm">
+                <Calculator className="h-3 w-3 sm:h-4 sm:w-4 text-primary shrink-0" />
+                <span className="truncate">Calculations</span>
               </TabsTrigger>
             </TabsList>
             

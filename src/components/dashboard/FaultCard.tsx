@@ -11,6 +11,16 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/components/ui/sonner";
 import { useNavigate } from "react-router-dom";
+import { PermissionService } from "@/services/PermissionService";
+
+// Type augmentation to fix type errors
+interface EnhancedOP5Fault extends OP5Fault {
+  mttr?: number;
+}
+
+interface EnhancedControlSystemOutage extends ControlSystemOutage {
+  unservedEnergyMWh?: number;
+}
 
 type FaultCardProps = {
   fault: OP5Fault | ControlSystemOutage;
@@ -20,16 +30,17 @@ type FaultCardProps = {
 export function FaultCard({ fault, type }: FaultCardProps) {
   const { regions, districts, resolveFault, deleteFault, canEditFault } = useData();
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const permissionService = PermissionService.getInstance();
   const [isResolveOpen, setIsResolveOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
-  const navigate = useNavigate();
   
   const region = regions.find(r => r.id === fault.regionId);
   const district = districts.find(d => d.id === fault.districtId);
   
   const isOP5 = type === "op5";
-  const op5Fault = isOP5 ? fault as OP5Fault : null;
-  const controlOutage = !isOP5 ? fault as ControlSystemOutage : null;
+  const op5Fault = isOP5 ? fault as EnhancedOP5Fault : null;
+  const controlOutage = !isOP5 ? fault as EnhancedControlSystemOutage : null;
   
   const getTotalAffectedCustomers = () => {
     if (isOP5 && op5Fault?.affectedPopulation) {
@@ -59,27 +70,147 @@ export function FaultCard({ fault, type }: FaultCardProps) {
     }
   };
   
+  const getCardColors = (faultType: string) => {
+    switch (faultType) {
+      case "Planned":
+        return "border-l-4 border-l-blue-500 bg-gradient-to-br from-blue-50 to-white dark:from-blue-950/30 dark:to-gray-800/30";
+      case "Unplanned":
+        return "border-l-4 border-l-red-500 bg-gradient-to-br from-red-50 to-white dark:from-red-950/30 dark:to-gray-800/30";
+      case "Emergency":
+        return "border-l-4 border-l-orange-500 bg-gradient-to-br from-orange-50 to-white dark:from-orange-950/30 dark:to-gray-800/30";
+      case "Load Shedding":
+        return "border-l-4 border-l-purple-500 bg-gradient-to-br from-purple-50 to-white dark:from-purple-950/30 dark:to-gray-800/30";
+      case "GridCo Outage":
+        return "border-l-4 border-l-emerald-500 bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-950/30 dark:to-gray-800/30";
+      default:
+        return "border-l-4 border-l-gray-500 bg-gradient-to-br from-gray-50 to-white dark:from-gray-950/30 dark:to-gray-800/30";
+    }
+  };
+  
   const statusClass = fault.status === "active" 
-    ? "bg-red-100 text-red-800" 
-    : "bg-green-100 text-green-800";
+    ? "bg-red-100 text-red-800 border border-red-200" 
+    : "bg-green-100 text-green-800 border border-green-200";
   
   const durationText = fault.occurrenceDate && fault.restorationDate 
     ? formatDuration((new Date(fault.restorationDate).getTime() - new Date(fault.occurrenceDate).getTime()) / (1000 * 60 * 60))
     : "Ongoing";
   
+  const canResolve = () => {
+    if (fault.status === "resolved") return false;
+    
+    // Check if user has permission to manage faults
+    const feature = isOP5 ? 'fault_reporting' : 'fault_reporting';
+    if (!user || !permissionService.canAccessFeature(user.role, feature)) {
+      return false;
+    }
+    
+    // Technicians can resolve faults in their district
+    if (user.role === "technician") {
+      return user.district === district?.name;
+    }
+    
+    // District engineers for their district or higher roles can resolve
+    if (user.role === "district_engineer") {
+      return user.district === district?.name;
+    }
+    
+    // Regional engineers can resolve in their region
+    if (user.role === "regional_engineer") {
+      return user.region === region?.name;
+    }
+    
+    // Global engineers and system admins can resolve anywhere
+    return user.role === "global_engineer" || user.role === "system_admin";
+  };
+
+  const canEdit = () => {
+    // Check if user has permission to manage faults
+    const feature = isOP5 ? 'fault_reporting_update' : 'fault_reporting_update';
+    if (!user || !permissionService.canAccessFeature(user.role, feature)) {
+      return false;
+    }
+    
+    // Technicians can edit faults in their district
+    if (user.role === "technician") {
+      return user.district === district?.name;
+    }
+    
+    // District engineers for their district or higher roles can edit
+    if (user.role === "district_engineer") {
+      return user.district === district?.name;
+    }
+    
+    // Regional engineers can edit in their region
+    if (user.role === "regional_engineer") {
+      return user.region === region?.name;
+    }
+    
+    // Global engineers and system admins can edit anywhere
+    return user.role === "global_engineer" || user.role === "system_admin";
+  };
+
+  const canDelete = () => {
+    // Check if user has permission to manage faults
+    const feature = isOP5 ? 'fault_reporting_delete' : 'fault_reporting_delete';
+    if (!user || !permissionService.canAccessFeature(user.role, feature)) {
+      return false;
+    }
+    
+    // Technicians can delete faults in their district
+    if (user.role === "technician") {
+      return user.district === district?.name;
+    }
+    
+    // District engineers for their district or higher roles can delete
+    if (user.role === "district_engineer") {
+      return user.district === district?.name;
+    }
+    
+    // Regional engineers can delete in their region
+    if (user.role === "regional_engineer") {
+      return user.region === region?.name;
+    }
+    
+    // Global engineers and system admins can delete anywhere
+    return user.role === "global_engineer" || user.role === "system_admin";
+  };
+  
+  const affectedPopulation = op5Fault?.affectedPopulation || { rural: 0, urban: 0, metro: 0 };
+  
   const handleResolve = () => {
+    // Check if user has permission to manage faults
+    const feature = isOP5 ? 'fault_reporting' : 'fault_reporting';
+    if (user && !permissionService.canAccessFeature(user.role, feature)) {
+      toast.error("You don't have permission to resolve faults");
+      return;
+    }
+    
     resolveFault(fault.id, isOP5);
     setIsResolveOpen(false);
     toast.success("Fault has been marked as resolved");
   };
 
   const handleDelete = () => {
+    // Check if user has permission to manage faults
+    const feature = isOP5 ? 'fault_reporting' : 'fault_reporting';
+    if (user && !permissionService.canAccessFeature(user.role, feature)) {
+      toast.error("You don't have permission to delete faults");
+      return;
+    }
+    
     deleteFault(fault.id, isOP5);
     setIsDeleteOpen(false);
     toast.success("Fault has been deleted");
   };
   
   const handleEdit = () => {
+    // Check if user has permission to manage faults
+    const feature = isOP5 ? 'fault_reporting' : 'fault_reporting';
+    if (user && !permissionService.canAccessFeature(user.role, feature)) {
+      toast.error("You don't have permission to edit faults");
+      return;
+    }
+    
     if (isOP5) {
       navigate(`/edit-op5-fault/${fault.id}`);
     } else {
@@ -87,35 +218,14 @@ export function FaultCard({ fault, type }: FaultCardProps) {
     }
   };
   
-  const canResolve = () => {
-    if (fault.status === "resolved") return false;
-    
-    // Only district engineers for their district or higher roles can resolve
-    if (user?.role === "district_engineer") {
-      return user.district === district?.name;
-    }
-    
-    // Regional engineers can resolve in their region
-    if (user?.role === "regional_engineer") {
-      return user.region === region?.name;
-    }
-    
-    // Global engineers and system admins can resolve anywhere
-    return user?.role === "global_engineer" || user?.role === "system_admin";
-  };
-
-  const canEdit = canEditFault(fault);
-  
-  const affectedPopulation = op5Fault?.affectedPopulation || { rural: 0, urban: 0, metro: 0 };
-  
   return (
-    <Card className="h-full flex flex-col">
-      <CardHeader className="pb-2">
+    <Card className={`h-full flex flex-col shadow-md hover:shadow-lg transition-all duration-200 ease-out hover:scale-[1.01] overflow-hidden ${getCardColors(fault.faultType)}`}>
+      <CardHeader className="p-4 pb-2 bg-white/80 dark:bg-gray-800/50">
         <div className="flex justify-between items-start">
-          <CardTitle className="text-lg">
+          <CardTitle className="text-lg font-semibold">
             {isOP5 ? "OP5 Fault" : "Control System Outage"}
           </CardTitle>
-          <Badge className={statusClass}>
+          <Badge className={`${statusClass} shadow-sm`}>
             {fault.status === "active" ? "Active" : "Resolved"}
           </Badge>
         </div>
@@ -124,106 +234,91 @@ export function FaultCard({ fault, type }: FaultCardProps) {
           {region?.name}, {district?.name}
         </CardDescription>
       </CardHeader>
-      <CardContent className="flex-grow pb-0">
-        <div className="space-y-3">
+      
+      <CardContent className="p-4 flex-grow">
+        <div className="space-y-4">
           <div className="flex items-center gap-2">
-            <Badge variant="outline" className={getBadgeColor(fault.faultType)}>
+            <Badge className={getBadgeColor(fault.faultType)}>
               {fault.faultType}
             </Badge>
+            {fault.specificFaultType && (
+              <Badge variant="outline" className="text-xs">
+                {fault.specificFaultType}
+              </Badge>
+            )}
+          </div>
+          
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Clock size={14} />
+              <span>Duration: {durationText}</span>
+            </div>
             
-            <Badge variant="outline" className="bg-gray-100 text-gray-800 hover:bg-gray-100">
-              ID: {fault.id.substring(0, 10)}
-            </Badge>
-          </div>
-          
-          {isOP5 && (
-            <p className="flex items-center gap-1 text-sm">
-              <AlertTriangle size={14} className="text-orange-500" />
-              <span className="font-medium">Location:</span> {op5Fault?.faultLocation}
-            </p>
-          )}
-          
-          {!isOP5 && (
-            <p className="flex items-center gap-1 text-sm">
-              <BarChart size={14} className="text-blue-500" />
-              <span className="font-medium">Load:</span> {controlOutage?.loadMW} MW
-            </p>
-          )}
-          
-          <div className="flex items-center gap-2">
-            <Clock className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">
-              Duration: {durationText}
-            </span>
-          </div>
-          
-          <div className="flex items-center gap-1 text-sm">
-            <Users size={14} className="text-muted-foreground" />
-            <span className="font-medium">Affected:</span>{" "}
-            {getTotalAffectedCustomers()} customers
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Users size={14} />
+              <span>Affected: {getTotalAffectedCustomers().toLocaleString()} customers</span>
+            </div>
+            
+            {isOP5 && op5Fault?.mttr && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <BarChart size={14} />
+                <span>MTTR: {formatDuration(op5Fault.mttr)}</span>
+              </div>
+            )}
+            
+            {!isOP5 && controlOutage?.unservedEnergyMWh && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <BarChart size={14} />
+                <span>Unserved Energy: {controlOutage.unservedEnergyMWh.toFixed(2)} MWh</span>
+              </div>
+            )}
           </div>
           
           <Accordion type="single" collapsible className="w-full">
             <AccordionItem value="details" className="border-b-0">
               <AccordionTrigger className="text-sm py-2">View Details</AccordionTrigger>
-              <AccordionContent className="text-xs space-y-2">
+              <AccordionContent className="text-xs space-y-2 bg-white/50 dark:bg-gray-900/30 p-2 rounded-md">
                 <div>
-                  <div className="font-medium">Occurred:</div>
+                  <div className="font-medium text-muted-foreground">Occurred:</div>
                   <div>{formatDate(fault.occurrenceDate)}</div>
                 </div>
                 
                 {fault.restorationDate && (
                   <div>
-                    <div className="font-medium">Restored:</div>
+                    <div className="font-medium text-muted-foreground">Restored:</div>
                     <div>{formatDate(fault.restorationDate)}</div>
                   </div>
                 )}
                 
-                {isOP5 ? (
-                  <>
-                    {op5Fault?.mttr && (
-                      <div>
-                        <div className="font-medium">MTTR:</div>
-                        <div>{formatDuration(op5Fault.mttr)}</div>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    {controlOutage?.reason && (
-                      <div>
-                        <div className="font-medium">Reason:</div>
-                        <div>{controlOutage.reason}</div>
-                      </div>
-                    )}
-                    
-                    {controlOutage?.areaAffected && (
-                      <div>
-                        <div className="font-medium">Area Affected:</div>
-                        <div>{controlOutage.areaAffected}</div>
-                      </div>
-                    )}
-                    
-                    {controlOutage?.unservedEnergyMWh !== undefined && (
-                      <div>
-                        <div className="font-medium">Unserved Energy:</div>
-                        <div>{controlOutage.unservedEnergyMWh.toFixed(2)} MWh</div>
-                      </div>
-                    )}
-                  </>
+                {isOP5 && op5Fault?.repairDate && (
+                  <div>
+                    <div className="font-medium text-muted-foreground">Repair Started:</div>
+                    <div>{formatDate(op5Fault.repairDate)}</div>
+                  </div>
                 )}
+                
+                <div>
+                  <div className="font-medium text-muted-foreground">Location:</div>
+                  <div>{fault.faultLocation}</div>
+                </div>
+                
+                <div>
+                  <div className="font-medium text-muted-foreground">Description:</div>
+                  <div>{fault.outageDescription}</div>
+                </div>
               </AccordionContent>
             </AccordionItem>
           </Accordion>
         </div>
       </CardContent>
-      <CardFooter className="pt-4">
+      
+      <CardFooter className="p-4 pt-4 bg-white/80 dark:bg-gray-800/50 mt-auto">
         <div className="flex gap-2 w-full">
           {canResolve() && (
             <Dialog open={isResolveOpen} onOpenChange={setIsResolveOpen}>
               <DialogTrigger asChild>
-                <Button variant="outline" className="flex-1">
-                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                <Button variant="outline" className="flex-1 border-green-200 hover:bg-green-50 hover:text-green-700 dark:hover:bg-green-900/30">
+                  <CheckCircle2 className="mr-2 h-4 w-4 text-green-500" />
                   Resolve
                 </Button>
               </DialogTrigger>
@@ -238,7 +333,7 @@ export function FaultCard({ fault, type }: FaultCardProps) {
                   <Button variant="outline" onClick={() => setIsResolveOpen(false)}>
                     Cancel
                   </Button>
-                  <Button onClick={handleResolve}>
+                  <Button onClick={handleResolve} className="bg-green-600 hover:bg-green-700">
                     <CheckCircle2 className="mr-2 h-4 w-4" />
                     Confirm Resolve
                   </Button>
@@ -247,22 +342,22 @@ export function FaultCard({ fault, type }: FaultCardProps) {
             </Dialog>
           )}
           
-          {canEdit && (
+          {canEdit() && (
             <Button 
               variant="outline" 
-              className="flex-1"
+              className="flex-1 border-blue-200 hover:bg-blue-50 hover:text-blue-700 dark:hover:bg-blue-900/30"
               onClick={handleEdit}
             >
-              <Edit className="mr-2 h-4 w-4" />
+              <Edit className="mr-2 h-4 w-4 text-blue-500" />
               Edit
             </Button>
           )}
           
-          {canEdit && (
+          {canDelete() && (
             <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
               <DialogTrigger asChild>
-                <Button variant="outline" className="flex-1">
-                  <Trash2 className="mr-2 h-4 w-4" />
+                <Button variant="outline" className="flex-1 border-red-200 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-900/30">
+                  <Trash2 className="mr-2 h-4 w-4 text-red-500" />
                   Delete
                 </Button>
               </DialogTrigger>
@@ -277,7 +372,7 @@ export function FaultCard({ fault, type }: FaultCardProps) {
                   <Button variant="outline" onClick={() => setIsDeleteOpen(false)}>
                     Cancel
                   </Button>
-                  <Button variant="destructive" onClick={handleDelete}>
+                  <Button variant="destructive" onClick={handleDelete} className="bg-red-600 hover:bg-red-700">
                     <Trash2 className="mr-2 h-4 w-4" />
                     Delete
                   </Button>

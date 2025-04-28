@@ -9,29 +9,194 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 import { NavLink } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
+import { PageHeader } from '@/components/ui/page-header';
+import { Layout } from '@/components/layout/Layout';
+
+interface PermissionSettings {
+  view: boolean;
+  edit: boolean;
+  delete: boolean;
+}
+
+interface RolePermissions {
+  [key: string]: PermissionSettings;
+}
+
+interface FeaturePermissions {
+  [key: string]: UserRole[];
+}
+
+interface FeatureCategory {
+  name: string;
+  features: {
+    id: string;
+    name: string;
+    description: string;
+  }[];
+}
+
+const featureCategories: FeatureCategory[] = [
+  {
+    name: "Asset Management",
+    features: [
+      {
+        id: "asset_management",
+        name: "Asset Management",
+        description: "Manage and track all grid assets"
+      },
+      {
+        id: "inspection_management",
+        name: "Inspection Management",
+        description: "Schedule and manage asset inspections"
+      },
+      {
+        id: "load_monitoring",
+        name: "Load Monitoring",
+        description: "Monitor and analyze asset load data"
+      },
+      {
+        id: "substation_inspection",
+        name: "Substation Inspection",
+        description: "Manage substation inspection records"
+      },
+      {
+        id: "vit_inspection",
+        name: "VIT Inspection",
+        description: "Visual inspection tracking system"
+      },
+      {
+        id: "overhead_line_inspection",
+        name: "Overhead Line Inspection",
+        description: "Manage overhead line inspections"
+      }
+    ]
+  },
+  {
+    name: "Fault Management",
+    features: [
+      {
+        id: "fault_reporting",
+        name: "Fault Reporting",
+        description: "Report and track grid faults"
+      },
+      {
+        id: "fault_analytics",
+        name: "Fault Analytics",
+        description: "Analyze fault patterns and trends"
+      },
+      {
+        id: "control_outage_management",
+        name: "Control & Outage Management",
+        description: "Manage planned and unplanned outages"
+      },
+      {
+        id: "op5_fault_management",
+        name: "OP5 Fault Management",
+        description: "Manage operational faults"
+      }
+    ]
+  },
+  {
+    name: "Analytics",
+    features: [
+      {
+        id: "analytics_dashboard",
+        name: "Analytics Dashboard",
+        description: "View system-wide analytics"
+      },
+      {
+        id: "reliability_metrics",
+        name: "Reliability Metrics",
+        description: "Track system reliability KPIs"
+      },
+      {
+        id: "performance_reports",
+        name: "Performance Reports",
+        description: "Generate detailed performance reports"
+      }
+    ]
+  },
+  {
+    name: "User Management",
+    features: [
+      {
+        id: "user_management",
+        name: "User Management",
+        description: "Manage system users and roles"
+      },
+      {
+        id: "district_population",
+        name: "District Population",
+        description: "Manage district user assignments"
+      }
+    ]
+  },
+  {
+    name: "System Administration",
+    features: [
+      {
+        id: "system_configuration",
+        name: "System Configuration",
+        description: "Configure system-wide settings"
+      },
+      {
+        id: "permission_management",
+        name: "Permission Management",
+        description: "Manage feature access permissions"
+      },
+      {
+        id: "security_monitoring",
+        name: "Security Monitoring",
+        description: "Monitor system security status"
+      },
+      {
+        id: "security_testing",
+        name: "Security Testing",
+        description: "Test security configurations"
+      }
+    ]
+  }
+];
 
 export default function PermissionManagementPage() {
   const { user } = useAuth();
   const permissionService = PermissionService.getInstance();
   const [newFeature, setNewFeature] = useState('');
-  const [selectedRoles, setSelectedRoles] = useState<UserRole[]>([]);
-  const [featurePermissions, setFeaturePermissions] = useState<{ [key: string]: UserRole[] }>({});
+  const [featurePermissions, setFeaturePermissions] = useState<FeaturePermissions>({});
   const [editingFeature, setEditingFeature] = useState<string | null>(null);
-  const [editRoles, setEditRoles] = useState<UserRole[]>([]);
+  const [viewPermissions, setViewPermissions] = useState<UserRole[]>([]);
+  const [editPermissions, setEditPermissions] = useState<UserRole[]>([]);
+  const [deletePermissions, setDeletePermissions] = useState<UserRole[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
 
-  // Get all available roles
+  // Get all available roles in hierarchy order
   const allRoles: UserRole[] = ['technician', 'district_engineer', 'regional_engineer', 'global_engineer', 'system_admin'];
 
-  // Load current permissions
+  // Initialize and listen for permission changes from Firestore
   useEffect(() => {
-    setFeaturePermissions(permissionService.getFeaturePermissions());
+    let unsubscribe: (() => void) | undefined;
+    const initPermissions = async () => {
+      setLoading(true);
+      await permissionService.initialize();
+      setFeaturePermissions(permissionService.getFeaturePermissions());
+      unsubscribe = permissionService.listenToPermissions(() => {
+        setFeaturePermissions(permissionService.getFeaturePermissions());
+      });
+      setLoading(false);
+    };
+    initPermissions();
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
   }, []);
 
   // Check if user has permission to access this page
-  if (!permissionService.canAccessFeature(user?.role || null, 'system_configuration')) {
+  if (!permissionService.canAccessFeature(user?.role || null, 'permission_management')) {
     return (
       <div className="p-4">
         <h1 className="text-2xl font-bold">Access Denied</h1>
@@ -40,233 +205,277 @@ export default function PermissionManagementPage() {
     );
   }
 
-  const handleAddFeature = () => {
+  const handleEditClick = (feature: string) => {
+    const currentPermissions = featurePermissions[feature] || [];
+    const updateFeature = `${feature}_update`;
+    const deleteFeature = `${feature}_delete`;
+    
+    setEditingFeature(feature);
+    setViewPermissions(currentPermissions);
+    setEditPermissions(featurePermissions[updateFeature] || []);
+    setDeletePermissions(featurePermissions[deleteFeature] || []);
+    setIsDialogOpen(true);
+  };
+
+  const handleCloseDialog = () => {
+    setIsDialogOpen(false);
+    setEditingFeature(null);
+    setViewPermissions([]);
+    setEditPermissions([]);
+    setDeletePermissions([]);
+  };
+
+  const handlePermissionToggle = (role: UserRole, operation: 'view' | 'edit' | 'delete') => {
+    switch (operation) {
+      case 'view':
+        setViewPermissions(prev => {
+          if (prev.includes(role)) {
+            return prev.filter(r => r !== role);
+          } else {
+            return [...prev, role];
+          }
+        });
+        break;
+      case 'edit':
+        setEditPermissions(prev => {
+          if (prev.includes(role)) {
+            return prev.filter(r => r !== role);
+          } else {
+            return [...prev, role];
+          }
+        });
+        break;
+      case 'delete':
+        setDeletePermissions(prev => {
+          if (prev.includes(role)) {
+            return prev.filter(r => r !== role);
+          } else {
+            return [...prev, role];
+          }
+        });
+        break;
+    }
+  };
+
+  const handleUpdatePermissions = async () => {
+    if (!editingFeature) return;
+    try {
+      // Get current permissions from the service
+      const currentPermissions = permissionService.getFeaturePermissions();
+      
+      // Create updated permissions
+      const updatedPermissions = { ...currentPermissions };
+      
+      // Update all permissions at once
+      updatedPermissions[editingFeature] = [...viewPermissions];
+      updatedPermissions[`${editingFeature}_update`] = [...editPermissions];
+      updatedPermissions[`${editingFeature}_delete`] = [...deletePermissions];
+
+      // Save all changes in a single update
+      await permissionService.updateAllPermissions(updatedPermissions);
+      
+      // Update local state
+      setFeaturePermissions(updatedPermissions);
+      
+      // Close dialog and reset state
+      setEditingFeature(null);
+      setViewPermissions([]);
+      setEditPermissions([]);
+      setDeletePermissions([]);
+      setIsDialogOpen(false);
+      
+      toast.success(`Permissions updated for "${editingFeature}"`);
+    } catch (error) {
+      console.error('Error updating permissions:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to update permissions');
+    }
+  };
+
+  const handleResetPermissions = async () => {
+    try {
+      await permissionService.resetToDefaults();
+      toast.success('Permissions reset to defaults');
+    } catch (error) {
+      toast.error('Failed to reset permissions');
+    }
+  };
+
+  const handleAddFeature = async () => {
     if (!newFeature.trim()) {
       toast.error('Please enter a feature name');
       return;
     }
-
     try {
-      permissionService.addFeature(newFeature, selectedRoles);
-      setFeaturePermissions(permissionService.getFeaturePermissions());
+      await permissionService.addFeature(newFeature, []);
       toast.success(`Feature "${newFeature}" added successfully`);
       setNewFeature('');
-      setSelectedRoles([]);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to add feature');
     }
   };
 
-  const handleEditClick = (feature: string, roles: UserRole[]) => {
-    setEditingFeature(feature);
-    setEditRoles(roles);
-  };
-
-  const handleUpdatePermissions = () => {
-    if (!editingFeature) return;
-
+  const handleRemoveFeature = async (feature: string) => {
     try {
-      permissionService.updateFeaturePermissions(editingFeature, editRoles);
-      setFeaturePermissions(permissionService.getFeaturePermissions());
-      toast.success(`Permissions updated for "${editingFeature}"`);
-      setEditingFeature(null);
-      setEditRoles([]);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to update permissions');
-    }
-  };
-
-  const handleRemoveFeature = (feature: string) => {
-    try {
-      permissionService.removeFeature(feature);
-      setFeaturePermissions(permissionService.getFeaturePermissions());
+      await permissionService.removeFeature(feature);
       toast.success(`Feature "${feature}" removed successfully`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to remove feature');
     }
   };
 
-  const handleRoleToggle = (role: UserRole, currentRoles: UserRole[], setRoles: (roles: UserRole[]) => void) => {
-    if (currentRoles.includes(role)) {
-      setRoles(currentRoles.filter(r => r !== role));
-    } else {
-      setRoles([...currentRoles, role]);
-    }
-  };
-
   return (
-    <div className="container mx-auto p-4">
-      <h1 className="text-3xl font-bold mb-6">Permission Management</h1>
-
-      {/* Navigation Links */}
-      <div className="mb-6 flex flex-wrap gap-4">
-        <NavLink
-          to="/dashboard"
-          className={({ isActive }) =>
-            cn(
-              "text-foreground hover:text-primary transition-colors",
-              isActive && "text-primary"
-            )
-          }
-        >
-          Dashboard
-        </NavLink>
-        <NavLink
-          to="/user-management"
-          className={({ isActive }) =>
-            cn(
-              "text-foreground hover:text-primary transition-colors",
-              isActive && "text-primary"
-            )
-          }
-        >
-          User Management
-        </NavLink>
-        <NavLink
-          to="/analytics"
-          className={({ isActive }) =>
-            cn(
-              "text-foreground hover:text-primary transition-colors",
-              isActive && "text-primary"
-            )
-          }
-        >
-          Analytics
-        </NavLink>
-        <NavLink
-          to="/asset-management/inspection-management"
-          className={({ isActive }) =>
-            cn(
-              "text-foreground hover:text-primary transition-colors",
-              isActive && "text-primary"
-            )
-          }
-        >
-          Inspections
-        </NavLink>
-        <NavLink
-          to="/report-fault"
-          className={({ isActive }) =>
-            cn(
-              "text-foreground hover:text-primary transition-colors",
-              isActive && "text-primary"
-            )
-          }
-        >
-          Report Fault
-        </NavLink>
-      </div>
-
-      {/* Add New Feature Section */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>Add New Feature</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="feature">Feature Name</Label>
+    <Layout>
+      <div className="container mx-auto p-4">
+        {/* Header Section */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+          <h1 className="text-2xl font-bold">Permission Management</h1>
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+            <Button
+              variant="outline"
+              onClick={handleResetPermissions}
+              className="text-red-600 hover:text-red-800 hover:bg-red-50 w-full sm:w-auto"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
+              </svg>
+              Reset to Defaults
+            </Button>
+            <div className="relative w-full sm:w-auto">
               <Input
-                id="feature"
                 value={newFeature}
                 onChange={(e) => setNewFeature(e.target.value)}
-                placeholder="Enter feature name"
+                placeholder="Enter new feature name"
+                className="pr-24 w-full"
               />
+              <Button 
+                onClick={handleAddFeature}
+                className="absolute right-1 top-1 h-8"
+              >
+                Add Feature
+              </Button>
             </div>
-            <div className="grid gap-2">
-              <Label>Allowed Roles</Label>
-              <div className="grid grid-cols-2 gap-4 p-4 border rounded-md">
+          </div>
+        </div>
+
+        {/* Feature Categories */}
+        <div className="grid gap-4 sm:gap-6 md:gap-8">
+          {featureCategories.map((category) => (
+            <div key={category.name} className="bg-white rounded-lg shadow-sm border border-gray-200">
+              <div className="px-4 sm:px-6 py-4 border-b border-gray-200">
+                <h2 className="text-lg sm:text-xl font-semibold text-gray-800">{category.name}</h2>
+              </div>
+              <div className="p-4 sm:p-6">
+                <div className="grid gap-4">
+                  {category.features.map((feature) => (
+                    <div key={feature.id} className="bg-gray-50 rounded-lg p-4 hover:bg-gray-100 transition-colors">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="flex-1">
+                          <h3 className="text-base sm:text-lg font-medium text-gray-800">{feature.name}</h3>
+                          <p className="text-sm text-gray-600 mt-1">{feature.description}</p>
+                        </div>
+                        <Button
+                          variant="outline"
+                          onClick={() => handleEditClick(feature.id)}
+                          className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 w-full sm:w-auto"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                          </svg>
+                          Edit Permissions
+                        </Button>
+                      </div>
+                      <div className="mt-3">
+                        <span className="text-sm font-medium text-gray-700">Allowed roles: </span>
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {featurePermissions[feature.id]?.map((role) => (
+                            <span 
+                              key={role} 
+                              className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                            >
+                              {role.replace('_', ' ').toUpperCase()}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Edit Permissions Dialog */}
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogContent className="w-[95vw] sm:max-w-[600px]">
+            <DialogHeader>
+              <DialogTitle className="text-lg sm:text-xl font-semibold">
+                Edit Permissions for {editingFeature?.replace('_', ' ').toUpperCase()}
+              </DialogTitle>
+              <DialogDescription>
+                Manage access permissions for different user roles. View allows basic access, Edit allows modifications, and Delete allows removal of records.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              <div className="space-y-4">
                 {allRoles.map((role) => (
-                  <div key={role} className="flex items-center space-x-2">
-                    <Checkbox
-                      id={`role-${role}`}
-                      checked={selectedRoles.includes(role)}
-                      onCheckedChange={() => handleRoleToggle(role, selectedRoles, setSelectedRoles)}
-                    />
-                    <Label htmlFor={`role-${role}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                  <div key={role} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <span className="font-medium text-gray-700">
                       {role.replace('_', ' ').toUpperCase()}
-                    </Label>
+                    </span>
+                    <div className="flex items-center space-x-4">
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          checked={viewPermissions.includes(role)}
+                          onCheckedChange={() => handlePermissionToggle(role, 'view')}
+                          className="h-5 w-5"
+                          aria-label={`Allow ${role} to view`}
+                        />
+                        <Label>View</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                    <Checkbox
+                      checked={editPermissions.includes(role)}
+                          onCheckedChange={() => handlePermissionToggle(role, 'edit')}
+                          disabled={!viewPermissions.includes(role)}
+                          className="h-5 w-5"
+                          aria-label={`Allow ${role} to edit`}
+                        />
+                        <Label>Edit</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          checked={deletePermissions.includes(role)}
+                          onCheckedChange={() => handlePermissionToggle(role, 'delete')}
+                          disabled={!viewPermissions.includes(role) || !editPermissions.includes(role)}
+                      className="h-5 w-5"
+                          aria-label={`Allow ${role} to delete`}
+                    />
+                        <Label>Delete</Label>
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
+              <div className="flex flex-col sm:flex-row justify-end gap-3 mt-6">
+                <Button
+                  variant="outline"
+                  onClick={handleCloseDialog}
+                  className="w-full sm:w-auto"
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleUpdatePermissions}
+                  className="w-full sm:w-auto"
+                >
+                  Save Changes
+                </Button>
+              </div>
             </div>
-            <Button onClick={handleAddFeature}>Add Feature</Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Current Permissions Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Current Permissions</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Feature</TableHead>
-                <TableHead>Allowed Roles</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {Object.entries(featurePermissions).map(([feature, roles]) => (
-                <TableRow key={feature}>
-                  <TableCell className="font-medium">
-                    {feature.replace('_', ' ').toUpperCase()}
-                  </TableCell>
-                  <TableCell>
-                    {roles.join(', ').replace(/_/g, ' ').toUpperCase()}
-                  </TableCell>
-                  <TableCell className="space-x-2">
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <Button
-                          variant="outline"
-                          onClick={() => handleEditClick(feature, roles)}
-                        >
-                          Edit
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent>
-                        <DialogHeader>
-                          <DialogTitle>Edit Permissions for {feature.replace('_', ' ').toUpperCase()}</DialogTitle>
-                        </DialogHeader>
-                        <div className="grid gap-4 py-4">
-                          <div className="grid gap-2">
-                            <Label>Allowed Roles</Label>
-                            <div className="grid grid-cols-2 gap-4 p-4 border rounded-md">
-                              {allRoles.map((role) => (
-                                <div key={role} className="flex items-center space-x-2">
-                                  <Checkbox
-                                    id={`edit-role-${role}`}
-                                    checked={editRoles.includes(role)}
-                                    onCheckedChange={() => handleRoleToggle(role, editRoles, setEditRoles)}
-                                  />
-                                  <Label htmlFor={`edit-role-${role}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                                    {role.replace('_', ' ').toUpperCase()}
-                                  </Label>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                          <Button onClick={handleUpdatePermissions}>Save Changes</Button>
-                        </div>
-                      </DialogContent>
-                    </Dialog>
-                    <Button
-                      variant="destructive"
-                      onClick={() => handleRemoveFeature(feature)}
-                    >
-                      Remove
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-    </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+    </Layout>
   );
 } 

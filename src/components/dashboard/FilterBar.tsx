@@ -24,12 +24,27 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
+import { DayPicker } from "react-day-picker";
+import 'react-day-picker/dist/style.css';
 import { CalendarIcon, FilterIcon, XIcon } from "lucide-react";
-import { format } from "date-fns";
+import { format, getYear, getMonth } from "date-fns";
 import { cn } from "@/lib/utils";
 import { FilterBarProps } from "@/lib/types";
 import { DateRange } from "react-day-picker";
+import { Label } from "@/components/ui/label";
+
+// Define type for date filter granularity
+type DateFilterType = "range" | "day" | "month" | "year";
+
+// Helper to generate year options
+const currentYear = getYear(new Date());
+const yearOptions = Array.from({ length: 10 }, (_, i) => currentYear - i);
+
+// Helper for month names
+const monthNames = [
+  "January", "February", "March", "April", "May", "June", 
+  "July", "August", "September", "October", "November", "December"
+];
 
 export function FilterBar({ 
   setFilterRegion, 
@@ -45,10 +60,16 @@ export function FilterBar({
   const [selectedRegion, setSelectedRegion] = useState<string>("");
   const [selectedDistrict, setSelectedDistrict] = useState<string>("");
   const [selectedFaultType, setSelectedFaultType] = useState<string>("all");
-  const [date, setDate] = useState<DateRange>({
+  const [dateRange, setDateRange] = useState<DateRange>({
     from: undefined,
     to: undefined,
   });
+  const [dateFilterType, setDateFilterType] = useState<DateFilterType>("range");
+  // State for specific pickers
+  const [selectedDay, setSelectedDay] = useState<Date | undefined>(undefined);
+  const [selectedMonth, setSelectedMonth] = useState<number | undefined>(undefined); // 0-11 for month index
+  const [selectedMonthYear, setSelectedMonthYear] = useState<number | undefined>(undefined);
+  const [selectedYear, setSelectedYear] = useState<number | undefined>(undefined);
   
   // Set initial values based on user role
   useEffect(() => {
@@ -108,10 +129,12 @@ export function FilterBar({
     
     setSelectedFaultType("all");
     setFilterStatus("all");
-    setDate({
-      from: undefined,
-      to: undefined,
-    });
+    setDateFilterType("range");
+    setDateRange({ from: undefined, to: undefined });
+    setSelectedDay(undefined);
+    setSelectedMonth(undefined);
+    setSelectedMonthYear(undefined);
+    setSelectedYear(undefined);
   };
   
   // Filter regions based on user role
@@ -122,14 +145,43 @@ export function FilterBar({
   // Filter districts based on selected region and user role
   const filteredDistricts = selectedRegion
     ? districts.filter(d => {
-        const region = regions.find(r => r.id === selectedRegion);
+        // First check if district belongs to selected region
+        if (d.regionId !== selectedRegion) return false;
+        
+        // For district engineers and technicians, only show their assigned district
         if (user?.role === "district_engineer" || user?.role === "technician") {
           return d.name === user.district;
         }
-        return region?.districts?.some(rd => rd.id === d.id) ?? false;
+        
+        // For regional engineers, only show districts in their region
+        if (user?.role === "regional_engineer") {
+          const userRegion = regions.find(r => r.name === user.region);
+          return userRegion ? d.regionId === userRegion.id : false;
+        }
+        
+        // For other roles, show all districts in the selected region
+        return true;
       })
     : [];
   
+  // Handlers for specific date pickers
+  const handleDaySelect = (day: Date | undefined) => {
+    setSelectedDay(day);
+    // Potentially close popover here if needed
+  };
+
+  const handleMonthSelect = (monthIndex: string) => {
+    setSelectedMonth(parseInt(monthIndex, 10));
+  };
+
+  const handleMonthYearSelect = (year: string) => {
+     setSelectedMonthYear(parseInt(year, 10));
+  };
+  
+  const handleYearSelect = (year: string) => {
+     setSelectedYear(parseInt(year, 10));
+  };
+
   return (
     <Card className="mb-6">
       <CardContent className="p-4">
@@ -158,12 +210,12 @@ export function FilterBar({
           <TabsContent value="basic" className="space-y-4 pt-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
+                <Label htmlFor="region-select-basic" className="text-xs text-muted-foreground">Region</Label>
                 <Select 
                   value={selectedRegion} 
                   onValueChange={handleRegionChange}
-                  disabled={user?.role === "district_engineer" || user?.role === "regional_engineer"}
                 >
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger id="region-select-basic" className="mt-1">
                     <SelectValue placeholder="Select region" />
                   </SelectTrigger>
                   <SelectContent>
@@ -177,12 +229,13 @@ export function FilterBar({
               </div>
               
               <div>
+                <Label htmlFor="district-select-basic" className="text-xs text-muted-foreground">District</Label>
                 <Select 
                   value={selectedDistrict} 
                   onValueChange={setSelectedDistrict}
-                  disabled={!selectedRegion || user?.role === "district_engineer"}
+                  disabled={!selectedRegion}
                 >
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger id="district-select-basic" className="mt-1">
                     <SelectValue placeholder="Select district" />
                   </SelectTrigger>
                   <SelectContent>
@@ -196,11 +249,12 @@ export function FilterBar({
               </div>
               
               <div>
+                <Label htmlFor="status-select-basic" className="text-xs text-muted-foreground">Status</Label>
                 <Select 
                   value={filterStatus} 
                   onValueChange={handleStatusChange}
                 >
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger id="status-select-basic" className="mt-1">
                     <SelectValue placeholder="Status" />
                   </SelectTrigger>
                   <SelectContent>
@@ -214,10 +268,11 @@ export function FilterBar({
           </TabsContent>
           
           <TabsContent value="advanced" className="space-y-4 pt-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
               <div>
+                <Label htmlFor="fault-type-select" className="text-xs text-muted-foreground">Fault Type</Label>
                 <Select value={selectedFaultType} onValueChange={setSelectedFaultType}>
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger id="fault-type-select" className="mt-1">
                     <SelectValue placeholder="Fault Type" />
                   </SelectTrigger>
                   <SelectContent>
@@ -232,50 +287,157 @@ export function FilterBar({
               </div>
               
               <div>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant={"outline"}
-                      className={cn(
-                        "w-full justify-start text-left font-normal",
-                        !date.from && "text-muted-foreground"
-                      )}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {date.from ? (
-                        date.to ? (
-                          <>
-                            {format(date.from, "LLL dd, y")} -{" "}
-                            {format(date.to, "LLL dd, y")}
-                          </>
-                        ) : (
-                          format(date.from, "LLL dd, y")
-                        )
-                      ) : (
-                        <span>Date Range</span>
-                      )}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      initialFocus
-                      mode="range"
-                      defaultMonth={date.from}
-                      selected={date}
-                      onSelect={setDate}
-                      numberOfMonths={2}
-                      className="pointer-events-auto"
-                    />
-                  </PopoverContent>
-                </Popover>
+                <Label htmlFor="date-filter-type" className="text-xs text-muted-foreground">Filter Period By</Label>
+                <Select 
+                  value={dateFilterType} 
+                  onValueChange={(value) => setDateFilterType(value as DateFilterType)}
+                >
+                  <SelectTrigger id="date-filter-type" className="mt-1">
+                    <SelectValue placeholder="Select period type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="range">Date Range</SelectItem>
+                    <SelectItem value="day">Specific Day</SelectItem>
+                    <SelectItem value="month">Specific Month</SelectItem>
+                    <SelectItem value="year">Specific Year</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
+
+              {dateFilterType === 'range' && (
+                <div>
+                  <Label htmlFor="date-range-picker" className="text-xs text-muted-foreground">Date Range</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        id="date-range-picker"
+                        variant={"outline"}
+                        className={cn(
+                          "w-full justify-start text-left font-normal mt-1",
+                          !dateRange.from && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {dateRange.from ? (
+                          dateRange.to ? (
+                            <>
+                              {format(dateRange.from, "LLL dd, y")} -{" "}
+                              {format(dateRange.to, "LLL dd, y")}
+                            </>
+                          ) : (
+                            format(dateRange.from, "LLL dd, y")
+                          )
+                        ) : (
+                          <span>Pick a date range</span>
+                        )}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <DayPicker
+                        initialFocus
+                        mode="range"
+                        defaultMonth={dateRange.from}
+                        selected={dateRange}
+                        onSelect={setDateRange}
+                        numberOfMonths={2}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              )}
+
+              {dateFilterType === 'day' && (
+                <div>
+                  <Label htmlFor="day-picker" className="text-xs text-muted-foreground">Select Day</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        id="day-picker"
+                        variant={"outline"}
+                        className={cn(
+                          "w-full justify-start text-left font-normal mt-1",
+                          !selectedDay && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {selectedDay ? format(selectedDay, "PPP") : <span>Pick a day</span>}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                      <DayPicker
+                        mode="single"
+                        selected={selectedDay}
+                        onSelect={handleDaySelect}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              )}
               
-              <div className="md:col-span-2">
+              {dateFilterType === 'month' && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <Label htmlFor="month-select" className="text-xs text-muted-foreground">Month</Label>
+                    <Select 
+                      value={selectedMonth?.toString() ?? ""} 
+                      onValueChange={handleMonthSelect}
+                    >
+                      <SelectTrigger id="month-select" className="mt-1">
+                        <SelectValue placeholder="Month" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {monthNames.map((name, index) => (
+                          <SelectItem key={index} value={index.toString()}>{name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div>
+                    <Label htmlFor="month-year-select" className="text-xs text-muted-foreground">Year</Label>
+                    <Select 
+                      value={selectedMonthYear?.toString() ?? ""} 
+                      onValueChange={handleMonthYearSelect}
+                    >
+                      <SelectTrigger id="month-year-select" className="mt-1">
+                        <SelectValue placeholder="Year" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {yearOptions.map(year => (
+                          <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+              
+              {dateFilterType === 'year' && (
+                <div>
+                  <Label htmlFor="year-select" className="text-xs text-muted-foreground">Select Year</Label>
+                  <Select 
+                    value={selectedYear?.toString() ?? ""} 
+                    onValueChange={handleYearSelect}
+                  >
+                    <SelectTrigger id="year-select" className="mt-1">
+                      <SelectValue placeholder="Year" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {yearOptions.map(year => (
+                        <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              
+              <div className="md:col-span-3">
                 <Button
                   variant="outline"
                   onClick={onRefresh}
                   disabled={isRefreshing}
-                  className="w-full"
+                  className="w-full mt-4"
                 >
                   {isRefreshing ? "Refreshing..." : "Refresh Data"}
                 </Button>

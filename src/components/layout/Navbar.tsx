@@ -37,9 +37,13 @@ export function Navbar() {
   const showMenuItem = (requiredRole: UserRole) => {
     if (!user?.role) return false;
     if (user.role === "system_admin") return true;
-    // Allow technicians to access asset management but not analytics
+    // For technicians, only show specific menu items
     if (user.role === "technician") {
       return requiredRole === "district_engineer" && !location.pathname.startsWith("/analytics");
+    }
+    // For district engineers, allow access to district population
+    if (user.role === "district_engineer") {
+      return requiredRole === "district_engineer" || requiredRole === "global_engineer";
     }
     return hasRequiredRole(user.role, requiredRole);
   };
@@ -62,8 +66,9 @@ export function Navbar() {
           <NavLink to="/report-fault" className="text-foreground hover:text-primary transition-colors">
             Report Fault
           </NavLink>
-          {/* Allow all engineers (including district) to access analytics */}
-          {showMenuItem("district_engineer") && (
+          
+          {/* Show Analytics only for non-technician roles */}
+          {user?.role !== "technician" && showMenuItem("district_engineer") && (
             <NavLink
               to="/analytics"
               className={({ isActive }: { isActive: boolean }) =>
@@ -74,7 +79,7 @@ export function Navbar() {
             </NavLink>
           )}
           
-          {/* Asset Management Dropdown - Only shown in desktop navigation */}
+          {/* Asset Management Dropdown - Show for technicians and other roles */}
           {showMenuItem("district_engineer") && (
             <div className="hidden md:block">
               <NavigationMenu>
@@ -160,7 +165,7 @@ export function Navbar() {
             </div>
           )}
           
-          {/* District Population Menu */}
+          {/* District Population Menu - Show for district engineers and above */}
           {showMenuItem("global_engineer") && (
             <NavLink 
               to="/district-population" 
@@ -173,8 +178,8 @@ export function Navbar() {
             </NavLink>
           )}
           
-          {/* Only show User Management for global and regional engineers */}
-          {showMenuItem("system_admin") && (
+          {/* Admin Menu Items - Only for system admin */}
+          {user?.role === "system_admin" && (
             <>
               <NavLink to="/user-management" className="text-foreground hover:text-primary transition-colors">
                 User Management
@@ -182,7 +187,19 @@ export function Navbar() {
               <NavLink to="/system-admin/permissions" className="text-foreground hover:text-primary transition-colors">
                 Permission Management
               </NavLink>
+              <NavLink to="/system-admin/security" className="text-foreground hover:text-primary transition-colors">
+                Security Monitoring
+              </NavLink>
+              <NavLink to="/test/security" className="text-foreground hover:text-primary transition-colors">
+                Security Testing
+              </NavLink>
             </>
+          )}
+
+          {user?.role === "global_engineer" && (
+            <NavLink to="/user-management" className="text-foreground hover:text-primary transition-colors">
+              User Management
+            </NavLink>
           )}
         </>
       )}
@@ -269,6 +286,39 @@ export function Navbar() {
                         className="block text-sm text-muted-foreground hover:text-foreground"
                       >
                         Overhead Line Inspection
+                      </NavLink>
+                    </div>
+                  </div>
+                )}
+
+                {/* Mobile Admin Links */}
+                {user?.role === "system_admin" && (
+                  <div className="space-y-3">
+                    <div className="font-medium">Admin</div>
+                    <div className="pl-4 space-y-2">
+                      <NavLink 
+                        to="/user-management" 
+                        className="block text-sm text-muted-foreground hover:text-foreground"
+                      >
+                        User Management
+                      </NavLink>
+                      <NavLink 
+                        to="/system-admin/permissions" 
+                        className="block text-sm text-muted-foreground hover:text-foreground"
+                      >
+                        Permission Management
+                      </NavLink>
+                      <NavLink 
+                        to="/system-admin/security" 
+                        className="block text-sm text-muted-foreground hover:text-foreground"
+                      >
+                        Security Monitoring
+                      </NavLink>
+                      <NavLink 
+                        to="/test/security" 
+                        className="block text-sm text-muted-foreground hover:text-foreground"
+                      >
+                        Security Testing
                       </NavLink>
                     </div>
                   </div>

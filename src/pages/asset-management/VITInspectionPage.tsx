@@ -23,44 +23,47 @@ export default function VITInspectionPage() {
   
   // Filter assets based on user role
   const filteredAssets = useMemo(() => {
-    if (!vitAssets) return [];
-    return vitAssets.filter(asset => {
-      if (user?.role === 'global_engineer' || user?.role === 'system_admin') return true;
-      if (user?.role === 'regional_engineer' && user.region) {
-        const userRegion = regions.find(r => r.name === user.region);
-        return userRegion ? asset.regionId === userRegion.id : false;
+    if (!user) return [];
+    
+    if (user.role === "system_admin" || user.role === "global_engineer") {
+      return vitAssets;
+    }
+    
+    if (user.role === "regional_engineer") {
+      return vitAssets.filter(asset => asset.region === user.region);
       }
-      if ((user?.role === 'district_engineer' || user?.role === 'technician') && user.region && user.district) {
-        const userRegion = regions.find(r => r.name === user.region);
-        const userDistrict = districts.find(d => d.name === user.district);
-        return userRegion && userDistrict ? 
-          asset.regionId === userRegion.id && asset.districtId === userDistrict.id : false;
+    
+    if (user.role === "district_engineer" || user.role === "technician") {
+      return vitAssets.filter(asset => asset.district === user.district);
       }
-      return false;
-    });
-  }, [vitAssets, user, regions, districts]);
+    
+    return [];
+  }, [vitAssets, user]);
 
   // Filter inspections based on user role
   const filteredInspections = useMemo(() => {
-    if (!vitInspections) return [];
+    if (!user) return [];
+    
+    if (user.role === "system_admin" || user.role === "global_engineer") {
+      return vitInspections;
+    }
+    
+    if (user.role === "regional_engineer") {
     return vitInspections.filter(inspection => {
       const asset = vitAssets.find(a => a.id === inspection.vitAssetId);
-      if (!asset) return false;
-
-      if (user?.role === 'global_engineer' || user?.role === 'system_admin') return true;
-      if (user?.role === 'regional_engineer' && user.region) {
-        const userRegion = regions.find(r => r.name === user.region);
-        return userRegion ? asset.regionId === userRegion.id : false;
+        return asset?.region === user.region;
+      });
       }
-      if ((user?.role === 'district_engineer' || user?.role === 'technician') && user.region && user.district) {
-        const userRegion = regions.find(r => r.name === user.region);
-        const userDistrict = districts.find(d => d.name === user.district);
-        return userRegion && userDistrict ? 
-          asset.regionId === userRegion.id && asset.districtId === userDistrict.id : false;
-      }
-      return false;
-    });
-  }, [vitInspections, vitAssets, user, regions, districts]);
+    
+    if (user.role === "district_engineer" || user.role === "technician") {
+      return vitInspections.filter(inspection => {
+        const asset = vitAssets.find(a => a.id === inspection.vitAssetId);
+        return asset?.district === user.district;
+      });
+    }
+    
+    return [];
+  }, [vitInspections, vitAssets, user]);
   
   const handleAddAsset = () => {
     setSelectedAsset(null);
@@ -151,8 +154,8 @@ export default function VITInspectionPage() {
                         const asset = vitAssets.find(a => a.id === inspection.vitAssetId);
                         if (!asset) return null;
                         
-                        const region = regions.find(r => r.id === asset.regionId)?.name || "Unknown";
-                        const district = districts.find(d => d.id === asset.districtId)?.name || "Unknown";
+                        const region = regions.find(r => r.name === asset.region)?.name || "Unknown";
+                        const district = districts.find(d => d.name === asset.district)?.name || "Unknown";
                         
                         return (
                           <tr key={inspection.id}>

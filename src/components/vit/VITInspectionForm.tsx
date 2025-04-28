@@ -24,11 +24,13 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuth } from "@/contexts/AuthContext";
 import { AlertTriangle, CheckCircle2, ClipboardList, Loader2 } from "lucide-react";
 import { VITInspectionChecklist, VITAsset, YesNoOption, GoodBadOption } from "@/lib/types";
+import { toast } from "react-hot-toast";
+import { serverTimestamp } from "firebase/firestore";
 
 interface VITInspectionFormProps {
   inspectionData?: VITInspectionChecklist;
   assetId?: string;
-  onSubmit: () => void;
+  onSubmit: (data: Partial<VITInspectionChecklist>) => void;
   onCancel: () => void;
 }
 
@@ -43,7 +45,7 @@ export function VITInspectionForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Form fields
-  const [selectedAssetId, setSelectedAssetId] = useState(assetId || inspectionData?.vitAssetId || "");
+  const [selectedAssetId, setSelectedAssetId] = useState<string>(assetId || inspectionData?.vitAssetId || "");
   const [inspectionDate, setInspectionDate] = useState(
     inspectionData?.inspectionDate ? new Date(inspectionData.inspectionDate).toISOString().slice(0, 16) : new Date().toISOString().slice(0, 16)
   );
@@ -132,15 +134,15 @@ export function VITInspectionForm({
     if (user?.role === "global_engineer" || user?.role === "system_admin") return true;
     if (user?.role === "regional_engineer" && user.region) {
       const userRegion = regions.find(r => r.name === user.region);
-      return userRegion ? asset.regionId === userRegion.id : false;
+      return userRegion ? asset.region === userRegion.name : false;
     }
     if ((user?.role === "district_engineer" || user?.role === "technician") && user.region && user.district) {
       const userRegion = regions.find(r => r.name === user.region);
       const userDistrict = districts.find(d => d.name === user.district);
       return userRegion && userDistrict ? 
-        asset.regionId === userRegion.id && asset.districtId === userDistrict.id : false;
+        asset.region === userRegion.name && asset.district === userDistrict.name : false;
     }
-    return false; // Default to no access if role doesn't match
+    return false;
   });
 
   // Handle asset selection
@@ -176,71 +178,93 @@ export function VITInspectionForm({
     return count;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!selectedAssetId || !inspectionDate || !inspectedBy) {
-      alert("Please fill all required fields");
+    if (!selectedAsset) {
+      toast.error("Please select a VIT asset");
+      return;
+    }
+
+    // Validate required fields
+    if (!inspectionDate || !inspectedBy) {
+      toast.error("Please fill in all required fields");
       return;
     }
 
     setIsSubmitting(true);
-    
     try {
-      // Get the selected asset to access its region and district
-      const selectedAsset = vitAssets.find(asset => asset.id === selectedAssetId);
-      if (!selectedAsset) {
-        alert("Selected asset not found");
-        setIsSubmitting(false);
-        return;
-      }
-      
-      // Get region and district names
-      const region = regions.find(r => r.id === selectedAsset.regionId)?.name || "";
-      const district = districts.find(d => d.id === selectedAsset.districtId)?.name || "";
-      
-      const inspectionFormData = {
-        vitAssetId: selectedAssetId,
-        inspectionDate: new Date(inspectionDate).toISOString(),
-        inspectedBy,
-        region,
-        district,
-        rodentTermiteEncroachment: rodentTermiteEncroachment || "No",
-        cleanDustFree: cleanDustFree || "No",
-        protectionButtonEnabled: protectionButtonEnabled || "No",
-        recloserButtonEnabled: recloserButtonEnabled || "No",
-        groundEarthButtonEnabled: groundEarthButtonEnabled || "No",
-        acPowerOn: acPowerOn || "No",
-        batteryPowerLow: batteryPowerLow || "No",
-        handleLockOn: handleLockOn || "No",
-        remoteButtonEnabled: remoteButtonEnabled || "No",
-        gasLevelLow: gasLevelLow || "No",
-        earthingArrangementAdequate: earthingArrangementAdequate || "No",
-        noFusesBlown: noFusesBlown || "No",
-        noDamageToBushings: noDamageToBushings || "No",
-        noDamageToHVConnections: noDamageToHVConnections || "No",
-        insulatorsClean: insulatorsClean || "No",
-        paintworkAdequate: paintworkAdequate || "No",
-        ptFuseLinkIntact: ptFuseLinkIntact || "No",
-        noCorrosion: noCorrosion || "No",
-        silicaGelCondition: silicaGelCondition || "Good",
-        correctLabelling: correctLabelling || "No",
-        remarks,
-        createdBy: user?.id || "",
-        createdAt: new Date().toISOString()
-      };
-      
       if (inspectionData?.id) {
         // Update existing inspection
-        updateVITInspection(inspectionData.id, inspectionFormData);
+        const updatedInspection: Omit<VITInspectionChecklist, "id"> = {
+          vitAssetId: selectedAsset.id,
+          region: selectedAsset.region,
+          district: selectedAsset.district,
+          inspectionDate,
+          inspectedBy,
+          rodentTermiteEncroachment: rodentTermiteEncroachment || "No",
+          cleanDustFree: cleanDustFree || "No",
+          protectionButtonEnabled: protectionButtonEnabled || "No",
+          recloserButtonEnabled: recloserButtonEnabled || "No",
+          groundEarthButtonEnabled: groundEarthButtonEnabled || "No",
+          acPowerOn: acPowerOn || "No",
+          batteryPowerLow: batteryPowerLow || "No",
+          handleLockOn: handleLockOn || "No",
+          remoteButtonEnabled: remoteButtonEnabled || "No",
+          gasLevelLow: gasLevelLow || "No",
+          earthingArrangementAdequate: earthingArrangementAdequate || "No",
+          noFusesBlown: noFusesBlown || "No",
+          noDamageToBushings: noDamageToBushings || "No",
+          noDamageToHVConnections: noDamageToHVConnections || "No",
+          insulatorsClean: insulatorsClean || "No",
+          paintworkAdequate: paintworkAdequate || "No",
+          ptFuseLinkIntact: ptFuseLinkIntact || "No",
+          noCorrosion: noCorrosion || "No",
+          silicaGelCondition: silicaGelCondition || "Good",
+          correctLabelling: correctLabelling || "No",
+          remarks: remarks || "",
+          createdBy: user?.email || "unknown",
+          createdAt: new Date().toISOString()
+        };
+        await updateVITInspection(inspectionData.id, updatedInspection);
       } else {
-        // Add new inspection
-        addVITInspection(inspectionFormData);
+        // Add new inspection with all required fields
+        const newInspection: Omit<VITInspectionChecklist, "id"> = {
+          vitAssetId: selectedAsset.id,
+          region: selectedAsset.region,
+          district: selectedAsset.district,
+          inspectionDate,
+          inspectedBy,
+          rodentTermiteEncroachment: rodentTermiteEncroachment || "No",
+          cleanDustFree: cleanDustFree || "No",
+          protectionButtonEnabled: protectionButtonEnabled || "No",
+          recloserButtonEnabled: recloserButtonEnabled || "No",
+          groundEarthButtonEnabled: groundEarthButtonEnabled || "No",
+          acPowerOn: acPowerOn || "No",
+          batteryPowerLow: batteryPowerLow || "No",
+          handleLockOn: handleLockOn || "No",
+          remoteButtonEnabled: remoteButtonEnabled || "No",
+          gasLevelLow: gasLevelLow || "No",
+          earthingArrangementAdequate: earthingArrangementAdequate || "No",
+          noFusesBlown: noFusesBlown || "No",
+          noDamageToBushings: noDamageToBushings || "No",
+          noDamageToHVConnections: noDamageToHVConnections || "No",
+          insulatorsClean: insulatorsClean || "No",
+          paintworkAdequate: paintworkAdequate || "No",
+          ptFuseLinkIntact: ptFuseLinkIntact || "No",
+          noCorrosion: noCorrosion || "No",
+          silicaGelCondition: silicaGelCondition || "Good",
+          correctLabelling: correctLabelling || "No",
+          remarks: remarks || "",
+          createdBy: user?.email || "unknown",
+          createdAt: new Date().toISOString()
+        };
+        await addVITInspection(newInspection);
       }
-      
-      onSubmit();
+      onSubmit(inspectionData);
     } catch (error) {
-      console.error("Error submitting inspection:", error);
+      console.error("Error saving inspection:", error);
+      toast.error("Failed to save inspection");
     } finally {
       setIsSubmitting(false);
     }

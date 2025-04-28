@@ -1,3 +1,7 @@
+import { doc, updateDoc, addDoc, collection } from "firebase/firestore";
+import { db } from "../config/firebase";
+import { OverheadLineInspection } from "./types";
+
 interface Region {
   id: string;
   name: string;
@@ -62,3 +66,13 @@ export function getDistrictName(regionId: string, districtId: string): string {
   const district = regionDistricts.find(d => d.id === districtId);
   return district ? district.name : "Unknown District";
 } 
+
+export const updateOverheadLineInspection = async (id: string, data: Partial<OverheadLineInspection>) => {
+  const docRef = doc(db, "overheadLineInspections", id);
+  await updateDoc(docRef, data);
+};
+
+export const addOverheadLineInspection = async (data: Omit<OverheadLineInspection, "id">) => {
+  const docRef = await addDoc(collection(db, "overheadLineInspections"), data);
+  return docRef.id;
+}; 

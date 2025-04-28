@@ -19,6 +19,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import Webcam from "react-webcam";
+import { db } from "@/config/firebase";
+import { collection, addDoc, updateDoc, doc, serverTimestamp } from "firebase/firestore";
 
 interface VITAssetFormProps {
   asset?: VITAsset;
@@ -64,44 +66,119 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
     createdBy: user?.email || "unknown"
   });
 
-  // Initialize region and district based on user's assigned values
+  // Initialize region and district based on user's assigned values or existing asset
   useEffect(() => {
-    if (!asset && (user?.role === "district_engineer" || user?.role === "regional_engineer" || user?.role === "technician")) {
-      // Find region ID based on user's assigned region name
-      const userRegion = regions.find(r => r.name === user.region);
-      if (userRegion) {
-        setRegionId(userRegion.id);
-        setFormData(prev => ({ ...prev, regionId: userRegion.id }));
-        
-        // For district engineer and technician, also set the district
-        if ((user.role === "district_engineer" || user?.role === "technician") && user.district) {
-          const userDistrict = districts.find(d => 
-            d.regionId === userRegion.id && d.name === user.district
-          );
-          if (userDistrict) {
-            setDistrictId(userDistrict.id);
-            setFormData(prev => ({ ...prev, districtId: userDistrict.id }));
+    let isMounted = true;
+    let retryCount = 0;
+    const maxRetries = 3;
+
+    const initializeData = async () => {
+      try {
+        // If editing an existing asset, use its values
+        if (asset) {
+          if (isMounted) {
+            // Find the region and district IDs based on their names
+            const existingRegion = regions.find(r => r.name === asset.region);
+            const existingDistrict = districts.find(d => d.name === asset.district);
+            
+            if (existingRegion) {
+              setRegionId(existingRegion.id);
+              setFormData(prev => ({ ...prev, region: asset.region }));
+              
+              // Set district after region is set
+              if (existingDistrict) {
+                setDistrictId(existingDistrict.id);
+                setFormData(prev => ({ ...prev, district: asset.district }));
+              }
+            }
           }
         }
+        // For technical roles, set based on user's assigned values
+        else if (user?.role === "district_engineer" || user?.role === "regional_engineer" || user?.role === "technician") {
+          const userRegion = regions.find(r => r.name === user.region);
+          if (userRegion && isMounted) {
+            setRegionId(userRegion.id);
+            setFormData(prev => ({ ...prev, region: user.region }));
+            
+            if ((user.role === "district_engineer" || user?.role === "technician") && user.district) {
+              const userDistrict = districts.find(d => 
+                d.regionId === userRegion.id && d.name === user.district
+              );
+              if (userDistrict && isMounted) {
+                setDistrictId(userDistrict.id);
+                setFormData(prev => ({ ...prev, district: user.district }));
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error initializing region/district data:", error);
+        if (retryCount < maxRetries && isMounted) {
+          retryCount++;
+          setTimeout(initializeData, 1000 * retryCount);
+        } else {
+          toast.error("Failed to load region/district data. Please refresh the page.");
+        }
+      }
+    };
+
+    initializeData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user, regions, districts, asset]);
+
+  // Add a new effect to handle district initialization when region changes
+  useEffect(() => {
+    if (asset && regionId) {
+      const existingDistrict = districts.find(d => 
+        d.regionId === regionId && d.name === asset.district
+      );
+      if (existingDistrict) {
+        setDistrictId(existingDistrict.id);
+        setFormData(prev => ({ ...prev, district: asset.district }));
       }
     }
-  }, [user, regions, districts, asset]);
+  }, [regionId, districts, asset]);
 
   // Ensure district engineer's and technician's district is always set correctly
   useEffect(() => {
-    if ((user?.role === "district_engineer" || user?.role === "technician") && user.district && !asset) {
-      // Find the user's assigned district
-      const userRegion = regions.find(r => r.name === user.region);
-      if (userRegion) {
-        const userDistrict = districts.find(d => 
-          d.regionId === userRegion.id && d.name === user.district
-        );
-        if (userDistrict && userDistrict.id !== districtId) {
-          setDistrictId(userDistrict.id);
-          setFormData(prev => ({ ...prev, districtId: userDistrict.id }));
+    let isMounted = true;
+    let retryCount = 0;
+    const maxRetries = 3;
+
+    const updateDistrict = async () => {
+      try {
+        // Only update district for district engineers and technicians
+        if ((user?.role === "district_engineer" || user?.role === "technician") && user.district && !asset) {
+          const userRegion = regions.find(r => r.name === user.region);
+          if (userRegion && isMounted) {
+            const userDistrict = districts.find(d => 
+              d.regionId === userRegion.id && d.name === user.district
+            );
+            if (userDistrict && userDistrict.id !== districtId && isMounted) {
+              setDistrictId(userDistrict.id);
+              setFormData(prev => ({ ...prev, district: user.district }));
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error updating district data:", error);
+        if (retryCount < maxRetries && isMounted) {
+          retryCount++;
+          setTimeout(updateDistrict, 1000 * retryCount);
+        } else {
+          toast.error("Failed to update district data. Please refresh the page.");
         }
       }
-    }
+    };
+
+    updateDistrict();
+
+    return () => {
+      isMounted = false;
+    };
   }, [user, regions, districts, districtId, asset]);
 
   // Filter regions and districts based on user role
@@ -111,12 +188,22 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
   
   const filteredDistricts = regionId
     ? districts.filter(d => {
-        const region = regions.find(r => r.id === regionId);
-        return region && (
-          user?.role === "district_engineer" || user?.role === "technician"
-            ? user.district === d.name 
-            : true
-        );
+        // First check if district belongs to selected region
+        if (d.regionId !== regionId) return false;
+        
+        // For district engineers and technicians, only show their assigned district
+        if (user?.role === "district_engineer" || user?.role === "technician") {
+          return d.name === user.district;
+        }
+        
+        // For regional engineers, only show districts in their region
+        if (user?.role === "regional_engineer") {
+          const userRegion = regions.find(r => r.name === user.region);
+          return userRegion ? d.regionId === userRegion.id : false;
+        }
+        
+        // For other roles, show all districts in the selected region
+        return true;
       })
     : [];
   
@@ -181,7 +268,7 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
     e.preventDefault();
     
     if (!regionId || !districtId || !serialNumber || !typeOfUnit || !location || !voltageLevel) {
-      alert("Please fill all required fields");
+      toast.error("Please fill all required fields");
       return;
     }
     
@@ -189,8 +276,8 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
     
     try {
       const assetData = {
-        regionId,
-        districtId,
+        region: filteredRegions.find(r => r.id === regionId)?.name,
+        district: filteredDistricts.find(d => d.id === districtId)?.name,
         voltageLevel,
         typeOfUnit,
         serialNumber,
@@ -199,20 +286,29 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
         status,
         protection,
         photoUrl,
-        createdBy: user?.email || "unknown"
+        createdBy: user?.email || "unknown",
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
       };
       
       if (asset) {
-        // Update existing asset
-        updateVITAsset(asset.id, assetData);
+        // Update existing asset in Firestore
+        const assetRef = doc(db, "vitAssets", asset.id);
+        await updateDoc(assetRef, {
+          ...assetData,
+          updatedAt: serverTimestamp()
+        });
+        toast.success("Asset updated successfully");
       } else {
-        // Add new asset
-        addVITAsset(assetData);
+        // Add new asset to Firestore
+        await addDoc(collection(db, "vitAssets"), assetData);
+        toast.success("Asset added successfully");
       }
       
       onSubmit();
     } catch (error) {
       console.error("Error submitting VIT asset:", error);
+      toast.error("Failed to save asset. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -273,10 +369,10 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
       return;
     }
     setRegionId(value);
-    setFormData(prev => ({ ...prev, regionId: value }));
+    setFormData(prev => ({ ...prev, region: value }));
     // Reset district when region changes
     setDistrictId("");
-    setFormData(prev => ({ ...prev, districtId: "" }));
+    setFormData(prev => ({ ...prev, district: "" }));
   };
 
   const handleDistrictChange = (value: string) => {
@@ -285,7 +381,7 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
       return;
     }
     setDistrictId(value);
-    setFormData(prev => ({ ...prev, districtId: value }));
+    setFormData(prev => ({ ...prev, district: value }));
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {

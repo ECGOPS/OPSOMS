@@ -43,42 +43,70 @@ export default function CreateLoadMonitoringPage() {
     feederLegs: [
       {
         id: uuidv4(),
-        redPhaseCurrent: 0,
-        yellowPhaseCurrent: 0,
-        bluePhaseCurrent: 0,
-        neutralCurrent: 0
+        redPhaseCurrent: '',
+        yellowPhaseCurrent: '',
+        bluePhaseCurrent: '',
+        neutralCurrent: ''
       }
     ]
   });
 
-  // Pre-fill region/district if available from user context, and filter districts initially
+  // Consolidated useEffect for initializing region and district based on user context
   useEffect(() => {
-    if (user?.region && regions) {
-      const userRegion = regions.find(r => r.name === user.region);
-      if (userRegion) {
-        handleRegionChange(userRegion.id); // Use ID to trigger filtering
-        setFormData(prev => ({ 
-          ...prev, 
-          regionId: userRegion.id,
-          region: user.region 
-        }));
-        if (user?.district) {
-          const userDistrict = districts.find(d => d.name === user.district && d.regionId === userRegion.id);
-          if (userDistrict) {
-            setFormData(prev => ({ 
-              ...prev, 
-              districtId: userDistrict.id,
-              district: user.district 
-            }));
-          }
-        }
-      } else {
-        setFilteredDistricts([]);
-      }
-    } else {
-      setFilteredDistricts([]);
+    console.log("Initialization Effect: Running...");
+    console.log("Initialization Effect: User:", user);
+    console.log("Initialization Effect: Regions:", regions);
+    console.log("Initialization Effect: Districts:", districts);
+
+    // Ensure all necessary data is loaded
+    if (!user || !regions || !districts) {
+      console.log("Initialization Effect: Missing data, exiting.");
+      setFilteredDistricts([]); // Clear districts if data is missing
+      return;
     }
-  }, [user, regions, districts]);
+
+    console.log(`Initialization Effect: Searching for region: ${user.region}`);
+    // Find the user's region
+    const userRegion = regions.find(r => r.name === user.region);
+    console.log("Initialization Effect: Found userRegion:", userRegion);
+
+    if (userRegion) {
+      console.log(`Initialization Effect: Filtering districts for regionId: ${userRegion.id}`);
+      // Filter districts for the user's region
+      const regionDistricts = districts.filter(d => d.regionId === userRegion.id);
+      console.log("Initialization Effect: Filtered regionDistricts:", regionDistricts);
+      setFilteredDistricts(regionDistricts);
+
+      console.log(`Initialization Effect: Searching for district: ${user.district} in filtered list`);
+      // Find the user's district within those districts
+      const userDistrict = user.district ? regionDistricts.find(d => d.name === user.district) : undefined;
+      console.log("Initialization Effect: Found userDistrict:", userDistrict);
+
+      // Set form data with region and potentially district
+      const newFormData = {
+        regionId: userRegion.id,
+        region: userRegion.name,
+        districtId: userDistrict ? userDistrict.id : "", // Set district ID if found, else clear
+        district: userDistrict ? userDistrict.name : ""   // Set district name if found, else clear
+      };
+      console.log("Initialization Effect: Setting formData with:", newFormData);
+      setFormData(prev => ({
+        ...prev,
+        ...newFormData
+      }));
+    } else {
+      console.log("Initialization Effect: User region not found, clearing selections.");
+      // If the user's region isn't found (e.g., admin user), clear filters/selections
+      setFilteredDistricts([]);
+      setFormData(prev => ({
+        ...prev,
+        regionId: "",
+        region: "",
+        districtId: "",
+        district: ""
+      }));
+    }
+  }, [user, regions, districts]); // Depend on user, regions, and districts data
 
   const [loadInfo, setLoadInfo] = useState<{
     ratedLoad: number;
@@ -128,10 +156,10 @@ export default function CreateLoadMonitoringPage() {
         ...(prev.feederLegs || []),
         {
           id: uuidv4(),
-          redPhaseCurrent: 0,
-          yellowPhaseCurrent: 0,
-          bluePhaseCurrent: 0,
-          neutralCurrent: 0
+          redPhaseCurrent: '',
+          yellowPhaseCurrent: '',
+          bluePhaseCurrent: '',
+          neutralCurrent: ''
         }
       ]
     }));
@@ -172,21 +200,44 @@ export default function CreateLoadMonitoringPage() {
     }
   };
 
-  // Handle Region Change - Filter Districts and Update Form Data
+  // Handle Region Change
   const handleRegionChange = (regionId: string) => {
     const selectedRegion = regions?.find(r => r.id === regionId);
     if (selectedRegion && districts) {
       const regionDistricts = districts.filter(d => d.regionId === regionId);
       setFilteredDistricts(regionDistricts);
+      
+      // If user is district engineer or technician, try to find their district in the new region
+      if ((user?.role === "district_engineer" || user?.role === "technician") && user.district) {
+        const userDistrict = regionDistricts.find(d => d.name === user.district);
+        if (userDistrict) {
+          setFormData(prev => ({
+            ...prev,
+            regionId: regionId,
+            region: selectedRegion.name,
+            districtId: userDistrict.id,
+            district: userDistrict.name
+          }));
+          return;
+        }
+      }
+      
       setFormData(prev => ({
         ...prev,
-        regionId: regionId, // Store region ID
-        region: selectedRegion.name, // Store region name
-        districtId: "", // Reset district ID
-        district: "" // Reset district name
+        regionId: regionId,
+        region: selectedRegion.name,
+        districtId: "",
+        district: ""
       }));
     } else {
       setFilteredDistricts([]);
+      setFormData(prev => ({ 
+        ...prev, 
+        regionId: "", 
+        region: "", 
+        districtId: "", 
+        district: "" 
+      }));
     }
   };
 
@@ -410,7 +461,7 @@ export default function CreateLoadMonitoringPage() {
         </div>
 
         <form onSubmit={handleSubmit}>
-          <div className="grid gap-6">
+          <div className="grid gap-4 sm:gap-6">
             {/* Basic Information Card */}
             <Card>
               <CardHeader>
@@ -420,7 +471,7 @@ export default function CreateLoadMonitoringPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
                   {/* Date, Time Inputs */}
                    <div className="space-y-2">
                     <Label htmlFor="date">Date</Label>
@@ -470,14 +521,19 @@ export default function CreateLoadMonitoringPage() {
                       value={formData.districtId || ""} // Use ID for value
                       onValueChange={handleDistrictChange} // Use custom handler
                       required
-                      disabled={user?.role === "district_engineer" || user?.role === "technician" || !formData.regionId || filteredDistricts.length === 0} // Disable for district engineers or if no region/districts
+                      disabled={
+                        user?.role === "district_engineer" || // Always disable for district engineers
+                        user?.role === "technician" || 
+                        !formData.regionId || 
+                        filteredDistricts.length === 0
+                      }
                     >
-                      <SelectTrigger id="district">
+                      <SelectTrigger id="district" className={user?.role === "district_engineer" ? "bg-muted" : ""}>
                         <SelectValue placeholder="Select District" />
                       </SelectTrigger>
                       <SelectContent>
                         {filteredDistricts.map((district) => (
-                          <SelectItem key={district.id} value={district.id}> {/* Use id for value */} 
+                          <SelectItem key={district.id} value={district.id}>
                             {district.name}
                           </SelectItem>
                         ))}
@@ -556,8 +612,8 @@ export default function CreateLoadMonitoringPage() {
               <CardContent>
                 <div className="space-y-4">
                   {formData.feederLegs?.map((leg, index) => (
-                    <div key={leg.id} className="grid grid-cols-5 gap-4 items-center border p-4 rounded-md">
-                      <Label className="col-span-5 font-medium">Feeder Leg {index + 1}</Label>
+                    <div key={leg.id} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-center border p-4 rounded-md">
+                      <Label className="col-span-1 sm:col-span-2 lg:col-span-5 font-medium">Feeder Leg {index + 1}</Label>
                       <div className="space-y-1">
                         <Label htmlFor={`red-${leg.id}`}>Red Phase</Label>
                         <Input
@@ -643,7 +699,7 @@ export default function CreateLoadMonitoringPage() {
                 <CardTitle>Calculated Load Information</CardTitle>
                 <CardDescription>Automatically calculated based on your inputs.</CardDescription>
               </CardHeader>
-              <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <CardContent className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                  {/* Display calculated values */}
                 <div className="p-3 bg-muted rounded-md">
                   <Label className="text-sm font-medium text-muted-foreground">Rated Load (A)</Label>
@@ -692,18 +748,6 @@ export default function CreateLoadMonitoringPage() {
                       {loadInfo.imbalanceWarningMessage}
                     </p>
                   )}
-                </div>
-                <div className="p-3 bg-muted rounded-md">
-                  <Label className="text-sm font-medium text-muted-foreground">Max Phase Current (A)</Label>
-                  <p className="text-lg font-semibold">{loadInfo.maxPhaseCurrent.toFixed(2)}</p>
-                </div>
-                <div className="p-3 bg-muted rounded-md">
-                  <Label className="text-sm font-medium text-muted-foreground">Min Phase Current (A)</Label>
-                  <p className="text-lg font-semibold">{loadInfo.minPhaseCurrent.toFixed(2)}</p>
-                </div>
-                <div className="p-3 bg-muted rounded-md">
-                  <Label className="text-sm font-medium text-muted-foreground">Avg Phase Current (A)</Label>
-                  <p className="text-lg font-semibold">{loadInfo.avgPhaseCurrent.toFixed(2)}</p>
                 </div>
               </CardContent>
             </Card>

@@ -1,17 +1,33 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { User, UserRole } from "@/lib/types";
 import { toast } from "@/components/ui/sonner";
+import { auth, db, functions, resetFirestoreConnection, handleFirestoreError } from "@/config/firebase";
+import { 
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  User as FirebaseUser,
+  sendPasswordResetEmail,
+  updatePassword
+} from "firebase/auth";
 import {
-  hashPassword,
-  generateSessionToken,
-  validateSessionToken,
-  storeSession,
-  sanitizeInput,
-  validateUserInput,
-  SessionToken
-} from "@/utils/security";
-import { SHA256 } from "crypto-js";
+  collection,
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  getDocs,
+  query,
+  where,
+  deleteDoc,
+  onSnapshot,
+  serverTimestamp,
+  Timestamp
+} from "firebase/firestore";
 import { StaffIdEntry } from "@/components/user-management/StaffIdManagement";
+import { httpsCallable } from "firebase/functions";
+import { securityMonitoringService, EVENT_TYPES } from "@/services/SecurityMonitoringService";
 
 // Export the interface
 export interface AuthContextType {
@@ -23,9 +39,15 @@ export interface AuthContextType {
   isAuthenticated: boolean;
   users: User[];
   setUsers: React.Dispatch<React.SetStateAction<User[]>>;
-  resetUserPassword: (email: string, newPassword: string) => void;
+  addUser: (user: Omit<User, "id">) => Promise<string>;
+  updateUser: (id: string, userData: Partial<User>) => Promise<void>;
+  deleteUser: (id: string) => Promise<void>;
+  toggleUserStatus: (id: string, disabled: boolean) => Promise<void>;
+  resetUserPassword: (email: string) => void;
+  adminResetUserPassword: (userId: string) => Promise<{ tempPassword: string; email: string }>;
   verifyStaffId: (staffId: string) => { isValid: boolean; staffInfo?: { name: string; role: UserRole; region?: string; district?: string } };
   staffIds: StaffIdEntry[];
+  setStaffIds: React.Dispatch<React.SetStateAction<StaffIdEntry[]>>;
   addStaffId: (entry: Omit<StaffIdEntry, "id"> & { customId?: string }) => void;
   updateStaffId: (id: string, entry: Omit<StaffIdEntry, "id">) => void;
   deleteStaffId: (id: string) => void;
@@ -33,585 +55,665 @@ export interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Mock users with hashed passwords
-const INITIAL_MOCK_USERS: User[] = [
-  {
-    id: "admin2",
-    email: "admin2@ecg.com",
-    name: "System Administrator 2",
-    role: "system_admin",
-    password: hashPassword("Admin@123"),
-    staffId: "ECGADMIN2"
-  },
-  {
-    id: "admin",
-    email: "admin@ecg.com",
-    name: "System Administrator",
-    role: "system_admin",
-    password: "5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8", // hash of "password"
-    staffId: "ECGADMIN"
-  },
-  {
-    id: "1",
-    email: "district@ecg.com",
-    name: "District Engineer",
-    role: "district_engineer",
-    region: "ACCRA EAST REGION",
-    district: "MAKOLA",
-    password: hashPassword("password"),
-    staffId: "ECG001"
-  },
-  {
-    id: "2",
-    email: "regional@ecg.com",
-    name: "Regional Engineer",
-    role: "regional_engineer",
-    region: "ACCRA EAST REGION",
-    password: hashPassword("password"),
-    staffId: "ECG002"
-  },
-  {
-    id: "3",
-    email: "global@ecg.com",
-    name: "Global Engineer",
-    role: "global_engineer",
-    password: hashPassword("password"),
-    staffId: "ECG003"
-  },
-  {
-    id: "4",
-    email: "district2@ecg.com",
-    name: "Tema District Engineer",
-    role: "district_engineer",
-    region: "TEMA REGION",
-    district: "TEMA NORTH",
-    password: hashPassword("password"),
-    staffId: "ECG004"
-  },
-  {
-    id: "5",
-    email: "district3@ecg.com",
-    name: "Kumasi District Engineer",
-    role: "district_engineer",
-    region: "ASHANTI EAST REGION",
-    district: "KUMASI EAST",
-    password: hashPassword("password"),
-    staffId: "ECG005"
-  },
-  {
-    id: "6",
-    email: "regional2@ecg.com",
-    name: "Ashanti Regional Engineer",
-    role: "regional_engineer",
-    region: "ASHANTI EAST REGION",
-    password: hashPassword("password"),
-    staffId: "ECG006"
-  },
-  {
-    id: "7",
-    email: "technician@ecg.com",
-    name: "Accra Technician",
-    role: "technician",
-    region: "ACCRA EAST REGION",
-    district: "MAKOLA",
-    password: hashPassword("password"),
-    staffId: "ECG007"
-  }
-];
-
-// Mock staff ID database for verification
-const STAFF_ID_DATABASE = [
-  {
-    id: "ECGADMIN2",
-    name: "System Administrator 2",
-    role: "system_admin" as UserRole
-  },
-  {
-    id: "ECG001",
-    name: "District Engineer 1",
-    role: "district_engineer" as UserRole,
-    region: "ACCRA EAST REGION",
-    district: "MAKOLA"
-  },
-  {
-    id: "ECG002",
-    name: "Regional Engineer 1",
-    role: "regional_engineer" as UserRole,
-    region: "ACCRA EAST REGION"
-  },
-  {
-    id: "ECG003",
-    name: "Global Engineer 1",
-    role: "global_engineer" as UserRole
-  },
-  {
-    id: "ECG004",
-    name: "District Engineer 2",
-    role: "district_engineer" as UserRole,
-    region: "TEMA REGION",
-    district: "TEMA NORTH"
-  },
-  {
-    id: "ECG005",
-    name: "District Engineer 3",
-    role: "district_engineer" as UserRole,
-    region: "ASHANTI EAST REGION",
-    district: "KUMASI EAST"
-  },
-  {
-    id: "ECG006",
-    name: "Regional Engineer 2",
-    role: "regional_engineer" as UserRole,
-    region: "ASHANTI EAST REGION"
-  },
-  {
-    id: "ECG007",
-    name: "Technician 1",
-    role: "technician" as UserRole,
-    region: "ACCRA EAST REGION",
-    district: "MAKOLA"
-  },
-  {
-    id: "ECG008",
-    name: "Technician 2",
-    role: "technician" as UserRole,
-    region: "TEMA REGION",
-    district: "TEMA NORTH"
-  },
-  {
-    id: "ECG009",
-    name: "Technician 3",
-    role: "technician" as UserRole,
-    region: "ASHANTI EAST REGION",
-    district: "KUMASI EAST"
-  },
-  {
-    id: "ECG010",
-    name: "Technician 4",
-    role: "technician" as UserRole,
-    region: "CAPE COAST REGION",
-    district: "CAPE COAST"
-  },
-  {
-    id: "ECGADMIN",
-    name: "System Administrator",
-    role: "system_admin" as UserRole
-  }
-];
+export { AuthContext };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [loginAttempts, setLoginAttempts] = useState<{ [key: string]: { count: number; lastAttempt: number } }>({});
-  const [users, setUsers] = useState<User[]>(() => {
-    // Try to load users from localStorage
-    const storedUsers = localStorage.getItem("ecg_users");
-    if (storedUsers) {
-      try {
-        return JSON.parse(storedUsers);
-      } catch (error) {
-        console.error("Error parsing stored users:", error);
-        return INITIAL_MOCK_USERS;
-      }
-    }
-    return INITIAL_MOCK_USERS;
-  });
-  const [staffIds, setStaffIds] = useState<StaffIdEntry[]>(() => {
-    // Try to load staff IDs from localStorage
-    const storedStaffIds = localStorage.getItem("ecg_staff_ids");
-    if (storedStaffIds) {
-      try {
-        return JSON.parse(storedStaffIds);
-      } catch (error) {
-        console.error("Error parsing stored staff IDs:", error);
-        return STAFF_ID_DATABASE;
-      }
-    }
-    return STAFF_ID_DATABASE;
-  });
-
-  // Save users to localStorage whenever they change
-  useEffect(() => {
-    localStorage.setItem("ecg_users", JSON.stringify(users));
-  }, [users]);
+  const [loading, setLoading] = useState(true);
+  const [users, setUsers] = useState<User[]>([]);
+  const [staffIds, setStaffIds] = useState<StaffIdEntry[]>([]);
 
   useEffect(() => {
-    // Check if session is valid
-    const sessionData = localStorage.getItem("ecg_session");
-    if (sessionData) {
+    setLoading(true);
+    console.log('[AuthContext] Initializing auth state');
+
+    // Load staff IDs immediately for signup verification
+    const loadStaffIds = async () => {
       try {
-        const session: SessionToken = JSON.parse(sessionData);
-        if (validateSessionToken(session)) {
-          const storedUser = users.find(u => u.id === session.userId);
-          if (storedUser) {
+        const staffIdsSnapshot = await getDocs(collection(db, "staffIds"));
+        const staffIdsList: StaffIdEntry[] = [];
+        staffIdsSnapshot.forEach((doc) => {
+          staffIdsList.push({ id: doc.id, ...doc.data() } as StaffIdEntry);
+        });
+        console.log(`[AuthContext] Loaded ${staffIdsList.length} staff IDs`);
+        setStaffIds(staffIdsList);
+      } catch (error) {
+        console.error("[AuthContext] Error loading staff IDs:", error);
+        toast.error("Error loading staff IDs");
+      }
+    };
+
+    // Call loadStaffIds immediately
+    loadStaffIds();
+
+    // Subscribe to auth state changes
+    const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
+      console.log('[AuthContext] Auth state changed:', { 
+        hasUser: !!firebaseUser,
+        uid: firebaseUser?.uid,
+        email: firebaseUser?.email,
+        emailVerified: firebaseUser?.emailVerified
+      });
+      
+      if (firebaseUser) {
+        try {
+          console.log('[AuthContext] Fetching user document for:', firebaseUser.uid);
+          // Get user document from Firestore
+          const userDoc = await getDoc(doc(db, "users", firebaseUser.uid));
+          console.log('[AuthContext] User document exists:', userDoc.exists());
+          
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            console.log('[AuthContext] User data loaded:', { 
+              role: userData.role,
+              region: userData.region,
+              district: userData.district,
+              disabled: userData.disabled,
+              name: userData.name,
+              staffId: userData.staffId
+            });
+
             // Check if user is disabled
-            if (storedUser.disabled) {
-              console.log("Session terminated - user is disabled");
-              localStorage.removeItem("ecg_session");
-              setUser(null);
+            if (userData.disabled) {
+              console.log('[AuthContext] User is disabled, signing out');
+              await signOut(auth);
+              toast.error("This account has been disabled");
               return;
             }
-            const { password, ...userWithoutPassword } = storedUser;
-            setUser(userWithoutPassword);
+            
+            // Get IP address
+            const ipAddress = await fetchIpAddress();
+            console.log('[AuthContext] IP address:', ipAddress);
+            
+            // Update last active and IP
+            await updateDoc(doc(db, "users", firebaseUser.uid), {
+              lastActive: serverTimestamp(),
+              lastIpAddress: ipAddress
+            });
+            console.log('[AuthContext] Updated user last active and IP');
+            
+            // Initialize user state with basic data
+            const userState: User = {
+              id: firebaseUser.uid,
+              email: firebaseUser.email || "",
+              name: userData.name || "",
+              role: userData.role,
+              staffId: userData.staffId || "",
+              region: userData.region,
+              regionId: userData.regionId,
+              district: userData.district,
+              districtId: userData.districtId,
+              disabled: userData.disabled,
+              mustChangePassword: userData.mustChangePassword
+            };
+
+            console.log('[AuthContext] Initial user state:', userState);
+            setUser(userState);
+          } else {
+            console.log('[AuthContext] User document not found, signing out');
+            await signOut(auth);
+            toast.error("User account not found");
           }
-        } else {
-          // Clear invalid session
-          localStorage.removeItem("ecg_session");
+        } catch (error) {
+          console.error('[AuthContext] Error in auth state change:', error);
+          await signOut(auth);
+          toast.error("Error loading user data");
         }
-      } catch (error) {
-        // Handle invalid session data
-        localStorage.removeItem("ecg_session");
+      } else {
+        setUser(null);
       }
-    }
-    setLoading(false);
-  }, [users]);
+      setLoading(false);
+    });
 
-  // Save staff IDs to localStorage whenever they change
+    // Subscribe to users collection only if authenticated
+    const usersUnsubscribe = onSnapshot(
+      collection(db, "users"),
+      (snapshot) => {
+        try {
+          const usersList: User[] = [];
+          snapshot.forEach((doc) => {
+            usersList.push({ id: doc.id, ...doc.data() } as User);
+          });
+          setUsers(usersList);
+        } catch (error) {
+          console.error("Error processing users snapshot:", error);
+          toast.error("Error loading users data");
+        }
+      },
+      (error) => {
+        console.error("Users listener error:", error);
+        toast.error("Error in users connection");
+      }
+    );
+
+    // Subscribe to staffIds collection with error handling
+    const staffIdsUnsubscribe = onSnapshot(
+      collection(db, "staffIds"),
+      (snapshot) => {
+        try {
+          const staffIdsList: StaffIdEntry[] = [];
+          snapshot.forEach((doc) => {
+            staffIdsList.push({ id: doc.id, ...doc.data() } as StaffIdEntry);
+          });
+          setStaffIds(staffIdsList);
+        } catch (error) {
+          console.error("Error processing staffIds snapshot:", error);
+          toast.error("Error loading staff IDs data");
+        }
+      },
+      (error) => {
+        console.error("StaffIds listener error:", error);
+        toast.error("Error in staff IDs connection");
+      }
+    );
+
+    return () => {
+      unsubscribeAuth();
+      usersUnsubscribe();
+      staffIdsUnsubscribe();
+    };
+  }, []);
+
+  // Add a separate effect to handle auth state changes
   useEffect(() => {
-    localStorage.setItem("ecg_staff_ids", JSON.stringify(staffIds));
-  }, [staffIds]);
-
-  const checkLoginAttempts = (email: string): boolean => {
-    const now = Date.now();
-    const attempts = loginAttempts[email];
-    
-    if (attempts) {
-      // Reset attempts after 15 minutes
-      if (now - attempts.lastAttempt > 15 * 60 * 1000) {
-        setLoginAttempts(prev => ({ ...prev, [email]: { count: 1, lastAttempt: now } }));
-        return true;
-      }
-      
-      // Block after 5 attempts
-      if (attempts.count >= 5) {
-        return false;
-      }
-      
-      setLoginAttempts(prev => ({
-        ...prev,
-        [email]: { count: attempts.count + 1, lastAttempt: now }
-      }));
-    } else {
-      setLoginAttempts(prev => ({ ...prev, [email]: { count: 1, lastAttempt: now } }));
+    if (user) {
+      console.log('[AuthContext] User state updated:', {
+        id: user.id,
+        role: user.role,
+        region: user.region,
+        district: user.district
+      });
     }
-    
-    return true;
+  }, [user]);
+
+  // Add activity tracking
+  useEffect(() => {
+    if (!user) return;
+
+    let activityTimeout: NodeJS.Timeout;
+
+    const updateActivity = async () => {
+      try {
+        await updateDoc(doc(db, 'users', user.id), {
+          lastActive: serverTimestamp()
+        });
+      } catch (error) {
+        console.error('Error updating activity:', error);
+      }
+    };
+
+    const handleActivity = () => {
+      clearTimeout(activityTimeout);
+      activityTimeout = setTimeout(updateActivity, 1000); // Debounce updates
+    };
+
+    // Track user activity
+    window.addEventListener('mousemove', handleActivity);
+    window.addEventListener('keydown', handleActivity);
+    window.addEventListener('click', handleActivity);
+    window.addEventListener('scroll', handleActivity);
+
+    // Update initially
+    updateActivity();
+
+    return () => {
+      clearTimeout(activityTimeout);
+      window.removeEventListener('mousemove', handleActivity);
+      window.removeEventListener('keydown', handleActivity);
+      window.removeEventListener('click', handleActivity);
+      window.removeEventListener('scroll', handleActivity);
+    };
+  }, [user]);
+
+  // Add IP address fetching
+  const fetchIpAddress = async (): Promise<string> => {
+    try {
+      const response = await fetch('https://api.ipify.org?format=json');
+      const data = await response.json();
+      return data.ip;
+    } catch (error) {
+      console.error('Error fetching IP:', error);
+      return 'unknown';
+    }
   };
 
   const login = async (email: string, password: string) => {
-    setLoading(true);
     try {
-      // Sanitize inputs
-      const sanitizedEmail = sanitizeInput(email);
-      console.log("=== Login Debug ===");
-      console.log("Attempting login for email:", sanitizedEmail);
-      console.log("Input password:", password);
-      console.log("Current users list:", users.map(u => ({ email: u.email, role: u.role, disabled: u.disabled })));
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
       
-      // Check login attempts
-      if (!checkLoginAttempts(sanitizedEmail)) {
-        throw new Error("Too many login attempts. Please try again in 15 minutes.");
+      // Get user data from Firestore
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      if (!userDoc.exists()) {
+        throw new Error('User document not found');
       }
 
-      // Find user
-      const foundUser = users.find(u => u.email === sanitizedEmail);
-      console.log("Found user:", foundUser ? { 
-        ...foundUser, 
-        password: "***", 
-        tempPassword: "***",
-        hashedInputPassword: hashPassword(password)
-      } : "Not found");
+      const userData = userDoc.data();
       
-      if (!foundUser) {
-        console.log("User not found");
-        throw new Error("Invalid email or password");
+      // Get IP address
+      let ipAddress = '';
+      try {
+        const response = await fetch('https://api.ipify.org?format=json');
+        const data = await response.json();
+        ipAddress = data.ip;
+      } catch (error) {
+        console.error('Error fetching IP address:', error);
       }
 
-      // Check if user is disabled
-      if (foundUser.disabled) {
-        console.log("User is disabled");
-        throw new Error("Your account has been disabled. Please contact your system administrator.");
+      // Update user's last login info
+      await updateDoc(doc(db, 'users', user.uid), {
+        lastLoginAt: serverTimestamp(),
+        lastIpAddress: ipAddress,
+        lastActive: serverTimestamp()
+      });
+
+      // Only attempt to log security event if user has sufficient permissions
+      try {
+        if (userData.role === 'system_admin' || userData.role === 'global_engineer') {
+          await securityMonitoringService.logEvent({
+            eventType: EVENT_TYPES.LOGIN_SUCCESS,
+            details: `Successful login for user ${email}`,
+            severity: 'low',
+            status: 'new',
+            userId: user.uid,
+            timestamp: new Date().toISOString()
+          });
+        }
+      } catch (securityError) {
+        // Log the error but don't fail the login process
+        console.warn('Failed to log security event:', securityError);
       }
 
-      // First check temporary password if it exists
-      if (foundUser.tempPassword && password === foundUser.tempPassword) {
-        console.log("Login successful with temporary password");
-        // Create session
-        const session = generateSessionToken(foundUser.id);
-        storeSession(session);
-        localStorage.setItem("ecg_session", JSON.stringify(session));
-        
-        // Set user without password
-        const { password: _, tempPassword: __, ...userWithoutPassword } = foundUser;
-        setUser(userWithoutPassword);
-        toast.success("Login successful! Please change your password.");
-        return;
-      }
-
-      // Check regular password
-      const hashedPassword = hashPassword(password);
-      console.log("Hashed input password:", hashedPassword);
-      console.log("Stored hashed password:", foundUser.password);
-      
-      if (hashedPassword === foundUser.password) {
-        console.log("Login successful with regular password");
-        // Create session
-        const session = generateSessionToken(foundUser.id);
-        storeSession(session);
-        localStorage.setItem("ecg_session", JSON.stringify(session));
-        
-        // Set user without password
-        const { password: _, tempPassword: __, ...userWithoutPassword } = foundUser;
-        setUser(userWithoutPassword);
-        toast.success("Login successful!");
-      } else {
-        console.log("Password mismatch");
-        throw new Error("Invalid email or password");
-      }
+      return;
     } catch (error) {
-      console.error("Login error:", error);
-      toast.error("Login failed: " + (error as Error).message);
-    } finally {
-      setLoading(false);
+      console.error('[AuthContext] Error logging in:', error);
+      throw error;
+    }
+  };
+
+  const signup = async (email: string, password: string, name: string, role: UserRole, region?: string, district?: string, staffId?: string) => {
+    try {
+      // Validate required fields based on role
+      if (role === 'technician' || role === 'district_engineer') {
+        if (!region || !district) {
+          throw new Error('Region and district are required for technicians and district engineers');
+        }
+      } else if (role === 'regional_engineer') {
+        if (!region) {
+          throw new Error('Region is required for regional engineers');
+        }
+      }
+
+      // Check if staff ID is already in use
+      if (staffId) {
+        const usersWithStaffId = await getDocs(query(collection(db, "users"), where("staffId", "==", staffId)));
+        if (!usersWithStaffId.empty) {
+          throw new Error('This staff ID is already in use by another user');
+        }
+      }
+
+      // Initialize IDs
+      let regionId = '';
+      let districtId = '';
+
+      // Only query for region if it's provided
+      if (region) {
+        const regionQuery = query(collection(db, "regions"), where("name", "==", region));
+        const regionSnapshot = await getDocs(regionQuery);
+        if (!regionSnapshot.empty) {
+          regionId = regionSnapshot.docs[0].id;
+        } else {
+          throw new Error(`Region "${region}" not found`);
+        }
+      }
+
+      // Only query for district if both district and regionId are provided
+      if (district && regionId) {
+        const districtQuery = query(
+          collection(db, "districts"),
+          where("name", "==", district),
+          where("regionId", "==", regionId)
+        );
+        const districtSnapshot = await getDocs(districtQuery);
+        if (!districtSnapshot.empty) {
+          districtId = districtSnapshot.docs[0].id;
+        } else {
+          throw new Error(`District "${district}" not found in region "${region}"`);
+        }
+      }
+
+      // Reset Firestore connection before creating user to ensure clean state
+      await resetFirestoreConnection();
+
+      // Create the user in Firebase Auth
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+
+      // Create user document in Firestore
+      const userData = {
+        email,
+        name,
+        role,
+        region: region || "",
+        regionId: regionId || "",
+        district: district || "",
+        districtId: districtId || "",
+        staffId: staffId || "",
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        disabled: false,
+        mustChangePassword: false
+      };
+
+      try {
+        // Use setDoc with merge option to handle potential race conditions
+        await setDoc(doc(db, "users", user.uid), userData, { merge: true });
+      } catch (firestoreError) {
+        // If Firestore error occurs, handle it and clean up the auth user
+        handleFirestoreError(firestoreError);
+        await user.delete();
+        throw new Error('Failed to create user document. Please try again.');
+      }
+
+      // Set user state
+      setUser({
+        id: user.uid,
+        ...userData
+      });
+
+      toast.success("Account created successfully");
+    } catch (error: any) {
+      console.error("Error signing up:", error);
+      // If there's an error, attempt to clean up the auth user
+      if (auth.currentUser) {
+        try {
+          await auth.currentUser.delete();
+        } catch (deleteError) {
+          console.error("Error cleaning up auth user:", deleteError);
+        }
+      }
+      toast.error(error.message || "Failed to create account");
+      throw error;
+    }
+  };
+
+  const logout = async () => {
+    try {
+      await signOut(auth);
+      setUser(null);
+      toast.success("Logged out successfully");
+    } catch (error) {
+      console.error("Error logging out:", error);
+      toast.error("Failed to logout");
+    }
+  };
+
+  const resetUserPassword = async (email: string) => {
+    try {
+      await sendPasswordResetEmail(auth, email);
+      toast.success("Password reset instructions have been sent to your email");
+    } catch (error: any) {
+      console.error("Error resetting password:", error);
+      if (error.code === 'auth/user-not-found') {
+        toast.error("No account found with this email");
+      } else {
+        toast.error("Failed to send password reset email. Please try again.");
+      }
+      throw error;
+    }
+  };
+
+  const adminResetUserPassword = async (userId: string) => {
+    try {
+      // Check if current user is a system admin
+      if (user?.role !== "system_admin") {
+        toast.error("Only system administrators can reset user passwords");
+        return { tempPassword: "", email: "" };
+      }
+
+      // Get the user document
+      const userDoc = await getDoc(doc(db, "users", userId));
+      if (!userDoc.exists()) {
+        toast.error("User not found");
+        return { tempPassword: "", email: "" };
+      }
+
+      const userData = userDoc.data();
+      const userEmail = userData.email;
+
+      if (!userEmail) {
+        toast.error("User email not found");
+        return { tempPassword: "", email: "" };
+      }
+
+      // Generate a temporary password that meets Firebase's requirements
+      const tempPassword = Math.random().toString(36).slice(-8) + "A1!"; // Add complexity requirements
+      
+      try {
+        // Send password reset email to the user
+        await sendPasswordResetEmail(auth, userEmail);
+        
+        // Update Firestore with the temporary password and flag
+        await updateDoc(doc(db, "users", userId), {
+          tempPassword: tempPassword,
+          mustChangePassword: true,
+          updatedAt: serverTimestamp()
+        });
+        
+        toast.success("Password reset email sent to user");
+        return { tempPassword, email: userEmail };
+      } catch (error) {
+        console.error("Error sending reset email:", error);
+        throw error;
+      }
+    } catch (error: any) {
+      console.error("Error resetting user password:", error);
+      toast.error("Failed to reset user password");
+      throw error;
     }
   };
 
   const verifyStaffId = (staffId: string) => {
-    // First check if it's a custom staff ID (not in the format ECGXXX)
-    if (!/^ECG\d{3}$/.test(staffId)) {
-      // Check if it exists in the staff ID management system
-      const customStaff = staffIds.find(s => s.id === staffId);
-      if (customStaff) {
-        return {
-          isValid: true,
-          staffInfo: {
-            name: customStaff.name,
-            role: customStaff.role,
-            region: customStaff.region,
-            district: customStaff.district
-          }
-        };
-      }
-      
-      // For new custom staff IDs, we'll still validate the format
-      if (!/^[A-Z0-9]{6,10}$/.test(staffId)) {
-        return { isValid: false };
-      }
-      
-      // For new custom staff IDs, we'll return a valid response but without auto-populated info
+    const staffInfo = staffIds.find(id => id.id === staffId);
+    if (!staffInfo) {
       return {
-        isValid: true,
-        staffInfo: {
-          name: "", // Will be filled by the user
-          role: "technician" as UserRole, // Default role
-          region: undefined,
-          district: undefined
-        }
+        isValid: false,
+        staffInfo: undefined
       };
     }
-    
-    // For ECGXXX format staff IDs, use the existing database
-    const staff = staffIds.find(s => s.id === staffId);
-    if (!staff) {
-      return { isValid: false };
-    }
-    
+
     return {
       isValid: true,
       staffInfo: {
-        name: staff.name,
-        role: staff.role,
-        region: staff.region,
-        district: staff.district
+        name: staffInfo.name,
+        role: staffInfo.role,
+        region: staffInfo.region,
+        district: staffInfo.district
       }
     };
   };
 
-  const signup = async (email: string, password: string, name: string, role: UserRole, region?: string, district?: string, staffId?: string) => {
-    setLoading(true);
+  const addStaffId = async (entry: Omit<StaffIdEntry, "id"> & { customId?: string }) => {
     try {
-      // Validate and sanitize inputs
-      const sanitizedInput = {
-        email: sanitizeInput(email),
-        password,
-        name: sanitizeInput(name),
-        role,
-        region: region ? sanitizeInput(region) : undefined,
-        district: district ? sanitizeInput(district) : undefined,
-        staffId: staffId ? sanitizeInput(staffId) : undefined
+      // Check if current user is a system admin
+      if (user?.role !== "system_admin") {
+        toast.error("Only system administrators can manage staff IDs");
+        return;
+      }
+      
+      // Generate a random ID if not provided
+      const id = entry.customId || Math.random().toString(36).substr(2, 9);
+      
+      // Create a cleaned entry with no undefined values
+      const cleanedEntry = {
+        name: entry.name,
+        role: entry.role,
+        region: entry.region || "",
+        district: entry.district || ""
       };
       
-      validateUserInput(sanitizedInput);
-
-      // Password validation
-      if (password.length < 8) {
-        throw new Error("Password must be at least 8 characters long");
-      }
-      if (!/[A-Z]/.test(password)) {
-        throw new Error("Password must contain at least one uppercase letter");
-      }
-      if (!/[a-z]/.test(password)) {
-        throw new Error("Password must contain at least one lowercase letter");
-      }
-      if (!/[0-9]/.test(password)) {
-        throw new Error("Password must contain at least one number");
-      }
-      if (!/^[a-zA-Z0-9]+$/.test(password)) {
-        throw new Error("Password can only contain letters and numbers");
-      }
-
-      // Verify staff ID if provided
-      if (staffId) {
-        const { isValid, staffInfo } = verifyStaffId(staffId);
-        
-        if (!isValid) {
-          throw new Error("Invalid staff ID. Please check and try again.");
-        }
-        
-        // If staff info exists, verify that the provided role, region, and district match
-        if (staffInfo) {
-          if (staffInfo.role !== role) {
-            throw new Error(`Staff ID is assigned to a ${staffInfo.role.replace('_', ' ')} role, not ${role.replace('_', ' ')}`);
-          }
-          
-          if (staffInfo.region && staffInfo.region !== region) {
-            throw new Error(`Staff ID is assigned to ${staffInfo.region} region, not ${region}`);
-          }
-          
-          if (staffInfo.district && staffInfo.district !== district) {
-            throw new Error(`Staff ID is assigned to ${staffInfo.district} district, not ${district}`);
-          }
-          
-          // Use the name from staff database if it doesn't match
-          if (staffInfo.name !== name) {
-            console.warn(`Name provided (${name}) doesn't match staff database (${staffInfo.name}). Using staff database name.`);
-            sanitizedInput.name = staffInfo.name;
-          }
-        }
-      } else {
-        // If no staff ID is provided, only allow global engineers to sign up
-        if (role !== "global_engineer") {
-          throw new Error("Staff ID is required for all roles except global engineer");
-        }
-      }
-
-      // Validate role assignment
-      if (role === "district_engineer" && (!region || !district)) {
-        throw new Error("District engineers must have both region and district assigned");
-      }
-      if (role === "regional_engineer" && !region) {
-        throw new Error("Regional engineers must have a region assigned");
-      }
-      if (role === "technician" && (!region || !district)) {
-        throw new Error("Technicians must have both region and district assigned");
-      }
-
-      // Check if user exists
-      if (users.some(u => u.email === sanitizedInput.email)) {
-        throw new Error("User already exists");
-      }
+      console.log("Adding staff ID with data:", cleanedEntry);
       
-      // Check if staff ID is already used
-      if (staffId && users.some(u => u.staffId === staffId)) {
-        throw new Error("Staff ID is already registered");
-      }
+      // Set the document with merge option to be safer
+      await setDoc(doc(db, "staffIds", id), cleanedEntry, { merge: true });
       
-      // Create new user with hashed password
-      const newUser: User = {
-        id: `user-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        ...sanitizedInput,
-        password: hashPassword(sanitizedInput.password)
-      };
-      
-      // Add new user to state
-      setUsers(prevUsers => [...prevUsers, newUser]);
-      
-      // Create session
-      const session = generateSessionToken(newUser.id);
-      storeSession(session);
-      localStorage.setItem("ecg_session", JSON.stringify(session));
-      
-      // Set user without password
-      const { password: _, ...userWithoutPassword } = newUser;
-      setUser(userWithoutPassword);
-      
-      toast.success("Account created successfully!");
+      setStaffIds(prev => [...prev, { id, ...cleanedEntry }]);
+      toast.success("Staff ID added successfully");
     } catch (error) {
-      toast.error("Signup failed: " + (error as Error).message);
-      throw error;
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem("ecg_session");
-    document.cookie = "session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-    toast.success("Logged out successfully!");
-  };
-
-  const resetUserPassword = (email: string, newPassword: string) => {
-    setUsers(prevUsers => 
-      prevUsers.map(user => {
-        if (user.email === email) {
-          return {
-            ...user,
-            password: hashPassword(newPassword),
-            tempPassword: undefined,
-            mustChangePassword: false
-          };
+      console.error("Error adding staff ID:", error);
+      let errorMessage = "Failed to add staff ID";
+      
+      // More specific error message
+      if (error instanceof Error) {
+        if (error.message.includes("permission")) {
+          errorMessage = "Permission denied. Only system administrators can add staff IDs.";
         }
-        return user;
-      })
-    );
-  };
-
-  const addStaffId = (entry: Omit<StaffIdEntry, "id"> & { customId?: string }) => {
-    // Check if a custom ID is provided
-    if (entry.customId) {
-      // Validate custom ID format
-      if (!/^[A-Z0-9]{6,10}$/.test(entry.customId)) {
-        throw new Error("Custom staff ID must be 6-10 alphanumeric characters");
       }
       
-      // Check if ID already exists
-      if (staffIds.some(s => s.id === entry.customId)) {
-        throw new Error("Staff ID already exists");
-      }
-      
-      const newEntry: StaffIdEntry = {
-        id: entry.customId,
-        name: entry.name,
-        role: entry.role,
-        region: entry.region,
-        district: entry.district
-      };
-      setStaffIds(prev => [...prev, newEntry]);
-    } else {
-      // Generate ECGXXX format ID
-      const newEntry: StaffIdEntry = {
-        id: `ECG${String(staffIds.length + 1).padStart(3, '0')}`,
-        name: entry.name,
-        role: entry.role,
-        region: entry.region,
-        district: entry.district
-      };
-      setStaffIds(prev => [...prev, newEntry]);
+      toast.error(errorMessage);
     }
   };
 
-  const updateStaffId = (id: string, entry: Omit<StaffIdEntry, "id">) => {
-    setStaffIds(prev => prev.map(item => item.id === id ? { ...entry, id } : item));
+  const updateStaffId = async (id: string, entry: Omit<StaffIdEntry, "id">) => {
+    try {
+      // Create a cleaned entry with no undefined values
+      const cleanedEntry = {
+        name: entry.name,
+        role: entry.role,
+        region: entry.region || "",
+        district: entry.district || ""
+      };
+      
+      await updateDoc(doc(db, "staffIds", id), cleanedEntry);
+      setStaffIds(prev => prev.map(s => s.id === id ? { id, ...cleanedEntry } : s));
+      toast.success("Staff ID updated successfully");
+    } catch (error) {
+      console.error("Error updating staff ID:", error);
+      toast.error("Failed to update staff ID");
+    }
   };
 
-  const deleteStaffId = (id: string) => {
-    // Check if the staff ID is in use by any user
-    const isInUse = users.some(user => user.staffId === id);
-    if (isInUse) {
-      throw new Error("Cannot delete staff ID that is in use by a user");
+  const deleteStaffId = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, "staffIds", id));
+      setStaffIds(prev => prev.filter(s => s.id !== id));
+      toast.success("Staff ID deleted successfully");
+    } catch (error) {
+      console.error("Error deleting staff ID:", error);
+      toast.error("Failed to delete staff ID");
     }
-    setStaffIds(prev => prev.filter(item => item.id !== id));
+  };
+
+  const addUser = async (userData: Omit<User, "id">): Promise<string> => {
+    try {
+      // Create a new document with auto-generated ID
+      const userRef = doc(collection(db, "users"));
+      
+      // Find region and district IDs if not provided
+      let regionId = userData.regionId;
+      let districtId = userData.districtId;
+      
+      if (!regionId && userData.region) {
+        const regionDoc = await getDocs(query(collection(db, "regions"), where("name", "==", userData.region)));
+        regionId = regionDoc.docs[0]?.id || "";
+      }
+      
+      if (!districtId && userData.district && regionId) {
+        const districtDoc = await getDocs(query(collection(db, "districts"), where("name", "==", userData.district), where("regionId", "==", regionId)));
+        districtId = districtDoc.docs[0]?.id || "";
+      }
+      
+      // Clean the data to prevent undefined values
+      const cleanedData = {
+        name: userData.name,
+        email: userData.email,
+        role: userData.role,
+        region: userData.region || "",
+        regionId: regionId || "",
+        district: userData.district || "",
+        districtId: districtId || "",
+        password: userData.password || "",
+        tempPassword: userData.tempPassword || "",
+        mustChangePassword: userData.mustChangePassword || false,
+        disabled: userData.disabled || false,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      };
+      
+      await setDoc(userRef, cleanedData);
+      toast.success("User added successfully");
+      return userRef.id;
+    } catch (error) {
+      console.error("Error adding user:", error);
+      toast.error("Failed to add user");
+      throw error;
+    }
+  };
+  
+  const updateUser = async (id: string, userData: Partial<User>): Promise<void> => {
+    try {
+      const userRef = doc(db, "users", id);
+      
+      // Find region and district IDs if not provided
+      let regionId = userData.regionId;
+      let districtId = userData.districtId;
+      
+      if (!regionId && userData.region) {
+        const regionDoc = await getDocs(query(collection(db, "regions"), where("name", "==", userData.region)));
+        regionId = regionDoc.docs[0]?.id || "";
+      }
+      
+      if (!districtId && userData.district && regionId) {
+        const districtDoc = await getDocs(query(collection(db, "districts"), where("name", "==", userData.district), where("regionId", "==", regionId)));
+        districtId = districtDoc.docs[0]?.id || "";
+      }
+      
+      // Remove undefined values and add updatedAt timestamp
+      const updateData: any = { 
+        ...userData,
+        regionId: regionId || "",
+        districtId: districtId || "",
+        updatedAt: serverTimestamp() 
+      };
+      Object.keys(updateData).forEach(key => {
+        if (updateData[key] === undefined) {
+          updateData[key] = "";
+        }
+      });
+      
+      await updateDoc(userRef, updateData);
+      toast.success("User updated successfully");
+    } catch (error) {
+      console.error("Error updating user:", error);
+      toast.error("Failed to update user");
+      throw error;
+    }
+  };
+  
+  const deleteUser = async (id: string): Promise<void> => {
+    try {
+      await deleteDoc(doc(db, "users", id));
+      toast.success("User deleted successfully");
+    } catch (error) {
+      console.error("Error deleting user:", error);
+      toast.error("Failed to delete user");
+      throw error;
+    }
+  };
+  
+  const toggleUserStatus = async (id: string, disabled: boolean): Promise<void> => {
+    try {
+      const userRef = doc(db, "users", id);
+      await updateDoc(userRef, { 
+        disabled,
+        updatedAt: serverTimestamp()
+      });
+      toast.success(`User ${disabled ? 'disabled' : 'enabled'} successfully`);
+    } catch (error) {
+      console.error("Error toggling user status:", error);
+      toast.error(`Failed to ${disabled ? 'disable' : 'enable'} user`);
+      throw error;
+    }
   };
 
   return (
@@ -625,9 +727,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAuthenticated: !!user,
         users,
         setUsers,
+        addUser,
+        updateUser,
+        deleteUser,
+        toggleUserStatus,
         resetUserPassword,
+        adminResetUserPassword,
         verifyStaffId,
         staffIds,
+        setStaffIds,
         addStaffId,
         updateStaffId,
         deleteStaffId

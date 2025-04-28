@@ -8,10 +8,13 @@ import { DataProvider } from "@/contexts/DataContext";
 import { Layout } from "@/components/layout/Layout";
 import ProtectedRoute from './components/access-control/ProtectedRoute';
 import { AccessControlWrapper } from "@/components/access-control/AccessControlWrapper";
+import { PermissionService } from "@/services/PermissionService";
+import { useEffect } from "react";
 
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import DashboardPage from "./pages/DashboardPage";
 import ReportFaultPage from "./pages/ReportFaultPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
@@ -35,190 +38,201 @@ import LoadMonitoringDetailsPage from "./pages/asset-management/LoadMonitoringDe
 import EditOP5FaultPage from "@/pages/EditOP5FaultPage";
 import EditControlOutagePage from "@/pages/EditControlOutagePage";
 import PermissionManagementPage from './pages/system-admin/PermissionManagementPage';
+import SecurityMonitoringPage from './pages/system-admin/SecurityMonitoringPage';
+import SecurityTestPage from './pages/system-admin/SecurityTestPage';
+import DistrictPopulationPage from './pages/DistrictPopulationPage';
 
 const queryClient = new QueryClient();
 
 function App() {
+  useEffect(() => {
+    // Initialize permissions
+    const permissionService = PermissionService.getInstance();
+    permissionService.initialize().catch(console.error);
+  }, []);
+
   return (
     <BrowserRouter>
-  <QueryClientProvider client={queryClient}>
-    <AuthProvider>
-      <DataProvider>
-        <TooltipProvider>
-            <Routes>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <DataProvider>
+            <TooltipProvider>
+              <Routes>
                 {/* Public routes */}
-              <Route path="/" element={<HomePage />} />
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/signup" element={<SignupPage />} />
+                <Route path="/" element={<HomePage />} />
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/signup" element={<SignupPage />} />
+                <Route path="/forgot-password" element={<ForgotPasswordPage />} />
                 <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
-                {/* Protected routes */}
+                {/* Protected routes (feature-based) */}
                 <Route path="/dashboard" element={
-                  <ProtectedRoute requiredRole={["technician", "district_engineer", "global_engineer", "system_admin"]}>
+                  <ProtectedRoute requiredFeature="analytics_dashboard">
                     <DashboardPage />
                   </ProtectedRoute>
                 } />
 
                 <Route path="/report-fault" element={
-                  <ProtectedRoute requiredRole={["technician", "district_engineer", "global_engineer", "system_admin"]}>
+                  <ProtectedRoute requiredFeature="fault_reporting">
                     <ReportFaultPage />
                   </ProtectedRoute>
                 } />
 
                 <Route path="/analytics" element={
-                  <ProtectedRoute requiredRole={["district_engineer", "global_engineer", "system_admin"]}>
+                  <ProtectedRoute requiredFeature="analytics_dashboard">
                     <AnalyticsPage />
                   </ProtectedRoute>
                 } />
 
                 <Route path="/user-management" element={
-                  <ProtectedRoute requiredRole="system_admin">
+                  <ProtectedRoute requiredFeature="user_management">
                     <UserManagementPage />
                   </ProtectedRoute>
                 } />
 
                 <Route path="/district-population" element={
-                  <ProtectedRoute requiredRole={["district_engineer", "global_engineer", "system_admin"]}>
-                    <AccessControlWrapper type="asset">
-                      <UserManagementPage />
-                    </AccessControlWrapper>
+                  <ProtectedRoute requiredFeature="district_population">
+                    <DistrictPopulationPage />
                   </ProtectedRoute>
                 } />
 
                 <Route path="/asset-management/load-monitoring" element={
-                  <ProtectedRoute requiredRole={["technician", "district_engineer", "global_engineer", "system_admin"]}>
+                  <ProtectedRoute requiredFeature="load_monitoring">
                     <LoadMonitoringPage />
                   </ProtectedRoute>
                 } />
 
                 <Route path="/asset-management/load-monitoring-details/:id" element={
-                  <ProtectedRoute requiredRole={["technician", "district_engineer", "global_engineer", "system_admin"]}>
+                  <ProtectedRoute requiredFeature="load_monitoring">
                     <LoadMonitoringDetailsPage />
                   </ProtectedRoute>
                 } />
 
                 <Route path="/asset-management/edit-load-monitoring/:id" element={
-                  <ProtectedRoute requiredRole={["technician", "district_engineer", "global_engineer", "system_admin"]}>
+                  <ProtectedRoute requiredFeature="load_monitoring_update">
                     <EditLoadMonitoringPage />
                   </ProtectedRoute>
                 } />
 
                 <Route path="/asset-management/create-load-monitoring" element={
-                  <ProtectedRoute requiredRole={["technician", "district_engineer", "global_engineer", "system_admin"]}>
+                  <ProtectedRoute requiredFeature="load_monitoring">
                     <CreateLoadMonitoringPage />
                   </ProtectedRoute>
                 } />
 
                 <Route path="/asset-management/inspection-management" element={
-                  <ProtectedRoute requiredRole={["district_engineer", "global_engineer", "system_admin"]}>
+                  <ProtectedRoute requiredFeature="inspection_management">
                     <InspectionManagementPage />
                   </ProtectedRoute>
                 } />
 
                 <Route path="/asset-management/inspection-details/:id" element={
-                  <ProtectedRoute requiredRole={["district_engineer", "global_engineer", "system_admin"]}>
+                  <ProtectedRoute requiredFeature="inspection_management">
                     <InspectionDetailsPage />
                   </ProtectedRoute>
                 } />
 
                 <Route path="/asset-management/substation-inspection" element={
-                  <ProtectedRoute requiredRole={["district_engineer", "global_engineer", "system_admin"]}>
+                  <ProtectedRoute requiredFeature="substation_inspection">
                     <SubstationInspectionPage />
                   </ProtectedRoute>
                 } />
 
                 <Route path="/asset-management/edit-inspection/:id" element={
-                  <ProtectedRoute requiredRole={["district_engineer", "global_engineer", "system_admin"]}>
+                  <ProtectedRoute requiredFeature="inspection_management_update">
                     <EditInspectionPage />
                   </ProtectedRoute>
                 } />
 
                 <Route path="/asset-management/vit-inspection" element={
-                  <ProtectedRoute requiredRole={["regional_engineer", "district_engineer", "global_engineer", "system_admin"]}>
+                  <ProtectedRoute requiredFeature="vit_inspection">
                     <VITInspectionPage />
                   </ProtectedRoute>
                 } />
 
                 <Route path="/asset-management/vit-inspection-management" element={
-                  <ProtectedRoute requiredRole={["regional_engineer", "district_engineer", "global_engineer", "system_admin"]}>
+                  <ProtectedRoute requiredFeature="vit_inspection">
                     <VITInspectionManagementPage />
                   </ProtectedRoute>
                 } />
 
                 <Route path="/asset-management/vit-inspection-details/:id" element={
-                  <ProtectedRoute requiredRole={["regional_engineer", "district_engineer", "global_engineer", "system_admin"]}>
+                  <ProtectedRoute requiredFeature="vit_inspection">
                     <VITInspectionDetailsPage />
                   </ProtectedRoute>
                 } />
 
                 <Route path="/asset-management/edit-vit-inspection/:id" element={
-                  <ProtectedRoute requiredRole={["regional_engineer", "district_engineer", "global_engineer", "system_admin"]}>
+                  <ProtectedRoute requiredFeature="vit_inspection_update">
                     <EditVITInspectionPage />
                   </ProtectedRoute>
                 } />
 
                 <Route path="/asset-management/vit-inspection-form/:id" element={
-                  <ProtectedRoute requiredRole={["regional_engineer", "district_engineer", "global_engineer", "system_admin"]}>
+                  <ProtectedRoute requiredFeature="vit_inspection">
                     <VITInspectionFormPage />
                   </ProtectedRoute>
                 } />
 
                 <Route path="/asset-management/overhead-line" element={
-                  <ProtectedRoute requiredRole={["technician", "district_engineer", "system_admin"]}>
-                    <AccessControlWrapper type="inspection">
-                      <OverheadLineInspectionPage />
-                    </AccessControlWrapper>
+                  <ProtectedRoute requiredFeature="overhead_line_inspection">
+                    <OverheadLineInspectionPage />
                   </ProtectedRoute>
                 } />
 
                 <Route path="/asset-management/overhead-line/details/:id" element={
-                  <ProtectedRoute requiredRole={["technician", "district_engineer", "system_admin"]}>
-                    <AccessControlWrapper type="inspection">
-                      <InspectionDetailsPage />
-                    </AccessControlWrapper>
+                  <ProtectedRoute requiredFeature="overhead_line_inspection">
+                    <InspectionDetailsPage />
                   </ProtectedRoute>
                 } />
 
                 <Route path="/asset-management/overhead-line/edit/:id" element={
-                  <ProtectedRoute requiredRole={["technician", "district_engineer", "system_admin"]}>
-                    <AccessControlWrapper type="inspection">
-                      <EditInspectionPage />
-                    </AccessControlWrapper>
+                  <ProtectedRoute requiredFeature="overhead_line_inspection_update">
+                    <EditInspectionPage />
                   </ProtectedRoute>
                 } />
 
                 <Route path="/edit-op5-fault/:id" element={
-                  <ProtectedRoute requiredRole={["district_engineer", "global_engineer", "system_admin"]}>
+                  <ProtectedRoute requiredFeature="fault_reporting_update">
                     <EditOP5FaultPage />
                   </ProtectedRoute>
                 } />
-                
+
                 <Route path="/edit-control-outage/:id" element={
-                  <ProtectedRoute requiredRole={["district_engineer", "global_engineer", "system_admin"]}>
+                  <ProtectedRoute requiredFeature="fault_reporting_update">
                     <EditControlOutagePage />
                   </ProtectedRoute>
                 } />
 
-                <Route
-                  path="/system-admin/permissions"
-                  element={
-                    <ProtectedRoute requiredRole="system_admin">
-                      <PermissionManagementPage />
-                    </ProtectedRoute>
-                  }
-                />
+                <Route path="/system-admin/permissions" element={
+                  <ProtectedRoute requiredFeature="permission_management">
+                    <PermissionManagementPage />
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/system-admin/security" element={
+                  <ProtectedRoute requiredFeature="security_monitoring">
+                    <SecurityMonitoringPage />
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/test/security" element={
+                  <ProtectedRoute requiredFeature="security_testing">
+                    <SecurityTestPage />
+                  </ProtectedRoute>
+                } />
 
                 {/* Catch all */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
+                <Route path="*" element={<NotFound />} />
+              </Routes>
               <Toaster />
               <Sonner />
-        </TooltipProvider>
-      </DataProvider>
-    </AuthProvider>
-  </QueryClientProvider>
+            </TooltipProvider>
+          </DataProvider>
+        </AuthProvider>
+      </QueryClientProvider>
     </BrowserRouter>
-);
+  );
 }
 
 export default App;

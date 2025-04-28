@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Layout } from "@/components/layout/Layout";
 import { useNavigate } from "react-router-dom";
 import {
@@ -29,27 +29,105 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { exportSubstationInspectionToPDF } from "@/utils/pdfExport";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { DatePicker } from "@/components/ui/date-picker";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { PermissionService } from '@/services/PermissionService';
 
 export default function InspectionManagementPage() {
   const { user } = useAuth();
-  const { savedInspections, deleteInspection } = useData();
+  const { regions, districts, savedInspections, deleteInspection } = useData();
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
-  
-  // Filter inspections based on user role and search term
-  const filteredInspections = savedInspections?.filter(inspection => {
-    // First check role-based access
-    if (user?.role === 'district_engineer' || user?.role === 'technician') {
-      if (inspection.district !== user.district) return false;
-    } else if (user?.role === 'regional_engineer') {
-      if (inspection.region !== user.region) return false;
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState<Date | null>(null);
+  const [selectedRegion, setSelectedRegion] = useState<string | null>(null);
+  const [selectedDistrict, setSelectedDistrict] = useState<string | null>(null);
+  const permissionService = PermissionService.getInstance();
+
+  // Filter districts based on selected region
+  const filteredDistricts = useMemo(() => {
+    if (!selectedRegion) return districts;
+    return districts.filter(d => d.regionId === selectedRegion);
+  }, [districts, selectedRegion]);
+
+  const filteredInspections = useMemo(() => {
+    if (!savedInspections) return [];
+    
+    let filtered = savedInspections;
+    
+    // Apply role-based filtering
+    if (user?.role === 'regional_engineer') {
+      filtered = filtered.filter(inspection => inspection.region === user.region);
+    } else if (user?.role === 'district_engineer' || user?.role === 'technician') {
+      filtered = filtered.filter(inspection => inspection.district === user.district);
     }
     
-    // Then apply search filter
-    return inspection.substationNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-           inspection.region.toLowerCase().includes(searchTerm.toLowerCase()) ||
-           inspection.district.toLowerCase().includes(searchTerm.toLowerCase());
-  }) || [];
+    // Apply date filter
+    if (selectedDate) {
+      filtered = filtered.filter(inspection => {
+        const inspectionDate = new Date(inspection.date);
+        return inspectionDate.toDateString() === selectedDate.toDateString();
+      });
+    }
+    
+    // Apply month filter
+    if (selectedMonth) {
+      filtered = filtered.filter(inspection => {
+        const inspectionDate = new Date(inspection.date);
+        return inspectionDate.getMonth() === selectedMonth.getMonth() && 
+               inspectionDate.getFullYear() === selectedMonth.getFullYear();
+      });
+    }
+    
+    // Apply region filter (for global engineer and admin)
+    if (selectedRegion && (user?.role === 'global_engineer' || user?.role === 'system_admin')) {
+      // Find the region name corresponding to the selectedRegion ID
+      const regionName = regions.find(r => r.id === selectedRegion)?.name;
+      if (regionName) {
+        filtered = filtered.filter(inspection => inspection.region === regionName);
+      }
+    }
+    
+    // Apply district filter (for regional engineer and above)
+    if (selectedDistrict && 
+        (user?.role === 'global_engineer' || 
+         user?.role === 'system_admin' || 
+         user?.role === 'regional_engineer')) {
+      // Find the district name corresponding to the selectedDistrict ID
+      const districtName = districts.find(d => d.id === selectedDistrict)?.name;
+      if (districtName) {
+        filtered = filtered.filter(inspection => inspection.district === districtName);
+      }
+    }
+    
+    // Apply search filter
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      filtered = filtered.filter(inspection => 
+        inspection.substationNo.toLowerCase().includes(term) ||
+        inspection.region.toLowerCase().includes(term) ||
+        inspection.district.toLowerCase().includes(term)
+      );
+    }
+    
+    return filtered;
+  }, [savedInspections, user, selectedDate, selectedMonth, selectedRegion, selectedDistrict, searchTerm]);
+
+  // Reset all filters
+  const handleResetFilters = () => {
+    setSelectedDate(null);
+    setSelectedMonth(null);
+    setSelectedRegion(null);
+    setSelectedDistrict(null);
+    setSearchTerm("");
+  };
 
   const handleView = (id: string) => {
     navigate(`/asset-management/inspection-details/${id}`);
@@ -470,6 +548,16 @@ export default function InspectionManagementPage() {
     }
   };
 
+  // Check if user can edit an inspection
+  const canEditInspection = (inspection: SubstationInspection) => {
+    return permissionService.canUpdateFeature(user?.role || null, 'inspection_management');
+  };
+
+  // Check if user can delete an inspection
+  const canDeleteInspection = (inspection: SubstationInspection) => {
+    return permissionService.canDeleteFeature(user?.role || null, 'inspection_management');
+  };
+
   return (
     <Layout>
       <div className="container mx-auto py-8">
@@ -483,6 +571,86 @@ export default function InspectionManagementPage() {
               New Inspection
             </Button>
           </div>
+        </div>
+        
+        {/* Filters */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div className="space-y-2">
+            <Label>Date</Label>
+            <DatePicker
+              value={selectedDate}
+              onChange={setSelectedDate}
+            />
+          </div>
+          
+          <div className="space-y-2">
+            <Label>Month</Label>
+            <DatePicker
+              value={selectedMonth}
+              onChange={setSelectedMonth}
+              picker="month"
+            />
+          </div>
+          
+          {(user?.role === 'global_engineer' || user?.role === 'system_admin') && (
+            <div className="space-y-2">
+              <Label>Region</Label>
+              <div className="w-full">
+                <Select
+                  value={selectedRegion}
+                  onValueChange={setSelectedRegion}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select region" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {regions.map(region => (
+                      <SelectItem key={region.id} value={region.id}>
+                        {region.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+          
+          {(user?.role === 'global_engineer' || 
+            user?.role === 'system_admin' || 
+            user?.role === 'regional_engineer') && (
+            <div className="space-y-2">
+              <Label>District</Label>
+              <div className="w-full">
+                <Select
+                  value={selectedDistrict}
+                  onValueChange={setSelectedDistrict}
+                  disabled={!selectedRegion && user?.role !== 'regional_engineer'}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select district" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {filteredDistricts.map(district => (
+                      <SelectItem key={district.id} value={district.id}>
+                        {district.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Reset Filters Button */}
+        <div className="flex justify-end mb-4">
+          <Button
+            variant="outline"
+            onClick={handleResetFilters}
+            disabled={!selectedDate && !selectedMonth && !selectedRegion && !selectedDistrict && !searchTerm}
+          >
+            Reset Filters
+          </Button>
         </div>
         
         <Card className="mb-6">
@@ -519,46 +687,35 @@ export default function InspectionManagementPage() {
                   // Calculate counts directly from inspection.items, handling undefined
                   const goodItems = inspection.items ? inspection.items.filter(item => item?.status === "good").length : 0;
                   const badItems = inspection.items ? inspection.items.filter(item => item?.status === "bad").length : 0;
+                  const statusSummary = (
+                    <div className="flex items-center gap-1">
+                      <span className="text-green-600 font-medium">{goodItems} good</span>
+                      <span>/</span>
+                      <span className="text-red-600 font-medium">{badItems} bad</span>
+                    </div>
+                  );
                   
                   return (
                     <TableRow key={inspection.id}>
-                      <TableCell>
-                        {formatDate(inspection.date)}
-                      </TableCell>
-                      <TableCell className="font-medium">{inspection.substationNo}</TableCell>
+                      <TableCell>{formatDate(inspection.date)}</TableCell>
+                      <TableCell>{inspection.substationNo}</TableCell>
                       <TableCell>{inspection.region}</TableCell>
                       <TableCell>{inspection.district}</TableCell>
                       <TableCell className="capitalize">{inspection.type}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                            {goodItems} good
-                          </span>
-                          {badItems > 0 && (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                              {badItems} bad
-                            </span>
-                          )}
-                        </div>
-                      </TableCell>
+                      <TableCell>{statusSummary}</TableCell>
                       <TableCell className="text-right">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                            <Button variant="ghost" className="h-8 w-8 p-0">
                               <span className="sr-only">Open menu</span>
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={() => handleView(inspection.id)}>
+                            <DropdownMenuItem onClick={() => navigate(`/asset-management/inspection-details/${inspection.id}`)}>
                               <Eye className="mr-2 h-4 w-4" />
                               View Details
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleEdit(inspection.id)}>
-                              <Pencil className="mr-2 h-4 w-4" />
-                              Edit
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleExportToPDF(inspection)}>
                               <FileText className="mr-2 h-4 w-4" />
@@ -568,14 +725,24 @@ export default function InspectionManagementPage() {
                               <Download className="mr-2 h-4 w-4" />
                               Export to CSV
                             </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem 
-                              className="text-red-600" 
-                              onClick={() => handleDelete(inspection.id)}
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Delete
-                            </DropdownMenuItem>
+                            {canEditInspection(inspection) && (
+                              <>
+                                <DropdownMenuItem onClick={() => navigate(`/asset-management/edit-inspection/${inspection.id}`)}>
+                                  <Pencil className="mr-2 h-4 w-4" />
+                                  Edit
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                {canDeleteInspection(inspection) && (
+                                  <DropdownMenuItem 
+                                    onClick={() => handleDelete(inspection.id)}
+                                    className="text-red-600"
+                                  >
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    Delete
+                                  </DropdownMenuItem>
+                                )}
+                              </>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -584,8 +751,8 @@ export default function InspectionManagementPage() {
                 })
               ) : (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-6">
-                    {searchTerm ? "No inspections found matching your search." : "No inspections have been saved yet."}
+                  <TableCell colSpan={7} className="text-center">
+                    No inspections found
                   </TableCell>
                 </TableRow>
               )}

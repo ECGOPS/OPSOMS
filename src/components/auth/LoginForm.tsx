@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -11,19 +11,61 @@ export function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loginAttempts, setLoginAttempts] = useState(0);
+  const [isLocked, setIsLocked] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
 
+  useEffect(() => {
+    if (loginAttempts >= 5) {
+      setIsLocked(true);
+      const timer = setTimeout(() => {
+        setIsLocked(false);
+        setLoginAttempts(0);
+      }, 15 * 60 * 1000); // 15 minutes lockout
+      return () => clearTimeout(timer);
+    }
+  }, [loginAttempts]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (isLocked) {
+      toast.error("Too many login attempts. Please try again later.");
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
       await login(email, password);
-      navigate("/dashboard");
-    } catch (error) {
-      console.error("Login failed:", error);
-      // Toast is handled in the auth context
+      setLoginAttempts(0);
+      // Don't navigate here - let the LoginPage handle navigation
+    } catch (error: any) {
+      setLoginAttempts(prev => prev + 1);
+      console.error("Login failed. Error details:", {
+        code: error.code,
+        message: error.message,
+        fullError: error
+      });
+      
+      // More specific error messages based on the error code
+      if (error.code === 'auth/invalid-credential' || 
+          error.code === 'auth/wrong-password' || 
+          error.code === 'auth/invalid-email' ||
+          error.code === 'auth/invalid-login-credentials') {
+        toast.error("Invalid email or password. Please try again.");
+      } else if (error.code === 'auth/user-not-found') {
+        toast.error("No account found with this email.");
+      } else if (error.code === 'auth/too-many-requests') {
+        toast.error("Too many login attempts. Please try again later.");
+      } else if (error.code === 'auth/user-disabled') {
+        toast.error("This account has been disabled. Please contact support.");
+      } else if (error.code === 'auth/network-request-failed') {
+        toast.error("Network error. Please check your internet connection.");
+      } else {
+        toast.error(`Login failed: ${error.message || 'Please try again.'}`);
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -55,6 +97,7 @@ export function LoginForm() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
+              disabled={isLocked}
             />
           </div>
           <div className="space-y-2">
@@ -71,10 +114,20 @@ export function LoginForm() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
+              disabled={isLocked}
             />
           </div>
-          <Button type="submit" className="w-full" disabled={isSubmitting}>
-            {isSubmitting ? "Logging in..." : "Login"}
+          <Button 
+            type="submit" 
+            className="w-full" 
+            disabled={isSubmitting || isLocked}
+          >
+            {isLocked 
+              ? "Account locked. Try again later" 
+              : isSubmitting 
+                ? "Logging in..." 
+                : "Login"
+            }
           </Button>
         </form>
       </CardContent>
@@ -86,41 +139,6 @@ export function LoginForm() {
           </Link>
         </p>
       </CardFooter>
-      
-      <div className="px-6 pb-6 pt-2">
-        <div className="bg-muted p-3 rounded-md">
-          <h3 className="text-sm font-medium mb-2">Demo Accounts:</h3>
-          <div className="grid gap-2 text-xs">
-            <div className="grid grid-cols-2 items-center gap-2">
-              <div>
-                <strong>District Engineer:</strong>
-                <div className="text-muted-foreground">district@ecg.com</div>
-              </div>
-              <div>
-                <div className="text-muted-foreground">password: password</div>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 items-center gap-2">
-              <div>
-                <strong>Regional Engineer:</strong>
-                <div className="text-muted-foreground">regional@ecg.com</div>
-              </div>
-              <div>
-                <div className="text-muted-foreground">password: password</div>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 items-center gap-2">
-              <div>
-                <strong>Global Engineer:</strong>
-                <div className="text-muted-foreground">global@ecg.com</div>
-              </div>
-              <div>
-                <div className="text-muted-foreground">password: password</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
     </Card>
   );
 }

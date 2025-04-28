@@ -96,22 +96,37 @@ export default function LoadMonitoringDetailsPage() {
   });
 
   useEffect(() => {
-    if (id && getLoadMonitoringRecord) {
-      const fetchedRecord = getLoadMonitoringRecord(id);
-      if (fetchedRecord) {
+    const fetchRecordData = async () => {
+      if (!id || !getLoadMonitoringRecord) {
+        toast.error("Invalid record ID or data context unavailable.");
+        navigate("/asset-management/load-monitoring");
+        setIsLoading(false);
+        return;
+      }
+      
+      try {
+        setIsLoading(true);
+        const fetchedRecord = await getLoadMonitoringRecord(id);
+        
+        if (!fetchedRecord) {
+          toast.error("Load monitoring record not found.");
+          navigate("/asset-management/load-monitoring");
+          return;
+        }
+        
         setRecord(fetchedRecord);
         setFormattedPercentageLoad(fetchedRecord.percentageLoad?.toFixed(2) ?? "0.00");
         setWarningLevels(calculateWarningLevels(fetchedRecord));
-      } else {
-        toast.error("Load monitoring record not found.");
-        navigate("/asset-management/load-monitoring"); // Redirect if not found
-      }
-      setIsLoading(false);
-    } else {
-      toast.error("Invalid record ID or data context unavailable.");
+      } catch (error) {
+        console.error("Error fetching load monitoring record:", error);
+        toast.error("Failed to load record details.");
       navigate("/asset-management/load-monitoring");
+      } finally {
       setIsLoading(false);
     }
+    };
+
+    fetchRecordData();
   }, [id, getLoadMonitoringRecord, navigate]);
 
   if (isLoading) {

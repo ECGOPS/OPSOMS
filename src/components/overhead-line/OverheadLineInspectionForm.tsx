@@ -14,12 +14,15 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 import { Loader2, MapPin } from "lucide-react";
 import { OverheadLineInspection, ConditionStatus } from "@/lib/types";
 import { getRegions, getDistricts } from "@/lib/api";
 import { useToast } from "@/components/ui/use-toast";
 import { showNotification, showServiceWorkerNotification } from '@/utils/notifications';
+import { serverTimestamp } from "firebase/firestore";
+import { updateOverheadLineInspection, addOverheadLineInspection } from "@/lib/api";
+import { useNavigate } from "react-router-dom";
 
 interface OverheadLineInspectionFormProps {
   inspection?: OverheadLineInspection | null;
@@ -33,6 +36,7 @@ export function OverheadLineInspectionForm({ inspection, onSubmit, onCancel }: O
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
+  const navigate = useNavigate();
 
   const defaultInsulatorCondition = {
     brokenOrCracked: false,
@@ -45,8 +49,8 @@ export function OverheadLineInspectionForm({ inspection, onSubmit, onCancel }: O
   const [formData, setFormData] = useState<OverheadLineInspection>(() => {
     const defaultFormData: OverheadLineInspection = {
       id: "",
-      regionId: "",
-      districtId: "",
+      region: "",
+      district: "",
       feederName: "",
       voltageLevel: "",
       referencePole: "",
@@ -55,6 +59,7 @@ export function OverheadLineInspectionForm({ inspection, onSubmit, onCancel }: O
       updatedAt: new Date().toISOString(),
       latitude: 0,
       longitude: 0,
+      items: [],
       inspector: {
         id: user?.id || "",
         name: user?.name || "",
@@ -135,31 +140,23 @@ export function OverheadLineInspectionForm({ inspection, onSubmit, onCancel }: O
         notes: ""
       },
       additionalNotes: "",
-      images: []
+      images: [],
+      date: new Date().toISOString().split('T')[0],
+      time: new Date().toTimeString().slice(0, 5)
     };
 
-    // Initialize region and district for district and regional engineers
-    if ((user?.role === "district_engineer" || user?.role === "technician" || user?.role === "system_admin") && user.region && user.district) {
-      const userRegion = regions.find(r => r.name === user.region);
-      if (userRegion) {
-        const userDistrict = districts.find(d => 
-          d.regionId === userRegion.id && d.name === user.district
-        );
-        if (userDistrict) {
-          defaultFormData.regionId = userRegion.id;
-          defaultFormData.districtId = userDistrict.id;
-        }
-      }
-    } else if ((user?.role === "regional_engineer" || user?.role === "system_admin") && user.region) {
-      const userRegion = regions.find(r => r.name === user.region);
-      if (userRegion) {
-        defaultFormData.regionId = userRegion.id;
-      }
-    } else if (user?.role === "system_admin" && regions.length > 0) {
-      // For system admin without assigned region, use the first region
-      defaultFormData.regionId = regions[0].id;
+    // Set region and district based on user role
+    if (user) {
+      if ((user.role === "district_engineer" || user.role === "technician") && user.region && user.district) {
+        defaultFormData.region = user.region;
+        defaultFormData.district = user.district;
+      } else if (user.role === "regional_engineer" && user.region) {
+        defaultFormData.region = user.region;
+      } else if (user.role === "system_admin" && regions.length > 0) {
+      defaultFormData.region = regions[0].name;
       if (districts.length > 0) {
-        defaultFormData.districtId = districts[0].id;
+        defaultFormData.district = districts[0].name;
+        }
       }
     }
 
@@ -178,45 +175,49 @@ export function OverheadLineInspectionForm({ inspection, onSubmit, onCancel }: O
 
   // Filter regions and districts based on user role
   const filteredRegions = useMemo(() => {
-    if (user?.role === "global_engineer" || user?.role === "system_admin") return regions;
-    if (user?.role === "regional_engineer") {
+    if (!user) return [];
+    if (user.role === "global_engineer" || user.role === "system_admin") return regions;
+    if (user.role === "regional_engineer" && user.region) {
       return regions.filter(r => r.name === user.region);
     }
-    if (user?.role === "district_engineer" || user?.role === "technician") {
+    if ((user.role === "district_engineer" || user.role === "technician") && user.region) {
       return regions.filter(r => r.name === user.region);
     }
     return [];
   }, [regions, user]);
 
   const filteredDistricts = useMemo(() => {
-    if (!formData.regionId) return [];
-    if (user?.role === "global_engineer" || user?.role === "system_admin") {
-      return districts.filter(d => d.regionId === formData.regionId);
+    if (!user || !formData.region) return [];
+    const region = regions.find(r => r.name === formData.region);
+    if (!region) return [];
+
+    if (user.role === "global_engineer" || user.role === "system_admin") {
+      return districts.filter(d => d.regionId === region.id);
     }
-    if (user?.role === "regional_engineer") {
-      return districts.filter(d => d.regionId === formData.regionId);
+    if (user.role === "regional_engineer") {
+      return districts.filter(d => d.regionId === region.id);
     }
-    if (user?.role === "district_engineer" || user?.role === "technician") {
-      return districts.filter(d => d.name === user.district);
+    if ((user.role === "district_engineer" || user.role === "technician") && user.district) {
+      return districts.filter(d => d.name === user.district && d.regionId === region.id);
     }
     return [];
-  }, [districts, formData.regionId, user]);
+  }, [districts, formData.region, user, regions]);
 
   // Handle region change
   const handleRegionChange = (value: string) => {
-    if (user?.role === "district_engineer" || user?.role === "regional_engineer" || user?.role === "technician") return;
-    
-    setFormData(prev => ({ 
-      ...prev, 
-      regionId: value,
-      districtId: "" // Reset district when region changes
+    setFormData(prev => ({
+      ...prev,
+      region: value,
+      district: "" // Reset district when region changes
     }));
   };
 
   // Handle district change
   const handleDistrictChange = (value: string) => {
-    if (user?.role === "district_engineer" || user?.role === "technician") return;
-    setFormData(prev => ({ ...prev, districtId: value }));
+    setFormData(prev => ({
+      ...prev,
+      district: value
+    }));
   };
 
   // Show loading state while auth is being checked
@@ -224,17 +225,31 @@ export function OverheadLineInspectionForm({ inspection, onSubmit, onCancel }: O
     return <div>Loading...</div>;
   }
 
-  // Update form data when user becomes available
+  // Update form data when user or regions/districts change
   useEffect(() => {
     if (user && !inspection) {
+      if ((user.role === "district_engineer" || user.role === "technician") && user.region && user.district) {
       setFormData(prev => ({
         ...prev,
+          region: user.region,
+          district: user.district,
         inspector: {
           id: user.id,
           name: user.name,
           email: user.email
         }
       }));
+      } else if (user.role === "regional_engineer" && user.region) {
+        setFormData(prev => ({
+          ...prev,
+          region: user.region,
+          inspector: {
+            id: user.id,
+            name: user.name,
+            email: user.email
+          }
+        }));
+      }
     }
   }, [user, inspection]);
 
@@ -303,102 +318,58 @@ export function OverheadLineInspectionForm({ inspection, onSubmit, onCancel }: O
     setIsSubmitting(true);
 
     try {
-      const submissionData = {
-        ...formData,
-        status: formData.status || "pending",
-        poleCondition: {
-          tilted: formData.poleCondition?.tilted || false,
-          rotten: formData.poleCondition?.rotten || false,
-          burnt: formData.poleCondition?.burnt || false,
-          substandard: formData.poleCondition?.substandard || false,
-          conflictWithLV: formData.poleCondition?.conflictWithLV || false,
-          notes: formData.poleCondition?.notes || ""
-        },
-        stayCondition: {
-          requiredButNotAvailable: formData.stayCondition?.requiredButNotAvailable || false,
-          cut: formData.stayCondition?.cut || false,
-          misaligned: formData.stayCondition?.misaligned || false,
-          defectiveStay: formData.stayCondition?.defectiveStay || false,
-          notes: formData.stayCondition?.notes || ""
-        },
-        crossArmCondition: {
-          misaligned: formData.crossArmCondition?.misaligned || false,
-          bend: formData.crossArmCondition?.bend || false,
-          corroded: formData.crossArmCondition?.corroded || false,
-          substandard: formData.crossArmCondition?.substandard || false,
-          others: formData.crossArmCondition?.others || false,
-          notes: formData.crossArmCondition?.notes || ""
-        },
-        insulatorCondition: {
-          brokenOrCracked: formData.insulatorCondition?.brokenOrCracked || false,
-          burntOrFlashOver: formData.insulatorCondition?.burntOrFlashOver || false,
-          shattered: formData.insulatorCondition?.shattered || false,
-          defectiveBinding: formData.insulatorCondition?.defectiveBinding || false,
-          notes: formData.insulatorCondition?.notes || ""
-        },
-        conductorCondition: {
-          looseConnectors: formData.conductorCondition?.looseConnectors || false,
-          weakJumpers: formData.conductorCondition?.weakJumpers || false,
-          burntLugs: formData.conductorCondition?.burntLugs || false,
-          saggedLine: formData.conductorCondition?.saggedLine || false,
-          undersized: formData.conductorCondition?.undersized || false,
-          linked: formData.conductorCondition?.linked || false,
-          notes: formData.conductorCondition?.notes || ""
-        },
-        lightningArresterCondition: {
-          brokenOrCracked: formData.lightningArresterCondition?.brokenOrCracked || false,
-          flashOver: formData.lightningArresterCondition?.flashOver || false,
-          missing: formData.lightningArresterCondition?.missing || false,
-          noEarthing: formData.lightningArresterCondition?.noEarthing || false,
-          bypassed: formData.lightningArresterCondition?.bypassed || false,
-          noArrester: formData.lightningArresterCondition?.noArrester || false,
-          notes: formData.lightningArresterCondition?.notes || ""
-        },
-        dropOutFuseCondition: {
-          brokenOrCracked: formData.dropOutFuseCondition?.brokenOrCracked || false,
-          flashOver: formData.dropOutFuseCondition?.flashOver || false,
-          insufficientClearance: formData.dropOutFuseCondition?.insufficientClearance || false,
-          looseOrNoEarthing: formData.dropOutFuseCondition?.looseOrNoEarthing || false,
-          corroded: formData.dropOutFuseCondition?.corroded || false,
-          linkedHVFuses: formData.dropOutFuseCondition?.linkedHVFuses || false,
-          others: formData.dropOutFuseCondition?.others || false,
-          notes: formData.dropOutFuseCondition?.notes || ""
-        },
-        transformerCondition: {
-          leakingOil: formData.transformerCondition?.leakingOil || false,
-          missingEarthLeads: formData.transformerCondition?.missingEarthLeads || false,
-          linkedHVFuses: formData.transformerCondition?.linkedHVFuses || false,
-          rustedTank: formData.transformerCondition?.rustedTank || false,
-          crackedBushing: formData.transformerCondition?.crackedBushing || false,
-          others: formData.transformerCondition?.others || false,
-          notes: formData.transformerCondition?.notes || ""
-        },
-        recloserCondition: {
-          lowGasLevel: formData.recloserCondition?.lowGasLevel || false,
-          lowBatteryLevel: formData.recloserCondition?.lowBatteryLevel || false,
-          burntVoltageTransformers: formData.recloserCondition?.burntVoltageTransformers || false,
-          protectionDisabled: formData.recloserCondition?.protectionDisabled || false,
-          bypassed: formData.recloserCondition?.bypassed || false,
-          others: formData.recloserCondition?.others || false,
-          notes: formData.recloserCondition?.notes || ""
+      // Helper function to clean nested objects and arrays
+      const cleanValue = (value: any): any => {
+        if (value === undefined || value === null) return null;
+        if (Array.isArray(value)) {
+          return value.map(item => cleanValue(item));
         }
+        if (typeof value === 'object') {
+          return Object.fromEntries(
+            Object.entries(value)
+              .map(([key, val]) => [key, cleanValue(val)])
+              .filter(([_, val]) => val !== undefined)
+          );
+        }
+        return value;
       };
 
-      // Call onSubmit with the data - let the parent component handle the actual submission
-      onSubmit(submissionData);
+      // Clean up the data by removing undefined values and providing defaults
+      const cleanData = {
+        ...formData,
+        items: formData.items || [],
+        inspector: formData.inspector || { name: "", designation: "" },
+        region: formData.region,
+        district: formData.district,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      // Remove any remaining undefined values
+      const finalData = Object.fromEntries(
+        Object.entries(cleanData)
+          .map(([key, value]) => [key, cleanValue(value)])
+          .filter(([_, value]) => value !== undefined)
+      ) as OverheadLineInspection;
+
+      if (inspection) {
+        await updateOverheadLineInspection(inspection.id, finalData);
+        toast({ title: "Success", description: "Inspection updated successfully" });
+      } else {
+        const { id, ...dataWithoutId } = finalData;
+        await addOverheadLineInspection(dataWithoutId);
+        toast({ title: "Success", description: "Inspection created successfully" });
+      }
       
-      toast({
-        title: "Success",
-        description: inspection ? "Inspection updated successfully" : "Inspection created successfully",
-      });
+      setIsSubmitting(false);
+      onCancel();
     } catch (error) {
-      console.error("Error submitting inspection:", error);
-      toast({
-        title: "Error",
-        description: "Failed to submit inspection",
-        variant: "destructive",
+      console.error("Error saving inspection:", error);
+      toast({ 
+        title: "Error", 
+        description: error instanceof Error ? error.message : "Failed to save inspection",
+        variant: "destructive"
       });
-    } finally {
       setIsSubmitting(false);
     }
   };
@@ -408,8 +379,8 @@ export function OverheadLineInspectionForm({ inspection, onSubmit, onCancel }: O
     async function loadRegions() {
       try {
         const regions = await getRegions();
-        if (regions.length > 0 && !formData.regionId) {
-          setFormData(prev => ({ ...prev, regionId: regions[0].id }));
+        if (regions.length > 0 && !formData.region) {
+          setFormData(prev => ({ ...prev, region: regions[0].name }));
         }
       } catch (error) {
         toast({
@@ -425,11 +396,11 @@ export function OverheadLineInspectionForm({ inspection, onSubmit, onCancel }: O
   // Load districts when region changes
   useEffect(() => {
     async function loadDistricts() {
-      if (!formData.regionId) return;
+      if (!formData.region) return;
       try {
-        const districts = await getDistricts(formData.regionId);
-        if (districts.length > 0 && !formData.districtId) {
-          setFormData(prev => ({ ...prev, districtId: districts[0].id }));
+        const districts = await getDistricts(regions.find(r => r.name === formData.region)?.id);
+        if (districts.length > 0 && !formData.district) {
+          setFormData(prev => ({ ...prev, district: districts[0].name }));
         }
       } catch (error) {
         toast({
@@ -440,7 +411,7 @@ export function OverheadLineInspectionForm({ inspection, onSubmit, onCancel }: O
       }
     }
     loadDistricts();
-  }, [formData.regionId, toast]);
+  }, [formData.region, toast]);
 
   // Memoize form sections
   const renderInspectorInfo = useMemo(() => (
@@ -485,7 +456,7 @@ export function OverheadLineInspectionForm({ inspection, onSubmit, onCancel }: O
           <div className="space-y-2">
             <Label htmlFor="region">Region *</Label>
             <Select
-              value={formData.regionId}
+              value={formData.region}
               onValueChange={handleRegionChange}
               disabled={user?.role === "district_engineer" || user?.role === "regional_engineer" || user?.role === "technician"}
               required
@@ -495,7 +466,7 @@ export function OverheadLineInspectionForm({ inspection, onSubmit, onCancel }: O
               </SelectTrigger>
               <SelectContent>
                 {filteredRegions.map((region) => (
-                  <SelectItem key={region.id} value={region.id}>
+                  <SelectItem key={region.id} value={region.name}>
                     {region.name}
                   </SelectItem>
                 ))}
@@ -506,9 +477,9 @@ export function OverheadLineInspectionForm({ inspection, onSubmit, onCancel }: O
           <div className="space-y-2">
             <Label htmlFor="district">District *</Label>
             <Select
-              value={formData.districtId}
+              value={formData.district}
               onValueChange={handleDistrictChange}
-              disabled={user?.role === "district_engineer" || user?.role === "technician" || !formData.regionId}
+              disabled={user?.role === "district_engineer" || user?.role === "technician" || !formData.region}
               required
             >
               <SelectTrigger>
@@ -516,7 +487,7 @@ export function OverheadLineInspectionForm({ inspection, onSubmit, onCancel }: O
               </SelectTrigger>
               <SelectContent>
                 {filteredDistricts.map((district) => (
-                  <SelectItem key={district.id} value={district.id}>
+                  <SelectItem key={district.id} value={district.name}>
                     {district.name}
                   </SelectItem>
                 ))}
@@ -551,6 +522,28 @@ export function OverheadLineInspectionForm({ inspection, onSubmit, onCancel }: O
               value={formData.referencePole}
               onChange={(e) => setFormData({ ...formData, referencePole: e.target.value })}
               placeholder="Enter reference pole"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="date">Date *</Label>
+            <Input
+              id="date"
+              type="date"
+              value={formData.date || new Date().toISOString().split('T')[0]}
+              onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+              required
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="time">Time *</Label>
+            <Input
+              id="time"
+              type="time"
+              value={formData.time || new Date().toTimeString().slice(0, 5)}
+              onChange={(e) => setFormData({ ...formData, time: e.target.value })}
+              required
             />
           </div>
 

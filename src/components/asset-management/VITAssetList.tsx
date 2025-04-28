@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { VITAsset } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { format } from 'date-fns';
 
 interface VITAssetListProps {
   assets: VITAsset[];
@@ -20,7 +21,7 @@ export function VITAssetList({ assets }: VITAssetListProps) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       {assets.map((asset) => (
-        <Link to={`/asset-management/${asset.id}`} key={asset.id}>
+        <Link to={`/asset-management/vit-inspection-details/${asset.id}`} key={asset.id}>
           <Card className="hover:shadow-lg transition-shadow">
             <CardHeader>
               <CardTitle className="flex justify-between items-center">
@@ -36,7 +37,7 @@ export function VITAssetList({ assets }: VITAssetListProps) {
                 <p><strong>Serial Number:</strong> {asset.serialNumber}</p>
                 <p><strong>Location:</strong> {asset.location}</p>
                 <p><strong>Protection:</strong> {asset.protection}</p>
-                <p><strong>Last Updated:</strong> {new Date(asset.updatedAt).toLocaleDateString()}</p>
+                <p><strong>Last Updated:</strong> {format(new Date(asset.updatedAt), 'MMM d, yyyy')}</p>
               </div>
             </CardContent>
           </Card>

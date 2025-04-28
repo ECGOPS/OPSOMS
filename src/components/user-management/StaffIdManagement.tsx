@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,9 +25,10 @@ import { useData } from "@/contexts/DataContext";
 import { toast } from "@/components/ui/sonner";
 import { UserRole } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
-import { Edit2, Trash2, Plus, Download, Upload } from "lucide-react";
+import { Edit2, Trash2, Plus, Download, Upload, Search } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { getFirestore, getDocs, collection } from "firebase/firestore";
 
 export type StaffIdEntry = {
   id: string;
@@ -38,10 +39,11 @@ export type StaffIdEntry = {
 };
 
 export function StaffIdManagement() {
-  const { staffIds, addStaffId, updateStaffId, deleteStaffId } = useAuth();
+  const { staffIds, setStaffIds, addStaffId, updateStaffId, deleteStaffId } = useAuth();
   const { regions, districts } = useData();
   const [isAdding, setIsAdding] = useState(false);
   const [isEditing, setIsEditing] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [newEntry, setNewEntry] = useState<Omit<StaffIdEntry, "id"> & { customId?: string }>({
     name: "",
     role: "technician",
@@ -51,92 +53,157 @@ export function StaffIdManagement() {
   });
   const [error, setError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filteredStaffIds, setFilteredStaffIds] = useState(staffIds);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
 
-  const handleAdd = () => {
+  // Optimize initial data loading
+  useEffect(() => {
+    const loadInitialData = async () => {
+      if (isInitialLoad) {
+        setIsLoading(true);
+        try {
+          const db = getFirestore();
+          const staffIdsSnapshot = await getDocs(collection(db, "staffIds"));
+          const staffIdsList: StaffIdEntry[] = [];
+          staffIdsSnapshot.forEach((doc) => {
+            staffIdsList.push({ id: doc.id, ...doc.data() } as StaffIdEntry);
+          });
+          setStaffIds(staffIdsList);
+          setFilteredStaffIds(staffIdsList);
+        } catch (error) {
+          console.error("Error loading staff IDs:", error);
+          toast.error("Failed to load staff IDs");
+        } finally {
+          setIsLoading(false);
+          setIsInitialLoad(false);
+        }
+      }
+    };
+
+    loadInitialData();
+  }, [isInitialLoad, setStaffIds]);
+
+  // Optimize search filtering
+  useEffect(() => {
+    if (!staffIds) return;
+    
+    const lowerCaseSearchTerm = searchTerm.toLowerCase();
+    const filtered = staffIds.filter(idObj => 
+      idObj.id.toLowerCase().includes(lowerCaseSearchTerm) ||
+      idObj.name.toLowerCase().includes(lowerCaseSearchTerm) ||
+      (idObj.region && idObj.region.toLowerCase().includes(lowerCaseSearchTerm)) ||
+      (idObj.district && idObj.district.toLowerCase().includes(lowerCaseSearchTerm))
+    );
+    setFilteredStaffIds(filtered);
+  }, [staffIds, searchTerm]);
+
+  // Optimize refresh function
+  const refreshStaffIds = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const db = getFirestore();
+      const staffIdsSnapshot = await getDocs(collection(db, "staffIds"));
+      const staffIdsList: StaffIdEntry[] = [];
+      staffIdsSnapshot.forEach((doc) => {
+        staffIdsList.push({ id: doc.id, ...doc.data() } as StaffIdEntry);
+      });
+      setStaffIds(staffIdsList);
+      setFilteredStaffIds(staffIdsList);
+      toast.success(`${staffIdsList.length} staff IDs loaded`);
+    } catch (error) {
+      console.error("Error refreshing staff IDs:", error);
+      toast.error("Failed to refresh staff IDs");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [setStaffIds]);
+
+  // Optimize add function
+  const handleAdd = async () => {
     setError(null);
-    // Validate the entry
-    if (!newEntry.name) {
-      setError("Name is required");
-      return;
-    }
-    if (!newEntry.role) {
-      setError("Role is required");
-      return;
-    }
-    if (newEntry.role !== "global_engineer" && !newEntry.region) {
-      setError("Region is required for this role");
-      return;
-    }
-    if (newEntry.role === "district_engineer" && !newEntry.district) {
-      setError("District is required for district engineers");
-      return;
-    }
-    if (newEntry.role === "technician" && !newEntry.district) {
-      setError("District is required for technicians");
-      return;
-    }
+    if (!validateEntry(newEntry)) return;
 
     try {
-      addStaffId(newEntry);
+      const staffIdData = {
+        ...newEntry,
+        customId: newEntry.customId?.trim() || undefined
+      };
+      
+      await addStaffId(staffIdData);
       setIsAdding(false);
-      setNewEntry({
-        name: "",
-        role: "technician",
-        region: undefined,
-        district: undefined,
-        customId: undefined
-      });
+      resetForm();
+      toast.success("Staff ID added successfully");
     } catch (error) {
-      setError((error as Error).message);
+      console.error("Staff ID add error:", error);
+      setError(error instanceof Error ? error.message : "Failed to add staff ID");
     }
   };
 
-  const handleUpdate = (id: string) => {
+  // Optimize update function
+  const handleUpdate = async (id: string) => {
     setError(null);
     const entry = staffIds.find(e => e.id === id);
     if (!entry) return;
 
-    // Validate the entry
-    if (!entry.name) {
-      setError("Name is required");
-      return;
-    }
-    if (!entry.role) {
-      setError("Role is required");
-      return;
-    }
-    if (entry.role !== "global_engineer" && !entry.region) {
-      setError("Region is required for this role");
-      return;
-    }
-    if (entry.role === "district_engineer" && !entry.district) {
-      setError("District is required for district engineers");
-      return;
-    }
-    if (entry.role === "technician" && !entry.district) {
-      setError("District is required for technicians");
-      return;
-    }
+    if (!validateEntry(entry)) return;
 
     try {
-      updateStaffId(id, {
+      await updateStaffId(id, {
         name: entry.name,
         role: entry.role,
         region: entry.region,
         district: entry.district
       });
       setIsEditing(null);
+      toast.success("Staff ID updated successfully");
     } catch (error) {
       setError((error as Error).message);
     }
   };
 
-  const handleDelete = (id: string) => {
+  // Optimize delete function
+  const handleDelete = async (id: string) => {
     try {
-      deleteStaffId(id);
+      await deleteStaffId(id);
+      toast.success("Staff ID deleted successfully");
     } catch (error) {
       setError((error as Error).message);
     }
+  };
+
+  // Validation helper
+  const validateEntry = (entry: Omit<StaffIdEntry, "id">) => {
+    if (!entry.name) {
+      setError("Name is required");
+      return false;
+    }
+    if (!entry.role) {
+      setError("Role is required");
+      return false;
+    }
+    if (entry.role !== "global_engineer" && entry.role !== "system_admin" && !entry.region) {
+      setError("Region is required for this role");
+      return false;
+    }
+    if ((entry.role === "district_engineer" || entry.role === "technician") && !entry.district) {
+      setError("District is required for district engineers and technicians");
+      return false;
+    }
+    return true;
+  };
+
+  // Reset form helper
+  const resetForm = () => {
+    setNewEntry({
+      name: "",
+      role: "technician",
+      region: undefined,
+      district: undefined,
+      customId: undefined
+    });
+    setIsAdding(false);
+    setIsEditing(null);
   };
 
   const getRoleBadgeColor = (role: UserRole) => {
@@ -193,7 +260,7 @@ export function StaffIdManagement() {
         
         try {
           // Validate role is a valid UserRole
-          if (!['global_engineer', 'regional_engineer', 'district_engineer', 'technician'].includes(role)) {
+          if (!['system_admin', 'global_engineer', 'regional_engineer', 'district_engineer', 'technician'].includes(role)) {
             throw new Error(`Invalid role: ${role}`);
           }
 
@@ -228,7 +295,8 @@ John Doe,regional_engineer,Greater Accra,,ECG001
 Jane Smith,district_engineer,Ashanti,Kumasi,ECG002
 Mike Johnson,technician,Western,Takoradi,ECG003
 Sarah Williams,global_engineer,,,ECG004
-Kwame Asante,technician,Central,Cape Coast,ECG005`;
+Kwame Asante,technician,Central,Cape Coast,ECG005
+Admin User,system_admin,,,ECGADMIN`;
 
     const blob = new Blob([sampleData], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
@@ -259,7 +327,7 @@ Kwame Asante,technician,Central,Cape Coast,ECG005`;
               <li>Each subsequent row represents one staff member</li>
               <li>Fields should be separated by commas</li>
               <li>Leave district empty for regional engineers</li>
-              <li>Leave region and district empty for global engineers</li>
+              <li>Leave region and district empty for global engineers and system administrators</li>
               <li>Custom ID is optional (6-10 alphanumeric characters)</li>
             </ul>
             <div className="flex gap-2 mt-2">
@@ -285,9 +353,23 @@ Kwame Asante,technician,Central,Cape Coast,ECG005`;
           </AlertDescription>
         </Alert>
 
-        <div className="flex justify-between items-center">
-          <h2 className="text-2xl font-bold">Staff ID Management</h2>
-          <Button onClick={() => setIsAdding(true)}>Add New Staff ID</Button>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div className="relative w-full sm:w-auto sm:min-w-[300px]">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="Search staff IDs..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-8 w-full"
+            />
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={refreshStaffIds} disabled={isLoading}>
+              {isLoading ? "Loading..." : "Refresh"}
+            </Button>
+            <Button onClick={() => setIsAdding(true)}>Add New Staff ID</Button>
+          </div>
         </div>
 
         {error && (
@@ -329,6 +411,7 @@ Kwame Asante,technician,Central,Cape Coast,ECG005`;
                     <SelectValue placeholder="Select role" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="system_admin">System Admin</SelectItem>
                     <SelectItem value="global_engineer">Global Engineer</SelectItem>
                     <SelectItem value="regional_engineer">Regional Engineer</SelectItem>
                     <SelectItem value="district_engineer">District Engineer</SelectItem>
@@ -336,7 +419,7 @@ Kwame Asante,technician,Central,Cape Coast,ECG005`;
                   </SelectContent>
                 </Select>
               </div>
-              {newEntry.role !== "global_engineer" && (
+              {newEntry.role !== "global_engineer" && newEntry.role !== "system_admin" && (
                 <>
                   <div>
                     <Label>Region</Label>
@@ -388,127 +471,146 @@ Kwame Asante,technician,Central,Cape Coast,ECG005`;
           </div>
         )}
 
-        <div className="border rounded-lg overflow-hidden">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Staff ID</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>Region</TableHead>
-                <TableHead>District</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {staffIds.map(entry => (
-                <TableRow key={entry.id}>
-                  <TableCell>{entry.id}</TableCell>
-                  <TableCell>
-                    {isEditing === entry.id ? (
-                      <Input
-                        value={entry.name}
-                        onChange={(e) => {
-                          const updatedEntry = { ...entry, name: e.target.value };
-                          updateStaffId(entry.id, updatedEntry);
-                        }}
-                      />
-                    ) : (
-                      entry.name
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {isEditing === entry.id ? (
-                      <Select
-                        value={entry.role}
-                        onValueChange={(value) => {
-                          const updatedEntry = { ...entry, role: value as UserRole };
-                          updateStaffId(entry.id, updatedEntry);
-                        }}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select role" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="global_engineer">Global Engineer</SelectItem>
-                          <SelectItem value="regional_engineer">Regional Engineer</SelectItem>
-                          <SelectItem value="district_engineer">District Engineer</SelectItem>
-                          <SelectItem value="technician">Technician</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      entry.role.replace('_', ' ')
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {isEditing === entry.id ? (
-                      <Select
-                        value={entry.region}
-                        onValueChange={(value) => {
-                          const updatedEntry = { ...entry, region: value, district: undefined };
-                          updateStaffId(entry.id, updatedEntry);
-                        }}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select region" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {regions?.map(region => (
-                            <SelectItem key={region.id} value={region.name}>
-                              {region.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      entry.region || "-"
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {isEditing === entry.id ? (
-                      <Select
-                        value={entry.district}
-                        onValueChange={(value) => {
-                          const updatedEntry = { ...entry, district: value };
-                          updateStaffId(entry.id, updatedEntry);
-                        }}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select district" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {districts
-                            ?.filter(d => d.regionId === regions?.find(r => r.name === entry.region)?.id)
-                            ?.map(district => (
-                              <SelectItem key={district.id} value={district.name}>
-                                {district.name}
-                              </SelectItem>
-                            ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      entry.district || "-"
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex space-x-2">
-                      {isEditing === entry.id ? (
-                        <>
-                          <Button variant="outline" size="sm" onClick={() => setIsEditing(null)}>Cancel</Button>
-                          <Button size="sm" onClick={() => handleUpdate(entry.id)}>Save</Button>
-                        </>
-                      ) : (
-                        <>
-                          <Button variant="outline" size="sm" onClick={() => setIsEditing(entry.id)}>Edit</Button>
-                          <Button variant="destructive" size="sm" onClick={() => handleDelete(entry.id)}>Delete</Button>
-                        </>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+        <div className="space-y-4">
+          <h3 className="text-lg font-medium">Registered Staff IDs</h3>
+          
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center p-10">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+              <p className="mt-4 text-sm text-muted-foreground">Loading staff IDs...</p>
+            </div>
+          ) : filteredStaffIds.length === 0 ? (
+            <div className="text-center p-10">
+              <p className="text-muted-foreground">No staff IDs found</p>
+              <p className="text-sm mt-2">Create a new staff ID by clicking the "Add New Staff ID" button above</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader className="sticky top-0 bg-background z-10">
+                  <TableRow>
+                    <TableHead className="whitespace-nowrap">Staff ID</TableHead>
+                    <TableHead className="whitespace-nowrap">Name</TableHead>
+                    <TableHead className="whitespace-nowrap">Role</TableHead>
+                    <TableHead className="whitespace-nowrap">Region</TableHead>
+                    <TableHead className="whitespace-nowrap">District</TableHead>
+                    <TableHead className="whitespace-nowrap">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredStaffIds.map(entry => (
+                    <TableRow key={entry.id}>
+                      <TableCell className="whitespace-nowrap">{entry.id}</TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {isEditing === entry.id ? (
+                          <Input
+                            value={entry.name}
+                            onChange={(e) => {
+                              const updatedEntry = { ...entry, name: e.target.value };
+                              updateStaffId(entry.id, updatedEntry);
+                            }}
+                          />
+                        ) : (
+                          entry.name
+                        )}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {isEditing === entry.id ? (
+                          <Select
+                            value={entry.role}
+                            onValueChange={(value) => {
+                              const updatedEntry = { ...entry, role: value as UserRole };
+                              updateStaffId(entry.id, updatedEntry);
+                            }}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select role" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="system_admin">System Admin</SelectItem>
+                              <SelectItem value="global_engineer">Global Engineer</SelectItem>
+                              <SelectItem value="regional_engineer">Regional Engineer</SelectItem>
+                              <SelectItem value="district_engineer">District Engineer</SelectItem>
+                              <SelectItem value="technician">Technician</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <Badge className={getRoleBadgeColor(entry.role)}>
+                            {getRoleLabel(entry.role)}
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {isEditing === entry.id ? (
+                          <Select
+                            value={entry.region}
+                            onValueChange={(value) => {
+                              const updatedEntry = { ...entry, region: value, district: undefined };
+                              updateStaffId(entry.id, updatedEntry);
+                            }}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select region" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {regions?.map(region => (
+                                <SelectItem key={region.id} value={region.name}>
+                                  {region.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          entry.region || "-"
+                        )}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {isEditing === entry.id ? (
+                          <Select
+                            value={entry.district}
+                            onValueChange={(value) => {
+                              const updatedEntry = { ...entry, district: value };
+                              updateStaffId(entry.id, updatedEntry);
+                            }}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select district" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {districts
+                                ?.filter(d => d.regionId === regions?.find(r => r.name === entry.region)?.id)
+                                ?.map(district => (
+                                  <SelectItem key={district.id} value={district.name}>
+                                    {district.name}
+                                  </SelectItem>
+                                ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          entry.district || "-"
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-2">
+                          {isEditing === entry.id ? (
+                            <>
+                              <Button variant="outline" size="sm" onClick={() => setIsEditing(null)}>Cancel</Button>
+                              <Button size="sm" onClick={() => handleUpdate(entry.id)}>Save</Button>
+                            </>
+                          ) : (
+                            <>
+                              <Button variant="outline" size="sm" onClick={() => setIsEditing(entry.id)}>Edit</Button>
+                              <Button variant="destructive" size="sm" onClick={() => handleDelete(entry.id)}>Delete</Button>
+                            </>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>

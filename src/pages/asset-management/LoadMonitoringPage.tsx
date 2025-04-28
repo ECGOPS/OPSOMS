@@ -29,6 +29,15 @@ import {
 import { AccessControlWrapper } from "@/components/access-control/AccessControlWrapper";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { Badge } from "@/components/ui/badge";
+import { DatePicker } from "@/components/ui/date-picker";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export default function LoadMonitoringPage() {
   const { user } = useAuth();
@@ -36,16 +45,61 @@ export default function LoadMonitoringPage() {
   const navigate = useNavigate();
   
   const [formattedPercentageLoads, setFormattedPercentageLoads] = useState<Record<string, string>>({});
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState<Date | null>(null);
+  const [selectedRegion, setSelectedRegion] = useState<string | null>(null);
+  const [selectedDistrict, setSelectedDistrict] = useState<string | null>(null);
+
+  // Filter districts based on selected region
+  const filteredDistricts = useMemo(() => {
+    if (!selectedRegion) return districts;
+    return districts.filter(d => d.regionId === selectedRegion);
+  }, [districts, selectedRegion]);
 
   const filteredRecords = useMemo(() => {
     if (!loadMonitoringRecords) return [];
-    return loadMonitoringRecords.filter(record => {
-      if (user?.role === 'global_engineer' || user?.role === 'system_admin') return true;
-      if (user?.role === 'regional_engineer') return record.regionId === regions.find(r => r.name === user.region)?.id;
-      if (user?.role === 'district_engineer' || user?.role === 'technician') return record.districtId === districts.find(d => d.name === user.district)?.id;
-      return false;
-    });
-  }, [loadMonitoringRecords, user, regions, districts]);
+    
+    let filtered = loadMonitoringRecords;
+    
+    // Apply role-based filtering
+    if (user?.role === 'regional_engineer') {
+      filtered = filtered.filter(record => record.region === user.region);
+    } else if (user?.role === 'district_engineer' || user?.role === 'technician') {
+      filtered = filtered.filter(record => record.district === user.district);
+    }
+    
+    // Apply date filter
+    if (selectedDate) {
+      filtered = filtered.filter(record => {
+        const recordDate = new Date(record.date);
+        return recordDate.toDateString() === selectedDate.toDateString();
+      });
+    }
+    
+    // Apply month filter
+    if (selectedMonth) {
+      filtered = filtered.filter(record => {
+        const recordDate = new Date(record.date);
+        return recordDate.getMonth() === selectedMonth.getMonth() && 
+               recordDate.getFullYear() === selectedMonth.getFullYear();
+      });
+    }
+    
+    // Apply region filter (for global engineer and admin)
+    if (selectedRegion && (user?.role === 'global_engineer' || user?.role === 'system_admin')) {
+      filtered = filtered.filter(record => record.regionId === selectedRegion);
+    }
+    
+    // Apply district filter (for regional engineer and above)
+    if (selectedDistrict && 
+        (user?.role === 'global_engineer' || 
+         user?.role === 'system_admin' || 
+         user?.role === 'regional_engineer')) {
+      filtered = filtered.filter(record => record.districtId === selectedDistrict);
+    }
+    
+    return filtered;
+  }, [loadMonitoringRecords, user, selectedDate, selectedMonth, selectedRegion, selectedDistrict]);
 
   // Format percentage loads when records change
   useEffect(() => {
@@ -80,28 +134,22 @@ export default function LoadMonitoringPage() {
     if (!record) return;
 
     // Check if user has permission to delete
-    if (user?.role === 'global_engineer') {
+    if (user?.role === 'global_engineer' || user?.role === 'system_admin') {
       deleteLoadMonitoringRecord(id);
       toast.success("Load monitoring record deleted successfully");
       return;
     }
 
-    if (user?.role === 'regional_engineer') {
-      const userRegion = regions.find(r => r.name === user.region);
-      if (userRegion && record.regionId === userRegion.id) {
+    if (user?.role === 'regional_engineer' && record.region === user.region) {
         deleteLoadMonitoringRecord(id);
         toast.success("Load monitoring record deleted successfully");
         return;
-      }
     }
 
-    if (user?.role === 'district_engineer') {
-      const userDistrict = districts.find(d => d.name === user.district);
-      if (userDistrict && record.districtId === userDistrict.id) {
+    if ((user?.role === 'district_engineer' || user?.role === 'technician') && record.district === user.district) {
         deleteLoadMonitoringRecord(id);
         toast.success("Load monitoring record deleted successfully");
         return;
-      }
     }
 
     toast.error("You don't have permission to delete this record");
@@ -441,107 +489,202 @@ export default function LoadMonitoringPage() {
     toast.success("All records exported to CSV successfully");
   };
 
+  // Reset all filters
+  const handleResetFilters = () => {
+    setSelectedDate(null);
+    setSelectedMonth(null);
+    setSelectedRegion(null);
+    setSelectedDistrict(null);
+  };
+
   return (
     <AccessControlWrapper type="load-monitoring">
       <Layout>
         <div className="container mx-auto p-4">
-          <div className="flex justify-between items-center mb-6">
+          {/* Header Section */}
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
             <h1 className="text-2xl font-bold">Load Monitoring</h1>
-            <div className="flex gap-2">
-              <Button onClick={handleExportAllToCSV} variant="outline">
+            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+              <Button onClick={handleExportAllToCSV} variant="outline" className="w-full sm:w-auto">
                 <Download className="mr-2 h-4 w-4" />
                 Export All to CSV
               </Button>
-              <Button onClick={() => navigate('/asset-management/create-load-monitoring')}>
+              <Button onClick={() => navigate('/asset-management/create-load-monitoring')} className="w-full sm:w-auto">
                 Add New Record
               </Button>
             </div>
           </div>
 
+          {/* Filters Section */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div className="space-y-2">
+              <Label>Date</Label>
+              <DatePicker
+                value={selectedDate}
+                onChange={setSelectedDate}
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label>Month</Label>
+              <DatePicker
+                value={selectedMonth}
+                onChange={setSelectedMonth}
+                picker="month"
+              />
+            </div>
+            
+            {(user?.role === 'global_engineer' || user?.role === 'system_admin') && (
+              <div className="space-y-2">
+                <Label>Region</Label>
+                <div className="w-full">
+                  <Select
+                    value={selectedRegion}
+                    onValueChange={setSelectedRegion}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select region" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {regions.map(region => (
+                        <SelectItem key={region.id} value={region.id}>
+                          {region.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+            
+            {(user?.role === 'global_engineer' || 
+              user?.role === 'system_admin' || 
+              user?.role === 'regional_engineer') && (
+              <div className="space-y-2">
+                <Label>District</Label>
+                <div className="w-full">
+                  <Select
+                    value={selectedDistrict}
+                    onValueChange={setSelectedDistrict}
+                    disabled={!selectedRegion && user?.role !== 'regional_engineer'}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select district" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {filteredDistricts.map(district => (
+                        <SelectItem key={district.id} value={district.id}>
+                          {district.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Reset Filters Button */}
+          <div className="flex justify-end mb-4">
+            <Button
+              variant="outline"
+              onClick={handleResetFilters}
+              disabled={!selectedDate && !selectedMonth && !selectedRegion && !selectedDistrict}
+              className="w-full sm:w-auto"
+            >
+              Reset Filters
+            </Button>
+          </div>
+
+          {/* Table Section */}
           <Card>
-            <CardContent className="p-6">
-              <Table>
-                <TableCaption>List of load monitoring records</TableCaption>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Substation</TableHead>
-                    <TableHead>Region</TableHead>
-                    <TableHead>District</TableHead>
-                    <TableHead>Rating (MW)</TableHead>
-                    <TableHead>Load (%)</TableHead>
-                    <TableHead>Load Status</TableHead>
-                    <TableHead>Peak Status</TableHead>
-                    <TableHead>Created By</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredRecords.map((record) => {
-                    const region = regions.find(r => r.id === record.regionId);
-                    const district = districts.find(d => d.id === record.districtId);
-                    const loadStatus = getLoadStatus(record.percentageLoad);
-                    
-                    return (
-                      <TableRow key={record.id}>
-                        <TableCell>{formatDate(record.date)}</TableCell>
-                        <TableCell>{record.substationName}</TableCell>
-                        <TableCell>{region?.name || 'Unknown'}</TableCell>
-                        <TableCell>{district?.name || 'Unknown'}</TableCell>
-                        <TableCell>{record.rating}</TableCell>
-                        <TableCell>{formattedPercentageLoads[record.id] ?? "0.00"}</TableCell>
-                        <TableCell>
-                          <Badge className={loadStatus.color}>
-                            {loadStatus.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{record.peakLoadStatus}</TableCell>
-                        <TableCell>{record.createdBy?.name || 'Unknown'}</TableCell>
-                        <TableCell>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" className="h-8 w-8 p-0">
-                                <span className="sr-only">Open menu</span>
-                                <Eye className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                              <DropdownMenuItem onClick={() => handleView(record.id)}>
-                                View Details
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleExportToPDF(record)}>
-                                <FileText className="mr-2 h-4 w-4" />
-                                Export to PDF
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleExportToCSV(record)}>
-                                <Download className="mr-2 h-4 w-4" />
-                                Export to CSV
-                              </DropdownMenuItem>
-                              {(user?.role === 'global_engineer' || 
-                                (user?.role === 'regional_engineer' && record.regionId === regions.find(r => r.name === user.region)?.id) ||
-                                (user?.role === 'district_engineer' && record.districtId === districts.find(d => d.name === user.district)?.id)) && (
-                                <>
-                                  <DropdownMenuItem onClick={() => handleEdit(record.id)}>
-                                    Edit
-                                  </DropdownMenuItem>
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem 
-                                    onClick={() => handleDelete(record.id)}
-                                    className="text-red-600"
-                                  >
-                                    Delete
-                                  </DropdownMenuItem>
-                                </>
-                              )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+            <CardContent className="p-0 sm:p-6">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableCaption>List of load monitoring records</TableCaption>
+                  <TableHeader className="sticky top-0 bg-background z-10">
+                    <TableRow>
+                      <TableHead className="whitespace-nowrap">Date</TableHead>
+                      <TableHead className="whitespace-nowrap">Substation</TableHead>
+                      <TableHead className="whitespace-nowrap">Region</TableHead>
+                      <TableHead className="whitespace-nowrap">District</TableHead>
+                      <TableHead className="whitespace-nowrap">Rating (MW)</TableHead>
+                      <TableHead className="whitespace-nowrap">Load (%)</TableHead>
+                      <TableHead className="whitespace-nowrap">Load Status</TableHead>
+                      <TableHead className="whitespace-nowrap">Peak Status</TableHead>
+                      <TableHead className="whitespace-nowrap">Created By</TableHead>
+                      <TableHead className="whitespace-nowrap">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredRecords.map((record) => {
+                      const region = regions.find(r => r.id === record.regionId);
+                      const district = districts.find(d => d.id === record.districtId);
+                      const loadStatus = getLoadStatus(record.percentageLoad);
+                      
+                      return (
+                        <TableRow key={record.id}>
+                          <TableCell className="whitespace-nowrap">{formatDate(record.date)}</TableCell>
+                          <TableCell className="whitespace-nowrap">{record.substationName}</TableCell>
+                          <TableCell className="whitespace-nowrap">{region?.name || 'Unknown'}</TableCell>
+                          <TableCell className="whitespace-nowrap">{district?.name || 'Unknown'}</TableCell>
+                          <TableCell className="whitespace-nowrap">{record.rating}</TableCell>
+                          <TableCell className="whitespace-nowrap">{formattedPercentageLoads[record.id] ?? "0.00"}</TableCell>
+                          <TableCell>
+                            <Badge className={loadStatus.color}>
+                              {loadStatus.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap">{record.peakLoadStatus}</TableCell>
+                          <TableCell className="whitespace-nowrap">{record.createdBy?.name || 'Unknown'}</TableCell>
+                          <TableCell>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" className="h-8 w-8 p-0">
+                                  <span className="sr-only">Open menu</span>
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-[200px]">
+                                <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                <DropdownMenuItem onClick={() => handleView(record.id)}>
+                                  View Details
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleExportToPDF(record)}>
+                                  <FileText className="mr-2 h-4 w-4" />
+                                  Export to PDF
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleExportToCSV(record)}>
+                                  <Download className="mr-2 h-4 w-4" />
+                                  Export to CSV
+                                </DropdownMenuItem>
+                                {(user?.role === 'global_engineer' || 
+                                  user?.role === 'system_admin' ||
+                                  user?.role === 'technician' ||
+                                  (user?.role === 'regional_engineer' && record.region === user.region) ||
+                                  (user?.role === 'district_engineer' && record.district === user.district)) && (
+                                  <>
+                                    <DropdownMenuItem onClick={() => handleEdit(record.id)}>
+                                      Edit
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem 
+                                      onClick={() => handleDelete(record.id)}
+                                      className="text-red-600"
+                                    >
+                                      Delete
+                                    </DropdownMenuItem>
+                                  </>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
         </div>

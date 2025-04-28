@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Layout } from "@/components/layout/Layout";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate, Link } from "react-router-dom";
@@ -91,6 +91,7 @@ export default function AnalyticsPage() {
     byMonth: [] as { name: string; value: number }[],
     topMaterials: [] as { name: string; value: number }[]
   });
+  const [overviewRecentFaultsTab, setOverviewRecentFaultsTab] = useState<'all' | 'op5' | 'control'>('all');
   
   useEffect(() => {
     if (!isAuthenticated) {
@@ -970,33 +971,115 @@ export default function AnalyticsPage() {
     setDetailsOpen(true);
   };
   
+  // Calculate the faults to show in the recent faults table based on the nested tab
+  const recentFaultsToShow = useMemo(() => {
+    let faultsToDisplay = filteredFaults;
+    if (overviewRecentFaultsTab === 'op5') {
+      faultsToDisplay = filteredFaults.filter((f): f is OP5Fault => 'faultLocation' in f);
+    } else if (overviewRecentFaultsTab === 'control') {
+      faultsToDisplay = filteredFaults.filter((f): f is OP5Fault => !('faultLocation' in f)); // Assuming control outage if not OP5
+    }
+    // Sort and slice *after* filtering by type
+    return faultsToDisplay
+      .sort((a, b) => new Date(b.occurrenceDate).getTime() - new Date(a.occurrenceDate).getTime()) // Sort by date descending
+      .slice(0, 7);
+  }, [filteredFaults, overviewRecentFaultsTab]);
+  
+  // Function to export only the recent faults shown in the overview table
+  const exportRecentFaultsToCSV = () => {
+    if (!recentFaultsToShow || recentFaultsToShow.length === 0) {
+      toast({ title: "No data to export", description: "The recent faults table is empty." });
+      return;
+    }
+
+    const headers = [
+      'ID', 'Type', 'Region', 'District', 'Occurrence Date', 'Status', 'Outage Duration', 'Customers Affected'
+    ];
+
+    const dataRows = recentFaultsToShow.map((fault: any) => {
+      const type = 'faultLocation' in fault ? 'OP5' : 'Control';
+      const region = getRegionName(fault.regionId);
+      const district = getDistrictName(fault.districtId);
+      const date = formatSafeDate(fault.occurrenceDate);
+      const status = fault.status;
+      const outageDuration = typeof fault.outrageDuration === 'number' && !isNaN(fault.outrageDuration)
+        ? `${fault.outrageDuration} min`
+        : 'N/A';
+      
+      return [
+        fault.id,
+        type,
+        region,
+        district,
+        date,
+        status,
+        outageDuration,
+        fault.affectedPopulation
+          ? (fault.affectedPopulation.rural + fault.affectedPopulation.urban + fault.affectedPopulation.metro)
+          : fault.customersAffected
+            ? (fault.customersAffected.rural + fault.customersAffected.urban + fault.customersAffected.metro)
+            : 'N/A'
+      ].map(value => {
+        const strValue = String(value);
+        if (strValue.includes(',') || strValue.includes('"')) {
+           // Correctly escape double quotes for CSV
+          return `"${strValue.replace(/"/g, '""')}"`;
+        }
+        return strValue;
+      }).join(',');
+    });
+
+    const csvContent = [headers.join(','), ...dataRows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `recent-faults-${overviewRecentFaultsTab}-${format(new Date(), 'yyyyMMdd')}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    // Correct the toast call to pass a single options object
+    toast({ title: "Export Successful", description: "Recent faults exported to CSV." }); 
+  };
+  
   if (!isAuthenticated) {
     return null;
   }
   
   return (
     <Layout>
-      <div className="container mx-auto py-4 sm:py-6 px-2 sm:px-4">
-        <div className="mb-4 sm:mb-8">
-          <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+      <div className="container mx-auto py-4 sm:py-6 px-2 sm:px-4 space-y-6 sm:space-y-8">
+        {/* Enhanced Page Header */}
+        <div className="pb-4 border-b border-border/40">
+          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
             Analytics & Reporting
           </h1>
-          <p className="text-sm sm:text-base text-muted-foreground">
+          <p className="text-sm sm:text-base text-muted-foreground mt-1">
             {user?.role === "district_engineer" 
               ? `Analysis for ${user.district}` 
               : "Analyze fault patterns and generate insights for better decision making"}
           </p>
         </div>
         
-        <div className="flex flex-col gap-4 mb-4 sm:mb-8">
-          <div className="flex flex-wrap gap-4">
-            <div className="flex-1 min-w-[200px]">
+        {/* Filters Section in a Card */}
+        <Card className="p-4 sm:p-6 bg-muted/30 border shadow-sm">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4">
+            <h2 className="text-lg font-semibold flex items-center gap-2">
+              <Filter className="h-5 w-5" /> Filters
+            </h2>
+             {/* Optional: Add a Reset Filters button here */}
+             {/* <Button variant="ghost" size="sm" onClick={resetFilters}>Reset Filters</Button> */}
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* Region Select */}
+            <div>
+              <Label htmlFor="region-select" className="text-xs text-muted-foreground">Region</Label>
               <Select
                 value={selectedRegion}
                 onValueChange={handleRegionChange}
                 disabled={user?.role === "district_engineer" || user?.role === "regional_engineer"}
               >
-                <SelectTrigger>
+                <SelectTrigger id="region-select" className="mt-1">
                   <SelectValue placeholder="Select Region" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1009,13 +1092,15 @@ export default function AnalyticsPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex-1 min-w-[200px]">
+            {/* District Select */}
+            <div>
+              <Label htmlFor="district-select" className="text-xs text-muted-foreground">District</Label>
               <Select
                 value={selectedDistrict}
                 onValueChange={handleDistrictChange}
                 disabled={!selectedRegion || user?.role === "district_engineer"}
               >
-                <SelectTrigger>
+                <SelectTrigger id="district-select" className="mt-1">
                   <SelectValue placeholder="Select District" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1030,12 +1115,14 @@ export default function AnalyticsPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex-1 min-w-[200px]">
+            {/* Fault Type Select */}
+            <div>
+               <Label htmlFor="fault-type-select" className="text-xs text-muted-foreground">Fault Type</Label>
               <Select
                 value={selectedFaultType}
                 onValueChange={handleFaultTypeChange}
               >
-                <SelectTrigger>
+                <SelectTrigger id="fault-type-select" className="mt-1">
                   <SelectValue placeholder="Select Fault Type" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1050,151 +1137,156 @@ export default function AnalyticsPage() {
             </div>
           </div>
           
-          <div className="flex flex-wrap items-center gap-2">
-            <Select value={dateRange} onValueChange={handleDateRangeChange}>
-              <SelectTrigger className="w-full sm:w-[180px]">
-                <SelectValue placeholder="Filter by Date Range">
-                  {dateRange === "custom-month" && startMonth && endMonth
-                    ? `${format(startMonth, "MMM yyyy")} - ${format(endMonth, "MMM yyyy")}`
-                    : dateRange === "custom-year" && startYear && endYear
-                    ? `${format(startYear, "yyyy")} - ${format(endYear, "yyyy")}`
-                    : dateRange === "custom-week" && startWeek && endWeek && selectedYear
-                    ? `Week ${startWeek} - Week ${endWeek}, ${format(selectedYear, "yyyy")}`
-                    : dateRange === "all"
-                    ? "All Time"
-                    : dateRange === "week"
-                    ? "Last 7 Days"
-                    : "Last Year"}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Time</SelectItem>
-                <SelectItem value="week">Last 7 Days</SelectItem>
-                <SelectItem value="month">Last 30 Days</SelectItem>
-                <SelectItem value="year">Last Year</SelectItem>
-                <SelectItem value="custom-week">Select Week Range</SelectItem>
-                <SelectItem value="custom-month">Select Month Range</SelectItem>
-                <SelectItem value="custom-year">Select Year Range</SelectItem>
-              </SelectContent>
-            </Select>
+          {/* Date Range Filters */}
+          <div className="mt-4">
+             <Label className="text-xs text-muted-foreground">Date Range</Label>
+            <div className="flex flex-wrap items-center gap-2 mt-1">
+              <Select value={dateRange} onValueChange={handleDateRangeChange}>
+                <SelectTrigger className="w-full sm:w-[180px]">
+                  <SelectValue placeholder="Filter by Date Range">
+                    {dateRange === "custom-month" && startMonth && endMonth
+                      ? `${format(startMonth, "MMM yyyy")} - ${format(endMonth, "MMM yyyy")}`
+                      : dateRange === "custom-year" && startYear && endYear
+                      ? `${format(startYear, "yyyy")} - ${format(endYear, "yyyy")}`
+                      : dateRange === "custom-week" && startWeek && endWeek && selectedYear
+                      ? `Week ${startWeek} - Week ${endWeek}, ${format(selectedYear, "yyyy")}`
+                      : dateRange === "all"
+                      ? "All Time"
+                      : dateRange === "week"
+                      ? "Last 7 Days"
+                      : "Last Year"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Time</SelectItem>
+                  <SelectItem value="week">Last 7 Days</SelectItem>
+                  <SelectItem value="month">Last 30 Days</SelectItem>
+                  <SelectItem value="year">Last Year</SelectItem>
+                  <SelectItem value="custom-week">Select Week Range</SelectItem>
+                  <SelectItem value="custom-month">Select Month Range</SelectItem>
+                  <SelectItem value="custom-year">Select Year Range</SelectItem>
+                </SelectContent>
+              </Select>
 
-            {dateRange === "custom-week" && (
-              <div className="flex items-center gap-2">
-                <Select value={selectedYear?.getFullYear()?.toString()} onValueChange={(value) => handleYearSelect(new Date(parseInt(value), 0))}>
-                  <SelectTrigger className="w-[120px]">
-                    <SelectValue placeholder="Year" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map(year => (
-                      <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              {dateRange === "custom-week" && (
+                <div className="flex items-center gap-2">
+                  <Select value={selectedYear?.getFullYear()?.toString()} onValueChange={(value) => handleYearSelect(new Date(parseInt(value), 0))}>
+                    <SelectTrigger className="w-[120px]">
+                      <SelectValue placeholder="Year" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map(year => (
+                        <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
 
-                <Select value={startWeek?.toString()} onValueChange={(value) => handleStartWeekSelect(parseInt(value))}>
-                  <SelectTrigger className="w-[120px]">
-                    <SelectValue placeholder="Start Week" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Array.from({ length: 52 }, (_, i) => i + 1).map(week => (
-                      <SelectItem key={week} value={week.toString()}>Week {week}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  <Select value={startWeek?.toString()} onValueChange={(value) => handleStartWeekSelect(parseInt(value))}>
+                    <SelectTrigger className="w-[120px]">
+                      <SelectValue placeholder="Start Week" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 52 }, (_, i) => i + 1).map(week => (
+                        <SelectItem key={week} value={week.toString()}>Week {week}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
 
-                <span>to</span>
+                  <span>to</span>
 
-                <Select value={endWeek?.toString()} onValueChange={(value) => handleEndWeekSelect(parseInt(value))}>
-                  <SelectTrigger className="w-[120px]">
-                    <SelectValue placeholder="End Week" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Array.from({ length: 52 }, (_, i) => i + 1).map(week => (
-                      <SelectItem key={week} value={week.toString()}>Week {week}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+                  <Select value={endWeek?.toString()} onValueChange={(value) => handleEndWeekSelect(parseInt(value))}>
+                    <SelectTrigger className="w-[120px]">
+                      <SelectValue placeholder="End Week" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 52 }, (_, i) => i + 1).map(week => (
+                        <SelectItem key={week} value={week.toString()}>Week {week}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
-            {dateRange === "custom-month" && (
-              <div className="flex items-center gap-2">
-                <Popover open={isStartMonthPickerOpen} onOpenChange={setIsStartMonthPickerOpen}>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" className="w-[200px] justify-start text-left font-normal">
-                      {startMonth ? format(startMonth, "MMMM yyyy") : "Start Month"}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <CalendarComponent
-                      mode="single"
-                      selected={startMonth}
-                      onSelect={handleStartMonthSelect}
-                      initialFocus
-                      disabled={(date) => endMonth ? date > endMonth : false}
-                    />
-                  </PopoverContent>
-                </Popover>
+              {dateRange === "custom-month" && (
+                <div className="flex items-center gap-2">
+                  <Popover open={isStartMonthPickerOpen} onOpenChange={setIsStartMonthPickerOpen}>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-[200px] justify-start text-left font-normal">
+                        {startMonth ? format(startMonth, "MMMM yyyy") : "Start Month"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <CalendarComponent
+                        mode="single"
+                        selected={startMonth}
+                        onSelect={handleStartMonthSelect}
+                        initialFocus
+                        disabled={(date) => endMonth ? date > endMonth : false}
+                      />
+                    </PopoverContent>
+                  </Popover>
 
-                <span>to</span>
+                  <span>to</span>
 
-                <Popover open={isEndMonthPickerOpen} onOpenChange={setIsEndMonthPickerOpen}>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" className="w-[200px] justify-start text-left font-normal">
-                      {endMonth ? format(endMonth, "MMMM yyyy") : "End Month"}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <CalendarComponent
-                      mode="single"
-                      selected={endMonth}
-                      onSelect={handleEndMonthSelect}
-                      initialFocus
-                      disabled={(date) => startMonth ? date < startMonth : false}
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
-            )}
+                  <Popover open={isEndMonthPickerOpen} onOpenChange={setIsEndMonthPickerOpen}>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-[200px] justify-start text-left font-normal">
+                        {endMonth ? format(endMonth, "MMMM yyyy") : "End Month"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <CalendarComponent
+                        mode="single"
+                        selected={endMonth}
+                        onSelect={handleEndMonthSelect}
+                        initialFocus
+                        disabled={(date) => startMonth ? date < startMonth : false}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              )}
 
-            {dateRange === "custom-year" && (
-              <div className="flex items-center gap-2">
-                <Select value={startYear?.getFullYear()?.toString()} onValueChange={(value) => handleStartYearSelect(new Date(parseInt(value), 0))}>
-                  <SelectTrigger className="w-[120px]">
-                    <SelectValue placeholder="Start Year" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - i).map(year => (
-                      <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              {dateRange === "custom-year" && (
+                <div className="flex items-center gap-2">
+                  <Select value={startYear?.getFullYear()?.toString()} onValueChange={(value) => handleStartYearSelect(new Date(parseInt(value), 0))}>
+                    <SelectTrigger className="w-[120px]">
+                      <SelectValue placeholder="Start Year" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - i).map(year => (
+                        <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
 
-                <span>to</span>
+                  <span>to</span>
 
-                <Select value={endYear?.getFullYear()?.toString()} onValueChange={(value) => handleEndYearSelect(new Date(parseInt(value), 0))}>
-                  <SelectTrigger className="w-[120px]">
-                    <SelectValue placeholder="End Year" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - i).map(year => (
-                      <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+                  <Select value={endYear?.getFullYear()?.toString()} onValueChange={(value) => handleEndYearSelect(new Date(parseInt(value), 0))}>
+                    <SelectTrigger className="w-[120px]">
+                      <SelectValue placeholder="End Year" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - i).map(year => (
+                        <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
           </div>
-          
-          <div className="flex flex-wrap items-center gap-2">
+
+          {/* Export Buttons moved here for better grouping */}
+          <div className="flex flex-wrap items-center gap-2 mt-6 border-t pt-4">
             <Button 
               variant="outline" 
               className="flex-1 sm:flex-none flex items-center gap-2"
               onClick={exportDetailed}
             >
               <FileText className="h-4 w-4" />
-              <span className="hidden sm:inline">Export Detailed Report</span>
-              <span className="sm:hidden">Export</span>
+              <span className="hidden sm:inline">Export Detailed CSV</span>
+              <span className="sm:hidden">CSV</span>
             </Button>
             <Button 
               variant="outline" 
@@ -1205,9 +1297,19 @@ export default function AnalyticsPage() {
               <span className="hidden sm:inline">Export PDF Report</span>
               <span className="sm:hidden">PDF</span>
             </Button>
+            <Button 
+              variant="outline" 
+              className="flex-1 sm:flex-none flex items-center gap-2"
+              onClick={exportMaterialsToCSV}
+            >
+              <Package className="h-4 w-4" />
+              <span className="hidden sm:inline">Export Materials CSV</span>
+              <span className="sm:hidden">Materials</span>
+            </Button>
           </div>
-        </div>
-        
+        </Card>
+
+        {/* Showing data range info - kept subtle */}
         {dateRange !== "all" && startDate && endDate && (
           <div className="mb-4 sm:mb-6 text-sm text-muted-foreground flex items-center gap-2">
             <Calendar className="h-4 w-4" />
@@ -1217,42 +1319,46 @@ export default function AnalyticsPage() {
           </div>
         )}
         
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-4 sm:mb-8">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base sm:text-lg font-medium">Total Faults</CardTitle>
+        {/* Summary Cards Section - unchanged */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+          <Card className="bg-red-50 border border-red-200 hover:shadow-md transition-shadow duration-200">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-base font-medium text-red-700">Total Faults</CardTitle>
+              <AlertTriangle className="h-4 w-4 text-red-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl sm:text-3xl font-bold">{filteredFaults.length}</div>
-              <p className="text-xs sm:text-sm text-muted-foreground">
+              <div className="text-2xl sm:text-3xl font-bold text-red-900">{filteredFaults.length}</div>
+              <p className="text-xs text-red-700">
                 {filteredFaults.filter((f: any) => f.status === "active").length} active
               </p>
             </CardContent>
           </Card>
           
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base sm:text-lg font-medium">OP5 Faults</CardTitle>
+          <Card className="bg-blue-50 border border-blue-200 hover:shadow-md transition-shadow duration-200">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-base font-medium text-blue-700">OP5 Faults</CardTitle>
+              <Wrench className="h-4 w-4 text-blue-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl sm:text-3xl font-bold">
+              <div className="text-2xl sm:text-3xl font-bold text-blue-900">
                 {filteredFaults.filter((f: any) => 'faultLocation' in f).length}
               </div>
-              <p className="text-xs sm:text-sm text-muted-foreground">
+              <p className="text-xs text-blue-700">
                 {filterRegion || filterDistrict ? `In selected area` : 'Across all regions'}
               </p>
             </CardContent>
           </Card>
           
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base sm:text-lg font-medium">Control Outages</CardTitle>
+          <Card className="bg-purple-50 border border-purple-200 hover:shadow-md transition-shadow duration-200">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-base font-medium text-purple-700">Control Outages</CardTitle>
+              <Users className="h-4 w-4 text-purple-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl sm:text-3xl font-bold">
+              <div className="text-2xl sm:text-3xl font-bold text-purple-900">
                 {filteredFaults.filter((f: any) => 'customersAffected' in f).length}
               </div>
-              <p className="text-xs sm:text-sm text-muted-foreground">
+              <p className="text-xs text-purple-700">
                 {filterRegion || filterDistrict ? `In selected area` : 'Across all regions'}
               </p>
             </CardContent>
@@ -1260,28 +1366,29 @@ export default function AnalyticsPage() {
         </div>
         
         {/* MTTR Report Card */}
-        <Card className="mb-4 sm:mb-8">
-          <CardHeader>
+        <Card className="mb-4 sm:mb-8 border shadow-sm hover:shadow-md transition-shadow duration-200">
+          <CardHeader className="bg-muted/30 border-b p-4">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
               <div>
-                <CardTitle className="text-base sm:text-lg">Mean Time To Repair (MTTR) Report</CardTitle>
-                <CardDescription className="text-xs sm:text-sm">Analysis of repair times for OP5 faults</CardDescription>
+                <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+                  <Clock className="h-5 w-5 text-primary" />
+                  Mean Time To Repair (MTTR) Report
+                </CardTitle>
+                <CardDescription className="text-xs sm:text-sm mt-1">Analysis of repair times for OP5 faults</CardDescription>
               </div>
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className="text-xs sm:text-sm">
-                  {filteredFaults.filter(f => 'faultLocation' in f && f.mttr).length} Faults Analyzed
-                </Badge>
-              </div>
+              <Badge variant="outline" className="text-xs sm:text-sm">
+                {filteredFaults.filter(f => 'faultLocation' in f && f.mttr).length} Faults Analyzed
+              </Badge>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 sm:p-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-4 sm:mb-6">
-              <Card>
+              <Card className="bg-yellow-50 border border-yellow-200">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-base sm:text-lg font-medium">Average MTTR</CardTitle>
+                  <CardTitle className="text-sm font-medium text-yellow-700">Average MTTR</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl sm:text-3xl font-bold">
+                  <div className="text-xl sm:text-2xl font-bold text-yellow-900">
                     {(() => {
                       const op5FaultsWithMTTR = filteredFaults.filter(f => 'faultLocation' in f && f.mttr);
                       const totalMTTR = op5FaultsWithMTTR.reduce((sum, fault) => sum + (fault.mttr || 0), 0);
@@ -1289,39 +1396,39 @@ export default function AnalyticsPage() {
                       return `${averageMTTR.toFixed(2)} hours`;
                     })()}
                   </div>
-                  <p className="text-xs sm:text-sm text-muted-foreground mt-2">
+                  <p className="text-xs text-yellow-700 mt-1">
                     Across all regions
                   </p>
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="bg-orange-50 border border-orange-200">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-base sm:text-lg font-medium">Total Repair Time</CardTitle>
+                  <CardTitle className="text-sm font-medium text-orange-700">Total Repair Time</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl sm:text-3xl font-bold">
+                  <div className="text-xl sm:text-2xl font-bold text-orange-900">
                     {(() => {
                       const op5FaultsWithMTTR = filteredFaults.filter(f => 'faultLocation' in f && f.mttr);
                       const totalMTTR = op5FaultsWithMTTR.reduce((sum, fault) => sum + (fault.mttr || 0), 0);
                       return `${totalMTTR.toFixed(2)} hours`;
                     })()}
                   </div>
-                  <p className="text-xs sm:text-sm text-muted-foreground mt-2">
+                  <p className="text-xs text-orange-700 mt-1">
                     Combined repair time
                   </p>
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="bg-gray-50 border border-gray-200">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-base sm:text-lg font-medium">Faults with MTTR</CardTitle>
+                  <CardTitle className="text-sm font-medium text-gray-700">Faults with MTTR</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl sm:text-3xl font-bold">
+                  <div className="text-xl sm:text-2xl font-bold text-gray-900">
                     {filteredFaults.filter(f => 'faultLocation' in f && f.mttr).length}
                   </div>
-                  <p className="text-xs sm:text-sm text-muted-foreground mt-2">
+                  <p className="text-xs text-gray-700 mt-1">
                     Out of {filteredFaults.filter(f => 'faultLocation' in f).length} total OP5 faults
                   </p>
                 </CardContent>
@@ -1330,238 +1437,338 @@ export default function AnalyticsPage() {
 
             <div className="space-y-4">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                <h3 className="text-base sm:text-lg font-semibold">MTTR by Region</h3>
-                <Badge variant="outline" className="text-xs sm:text-sm">
-                  Average Repair Time
+                <h3 className="text-base font-semibold">MTTR by Region</h3>
+                <Badge variant="secondary" className="text-xs">
+                  Average Repair Time (Lower is Better)
                 </Badge>
               </div>
               <div className="space-y-4">
-                {regions.map(region => {
-                  const regionFaults = filteredFaults.filter(f => 'faultLocation' in f && f.mttr && f.regionId === region.id);
-                  const regionMTTR = regionFaults.reduce((sum, fault) => sum + (fault.mttr || 0), 0);
-                  const avgMTTR = regionFaults.length > 0 ? regionMTTR / regionFaults.length : 0;
-                  const totalFaults = filteredFaults.filter(f => 'faultLocation' in f && f.regionId === region.id).length;
-                  
-                  return (
-                    <div key={region.id} className="space-y-2">
-                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-sm sm:text-base">{region.name}</span>
-                          <Badge variant="secondary" className="text-xs">
-                            {regionFaults.length} faults
-                          </Badge>
-                        </div>
-                        <div className="flex items-center gap-2 w-full sm:w-auto">
-                          <span className="font-medium text-sm sm:text-base">{avgMTTR.toFixed(2)} hours</span>
-                          <div className="flex-1 sm:w-32 h-2 bg-muted rounded-full overflow-hidden">
-                            <div 
-                              className="h-full bg-primary" 
-                              style={{ 
-                                width: `${(avgMTTR / 5) * 100}%`,  // Scale for 5 hours max
-                                maxWidth: '100%'
-                              }} 
-                            />
+                {(user?.role === 'district_engineer' && user.regionId)
+                  ? regions.filter(region => region.id === user.regionId).map(region => {
+                      const regionFaults = filteredFaults.filter(f => 'faultLocation' in f && f.mttr && f.regionId === region.id);
+                      const regionMTTR = regionFaults.reduce((sum, fault) => sum + (fault.mttr || 0), 0);
+                      const avgMTTR = regionFaults.length > 0 ? regionMTTR / regionFaults.length : 0;
+                      const totalFaults = filteredFaults.filter(f => 'faultLocation' in f && f.regionId === region.id).length;
+                      return (
+                        <div key={region.id} className="space-y-2">
+                          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-sm sm:text-base">{region.name}</span>
+                              <Badge variant="secondary" className="text-xs">
+                                {regionFaults.length} faults
+                              </Badge>
+                            </div>
+                            <div className="flex items-center gap-2 w-full sm:w-auto">
+                              <span className="font-medium text-sm sm:text-base">{avgMTTR.toFixed(2)} hours</span>
+                              <div className="flex-1 sm:w-32 h-2 bg-muted rounded-full overflow-hidden">
+                                <div 
+                                  className="h-full bg-primary" 
+                                  style={{ 
+                                    width: `${(avgMTTR / 5) * 100}%`,  // Scale for 5 hours max
+                                    maxWidth: '100%'
+                                  }} 
+                                />
+                              </div>
+                            </div>
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {regionFaults.length} of {totalFaults} OP5 faults have MTTR data
                           </div>
                         </div>
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        {regionFaults.length} of {totalFaults} OP5 faults have MTTR data
-                      </div>
-                    </div>
-                  );
-                })}
+                      );
+                    })
+                  : regions.map(region => {
+                      const regionFaults = filteredFaults.filter(f => 'faultLocation' in f && f.mttr && f.regionId === region.id);
+                      const regionMTTR = regionFaults.reduce((sum, fault) => sum + (fault.mttr || 0), 0);
+                      const avgMTTR = regionFaults.length > 0 ? regionMTTR / regionFaults.length : 0;
+                      const totalFaults = filteredFaults.filter(f => 'faultLocation' in f && f.regionId === region.id).length;
+                      return (
+                        <div key={region.id} className="space-y-2">
+                          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-sm sm:text-base">{region.name}</span>
+                              <Badge variant="secondary" className="text-xs">
+                                {regionFaults.length} faults
+                              </Badge>
+                            </div>
+                            <div className="flex items-center gap-2 w-full sm:w-auto">
+                              <span className="font-medium text-sm sm:text-base">{avgMTTR.toFixed(2)} hours</span>
+                              <div className="flex-1 sm:w-32 h-2 bg-muted rounded-full overflow-hidden">
+                                <div 
+                                  className="h-full bg-primary" 
+                                  style={{ 
+                                    width: `${(avgMTTR / 5) * 100}%`,  // Scale for 5 hours max
+                                    maxWidth: '100%'
+                                  }} 
+                                />
+                              </div>
+                            </div>
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {regionFaults.length} of {totalFaults} OP5 faults have MTTR data
+                          </div>
+                        </div>
+                      );
+                    })}
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Rest of the content with responsive adjustments */}
+        {/* Tabs Section with enhanced styling and responsiveness */}
         <div className="mt-8 sm:mt-12">
           <Tabs defaultValue="overview" className="w-full">
-            <TabsList className="flex flex-wrap w-full gap-2 p-2 bg-muted/30 rounded-lg border border-border/50 shadow-sm">
-              <TabsTrigger value="overview" className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-md transition-colors hover:bg-muted/50 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 p-1 h-auto bg-muted/50 rounded-lg border border-border/50 shadow-sm mb-6">
+              <TabsTrigger value="overview" className="flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-colors hover:bg-muted data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm">
                 <ActivityIcon className="h-4 w-4" />
-                <span className="hidden sm:inline">Overview</span>
+                <span>Overview</span>
               </TabsTrigger>
-              <TabsTrigger value="faults" className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-md transition-colors hover:bg-muted/50 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              <TabsTrigger value="faults" className="flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-colors hover:bg-muted data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm">
                 <AlertTriangle className="h-4 w-4" />
-                <span className="hidden sm:inline">Faults</span>
+                <span>Faults</span>
               </TabsTrigger>
-              <TabsTrigger value="reliability" className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-md transition-colors hover:bg-muted/50 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              <TabsTrigger value="reliability" className="flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-colors hover:bg-muted data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm">
                 <TrendingUp className="h-4 w-4" />
-                <span className="hidden sm:inline">Reliability</span>
+                <span>Reliability</span>
               </TabsTrigger>
-              <TabsTrigger value="performance" className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-md transition-colors hover:bg-muted/50 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              <TabsTrigger value="performance" className="flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-colors hover:bg-muted data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm">
                 <Clock className="h-4 w-4" />
-                <span className="hidden sm:inline">Performance</span>
+                <span>Performance</span>
               </TabsTrigger>
-              <TabsTrigger value="materials" className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-md transition-colors hover:bg-muted/50 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              <TabsTrigger value="materials" className="flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-colors hover:bg-muted data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm">
                 <Package className="h-4 w-4" />
-                <span className="hidden sm:inline">Materials</span>
+                <span>Materials</span>
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="overview" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <div className="flex justify-between items-center">
-                <div>
-                  <CardTitle>Recent Faults</CardTitle>
-                  <CardDescription>
-                    Latest fault reports {filterDistrict ? "in this district" : filterRegion ? "in this region" : "across the network"}
-                  </CardDescription>
-                </div>
-                <Button variant="outline" className="flex items-center gap-2" onClick={exportDetailed}>
-                  <Download className="h-4 w-4" />
-                  Export
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>ID</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Region</TableHead>
-                    <TableHead>District</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Details</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredFaults.slice(0, 7).map((fault: any) => (
-                    <TableRow key={fault.id}>
-                      <TableCell className="font-medium">{fault.id.substring(0, 10)}</TableCell>
-                      <TableCell>{'faultLocation' in fault ? 'OP5 Fault' : 'Control Outage'}</TableCell>
-                      <TableCell>{getRegionName(fault.regionId)}</TableCell>
-                      <TableCell>{getDistrictName(fault.districtId)}</TableCell>
-                      <TableCell>{formatSafeDate(fault.occurrenceDate)}</TableCell>
-                      <TableCell>
-                        <span className={`px-2 py-1 rounded-full text-xs ${
-                          fault.status === 'active' 
-                            ? 'bg-red-100 text-red-800' 
-                            : 'bg-green-100 text-green-800'
-                        }`}>
-                          {fault.status}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          className="flex items-center gap-1 p-0"
-                          onClick={() => showFaultDetails(fault)}
-                        >
-                          <Eye size={16} />
-                          View
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+            {/* Add padding and subtle background to Tab Content areas */}
+            <TabsContent value="overview" className="p-4 sm:p-6 bg-background rounded-lg border shadow-sm space-y-4">
+              {/* Nested Tabs for Recent Faults Table - with active color */}
+              <Tabs 
+                defaultValue="all" 
+                value={overviewRecentFaultsTab} 
+                onValueChange={(value) => setOverviewRecentFaultsTab(value as 'all' | 'op5' | 'control')} 
+                className="w-full"
+              >
+                {/* Add framing bg/padding to TabsList */}
+                <TabsList className="grid w-full grid-cols-3 max-w-sm mx-auto bg-muted p-1 h-auto rounded-md mb-4"> 
+                  <TabsTrigger 
+                    value="all" 
+                    className="text-xs sm:text-sm h-8 px-2 rounded-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm transition-colors duration-150"
+                  >
+                    All Recent
+                  </TabsTrigger>
+                  <TabsTrigger 
+                    value="op5" 
+                    className="text-xs sm:text-sm h-8 px-2 rounded-sm data-[state=active]:bg-orange-500 data-[state=active]:text-white data-[state=active]:shadow-sm hover:text-orange-600 transition-colors duration-150"
+                  >
+                    OP5 Recent
+                  </TabsTrigger>
+                  <TabsTrigger 
+                    value="control" 
+                    className="text-xs sm:text-sm h-8 px-2 rounded-sm data-[state=active]:bg-purple-500 data-[state=active]:text-white data-[state=active]:shadow-sm hover:text-purple-600 transition-colors duration-150"
+                  >
+                    Control Recent
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+
+              {/* Recent Faults Card - Now uses filtered data */}
+              <Card>
+                <CardHeader className="pt-2 pb-2">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <CardTitle className="text-base sm:text-lg">Recent Faults</CardTitle>
+                      <CardDescription className="text-xs sm:text-sm">
+                        Latest fault reports based on selected tab
+                      </CardDescription>
+                    </div>
+                    {/* Re-added Export button for this specific table */}
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="h-8 px-2"
+                      onClick={exportRecentFaultsToCSV} // Call the new function
+                    >
+                      <Download className="mr-1 h-4 w-4" />
+                      Export Recent
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>ID</TableHead>
+                          <TableHead>Type</TableHead>
+                          <TableHead>Region</TableHead>
+                          <TableHead>District</TableHead>
+                          <TableHead>Date</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Outage Duration</TableHead>
+                          <TableHead>Customers Affected</TableHead>
+                          <TableHead>Details</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {recentFaultsToShow.length > 0 ? (
+                          recentFaultsToShow.map((fault: any) => (
+                            <TableRow key={fault.id}>
+                              <TableCell className="font-medium text-xs sm:text-sm py-2 px-2 sm:px-4">{fault.id.substring(0, 8)}...</TableCell>
+                              <TableCell className="text-xs sm:text-sm py-2 px-2 sm:px-4">{'faultLocation' in fault ? 'OP5' : 'Control'}</TableCell>
+                              <TableCell className="text-xs sm:text-sm py-2 px-2 sm:px-4">{getRegionName(fault.regionId)}</TableCell>
+                              <TableCell className="text-xs sm:text-sm py-2 px-2 sm:px-4">{getDistrictName(fault.districtId)}</TableCell>
+                              <TableCell className="text-xs sm:text-sm py-2 px-2 sm:px-4">{formatSafeDate(fault.occurrenceDate)}</TableCell>
+                              <TableCell className="py-2 px-2 sm:px-4">
+                                <span className={`px-2 py-1 rounded-full text-xs ${fault.status === 'active' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
+                                  {fault.status}
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-xs sm:text-sm py-2 px-2 sm:px-4">{
+                                fault.occurrenceDate && fault.restorationDate
+                                  ? `${((new Date(fault.restorationDate).getTime() - new Date(fault.occurrenceDate).getTime()) / (1000 * 60 * 60)).toFixed(2)} hr`
+                                  : 'N/A'
+                              }</TableCell>
+                              <TableCell className="text-xs sm:text-sm py-2 px-2 sm:px-4">{
+                                fault.affectedPopulation
+                                  ? (fault.affectedPopulation.rural + fault.affectedPopulation.urban + fault.affectedPopulation.metro)
+                                  : fault.customersAffected
+                                    ? (fault.customersAffected.rural + fault.customersAffected.urban + fault.customersAffected.metro)
+                                    : 'N/A'
+                              }</TableCell>
+                              <TableCell className="py-2 px-2 sm:px-4">
+                                <Button variant="ghost" size="sm" className="h-7 px-1 sm:px-2" onClick={() => showFaultDetails(fault)}>
+                                  <Eye size={14} />
+                                  <span className="ml-1 hidden sm:inline">View</span>
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        ) : (
+                          <TableRow>
+                            <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                              No recent faults found for the selected type.
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
             </TabsContent>
 
-            <TabsContent value="faults" className="space-y-6">
+            <TabsContent value="faults" className="p-4 sm:p-6 bg-background rounded-lg border shadow-sm space-y-6">
               <AnalyticsCharts filteredFaults={filteredFaults} />
             </TabsContent>
 
-            <TabsContent value="reliability" className="space-y-6">
+            <TabsContent value="reliability" className="p-4 sm:p-6 bg-background rounded-lg border shadow-sm space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Rural Reliability */}
-                <Card>
+                {/* Updated Rural Reliability Card with color */}
+                <Card className="bg-green-50 border border-green-200 hover:shadow-lg transition-shadow duration-200">
                   <CardHeader>
-                    <CardTitle className="text-lg">Rural Reliability</CardTitle>
-                    <CardDescription>Indices for rural areas</CardDescription>
+                    <CardTitle className="text-lg flex items-center gap-2 text-green-800">
+                      <TrendingUp className="h-5 w-5 text-green-600" />
+                      Rural Reliability
+                    </CardTitle>
+                    <CardDescription className="text-green-700">Indices for rural areas</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-4">
+                    <div className="space-y-4 text-green-900">
                       <div>
-                        <Label className="text-sm text-muted-foreground">SAIDI</Label>
-                        <p className="text-2xl font-bold">{reliabilityIndices?.rural?.saidi?.toFixed(3) || '0.000'}</p>
-                        <p className="text-sm text-muted-foreground">System Average Interruption Duration Index</p>
+                        <Label className="text-sm text-green-700">SAIDI</Label>
+                        <p className="text-xl font-semibold">{reliabilityIndices?.rural?.saidi?.toFixed(3) || 'N/A'}</p>
+                        <p className="text-xs text-green-700">Avg. Interruption Duration</p>
                       </div>
                       <div>
-                        <Label className="text-sm text-muted-foreground">SAIFI</Label>
-                        <p className="text-2xl font-bold">{reliabilityIndices?.rural?.saifi?.toFixed(3) || '0.000'}</p>
-                        <p className="text-sm text-muted-foreground">System Average Interruption Frequency Index</p>
+                        <Label className="text-sm text-green-700">SAIFI</Label>
+                        <p className="text-xl font-semibold">{reliabilityIndices?.rural?.saifi?.toFixed(3) || 'N/A'}</p>
+                        <p className="text-xs text-green-700">Avg. Interruption Frequency</p>
                       </div>
                       <div>
-                        <Label className="text-sm text-muted-foreground">CAIDI</Label>
-                        <p className="text-2xl font-bold">{reliabilityIndices?.rural?.caidi?.toFixed(3) || '0.000'}</p>
-                        <p className="text-sm text-muted-foreground">Customer Average Interruption Duration Index</p>
+                        <Label className="text-sm text-green-700">CAIDI</Label>
+                        <p className="text-xl font-semibold">{reliabilityIndices?.rural?.caidi?.toFixed(3) || 'N/A'}</p>
+                        <p className="text-xs text-green-700">Avg. Customer Interruption Duration</p>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
 
-                {/* Urban Reliability */}
-                <Card>
+                {/* Updated Urban Reliability Card with color */}
+                <Card className="bg-blue-50 border border-blue-200 hover:shadow-lg transition-shadow duration-200">
                   <CardHeader>
-                    <CardTitle className="text-lg">Urban Reliability</CardTitle>
-                    <CardDescription>Indices for urban areas</CardDescription>
+                    <CardTitle className="text-lg flex items-center gap-2 text-blue-800">
+                      <TrendingUp className="h-5 w-5 text-blue-600" />
+                      Urban Reliability
+                    </CardTitle>
+                    <CardDescription className="text-blue-700">Indices for urban areas</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-4">
+                     <div className="space-y-4 text-blue-900">
                       <div>
-                        <Label className="text-sm text-muted-foreground">SAIDI</Label>
-                        <p className="text-2xl font-bold">{reliabilityIndices?.urban?.saidi?.toFixed(3) || '0.000'}</p>
-                        <p className="text-sm text-muted-foreground">System Average Interruption Duration Index</p>
+                        <Label className="text-sm text-blue-700">SAIDI</Label>
+                        <p className="text-xl font-semibold">{reliabilityIndices?.urban?.saidi?.toFixed(3) || 'N/A'}</p>
+                        <p className="text-xs text-blue-700">Avg. Interruption Duration</p>
                       </div>
                       <div>
-                        <Label className="text-sm text-muted-foreground">SAIFI</Label>
-                        <p className="text-2xl font-bold">{reliabilityIndices?.urban?.saifi?.toFixed(3) || '0.000'}</p>
-                        <p className="text-sm text-muted-foreground">System Average Interruption Frequency Index</p>
+                        <Label className="text-sm text-blue-700">SAIFI</Label>
+                        <p className="text-xl font-semibold">{reliabilityIndices?.urban?.saifi?.toFixed(3) || 'N/A'}</p>
+                        <p className="text-xs text-blue-700">Avg. Interruption Frequency</p>
                       </div>
                       <div>
-                        <Label className="text-sm text-muted-foreground">CAIDI</Label>
-                        <p className="text-2xl font-bold">{reliabilityIndices?.urban?.caidi?.toFixed(3) || '0.000'}</p>
-                        <p className="text-sm text-muted-foreground">Customer Average Interruption Duration Index</p>
+                        <Label className="text-sm text-blue-700">CAIDI</Label>
+                        <p className="text-xl font-semibold">{reliabilityIndices?.urban?.caidi?.toFixed(3) || 'N/A'}</p>
+                        <p className="text-xs text-blue-700">Avg. Customer Interruption Duration</p>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
 
-                {/* Metro Reliability */}
-                <Card>
+                {/* Updated Metro Reliability Card with color */}
+                <Card className="bg-purple-50 border border-purple-200 hover:shadow-lg transition-shadow duration-200">
                   <CardHeader>
-                    <CardTitle className="text-lg">Metro Reliability</CardTitle>
-                    <CardDescription>Indices for metro areas</CardDescription>
+                    <CardTitle className="text-lg flex items-center gap-2 text-purple-800">
+                      <TrendingUp className="h-5 w-5 text-purple-600" />
+                      Metro Reliability
+                    </CardTitle>
+                    <CardDescription className="text-purple-700">Indices for metro areas</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-4">
+                     <div className="space-y-4 text-purple-900">
                       <div>
-                        <Label className="text-sm text-muted-foreground">SAIDI</Label>
-                        <p className="text-2xl font-bold">{reliabilityIndices?.metro?.saidi?.toFixed(3) || '0.000'}</p>
-                        <p className="text-sm text-muted-foreground">System Average Interruption Duration Index</p>
+                        <Label className="text-sm text-purple-700">SAIDI</Label>
+                        <p className="text-xl font-semibold">{reliabilityIndices?.metro?.saidi?.toFixed(3) || 'N/A'}</p>
+                        <p className="text-xs text-purple-700">Avg. Interruption Duration</p>
                       </div>
                       <div>
-                        <Label className="text-sm text-muted-foreground">SAIFI</Label>
-                        <p className="text-2xl font-bold">{reliabilityIndices?.metro?.saifi?.toFixed(3) || '0.000'}</p>
-                        <p className="text-sm text-muted-foreground">System Average Interruption Frequency Index</p>
+                        <Label className="text-sm text-purple-700">SAIFI</Label>
+                        <p className="text-xl font-semibold">{reliabilityIndices?.metro?.saifi?.toFixed(3) || 'N/A'}</p>
+                        <p className="text-xs text-purple-700">Avg. Interruption Frequency</p>
                       </div>
                       <div>
-                        <Label className="text-sm text-muted-foreground">CAIDI</Label>
-                        <p className="text-2xl font-bold">{reliabilityIndices?.metro?.caidi?.toFixed(3) || '0.000'}</p>
-                        <p className="text-sm text-muted-foreground">Customer Average Interruption Duration Index</p>
+                        <Label className="text-sm text-purple-700">CAIDI</Label>
+                        <p className="text-xl font-semibold">{reliabilityIndices?.metro?.caidi?.toFixed(3) || 'N/A'}</p>
+                        <p className="text-xs text-purple-700">Avg. Customer Interruption Duration</p>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
               </div>
+            </TabsContent>
+
+            <TabsContent value="performance" className="p-4 sm:p-6 bg-background rounded-lg border shadow-sm space-y-6">
+              {/* Add Performance Content Here */}
+              <p>Performance metrics will be displayed here.</p>
             </TabsContent>
 
             {renderMaterialsContent()}
           </Tabs>
         </div>
         
-        {/* Fault Details Dialog */}
+        {/* Fault Details Dialog - improved responsiveness */}
         <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-md sm:max-w-2xl">
             {selectedFault && (
               <>
                 <DialogHeader>

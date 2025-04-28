@@ -42,8 +42,8 @@ export const exportInspectionToCsv = (inspection: VITInspectionChecklist, asset:
   const dataRows = [
     ["Asset Serial Number", asset?.serialNumber || ""],
     ["Asset Type", asset?.typeOfUnit || ""],
-    ["Region", asset ? getRegionName(asset.regionId) : ""],
-    ["District", asset ? getDistrictName(asset.districtId) : ""],
+    ["Region", asset ? getRegionName(asset.region) : ""],
+    ["District", asset ? getDistrictName(asset.district) : ""],
     ["Inspection Date", formatDate(inspection.inspectionDate)],
     ["Inspector", inspection.inspectedBy],
     ["Rodent/Termite Encroachment", inspection.rodentTermiteEncroachment],
@@ -98,8 +98,8 @@ export const exportInspectionToPDF = async (inspection: VITInspectionChecklist, 
       throw new Error("Asset information is required to generate the report");
     }
 
-    const region = getRegionName(asset.regionId) || "Unknown";
-    const district = getDistrictName(asset.districtId) || "Unknown";
+    const region = getRegionName(asset.region) || "Unknown";
+    const district = getDistrictName(asset.district) || "Unknown";
     
     // Create PDF document with A4 size
     const pdfDoc = await PDFDocument.create();

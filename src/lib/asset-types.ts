@@ -2,10 +2,10 @@ import { InspectionItem } from './types';
 
 export interface FeederLeg {
   id: string;
-  redPhaseCurrent: number;
-  yellowPhaseCurrent: number;
-  bluePhaseCurrent: number;
-  neutralCurrent: number;
+  redPhaseCurrent: number | '';
+  yellowPhaseCurrent: number | '';
+  bluePhaseCurrent: number | '';
+  neutralCurrent: number | '';
 }
 
 export interface LoadMonitoringData {

@@ -33,7 +33,7 @@ interface VITAssetsTableProps {
 }
 
 export function VITAssetsTable({ assets: propAssets, onAddAsset, onEditAsset, onInspect }: VITAssetsTableProps) {
-  const { vitAssets, deleteVITAsset, regions, districts } = useData();
+  const { vitAssets, deleteVITAsset } = useData();
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
   const [filteredAssets, setFilteredAssets] = useState<VITAsset[]>(propAssets || vitAssets);
@@ -48,24 +48,14 @@ export function VITAssetsTable({ assets: propAssets, onAddAsset, onEditAsset, on
             asset.serialNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
             asset.location.toLowerCase().includes(searchTerm.toLowerCase()) ||
             asset.typeOfUnit.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            getRegionName(asset.regionId).toLowerCase().includes(searchTerm.toLowerCase()) ||
-            getDistrictName(asset.districtId).toLowerCase().includes(searchTerm.toLowerCase())
+            asset.region.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            asset.district.toLowerCase().includes(searchTerm.toLowerCase())
         )
       );
     } else {
       setFilteredAssets(propAssets || vitAssets);
     }
-  }, [searchTerm, propAssets, vitAssets, regions, districts]);
-
-  const getRegionName = (regionId: string) => {
-    const region = regions.find((r) => r.id === regionId);
-    return region ? region.name : "Unknown Region";
-  };
-
-  const getDistrictName = (districtId: string) => {
-    const district = districts.find((d) => d.id === districtId);
-    return district ? district.name : "Unknown District";
-  };
+  }, [searchTerm, propAssets, vitAssets]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -119,8 +109,8 @@ export function VITAssetsTable({ assets: propAssets, onAddAsset, onEditAsset, on
       asset.serialNumber,
       asset.typeOfUnit,
       asset.voltageLevel,
-      getRegionName(asset.regionId),
-      getDistrictName(asset.districtId),
+      asset.region || "Unknown Region",
+      asset.district || "Unknown District",
       asset.location,
       asset.gpsCoordinates,
       asset.status,
@@ -217,8 +207,8 @@ export function VITAssetsTable({ assets: propAssets, onAddAsset, onEditAsset, on
                       {asset.status}
                     </Badge>
                   </TableCell>
-                  <TableCell>{getRegionName(asset.regionId)}</TableCell>
-                  <TableCell>{getDistrictName(asset.districtId)}</TableCell>
+                  <TableCell>{asset.region || "Unknown Region"}</TableCell>
+                  <TableCell>{asset.district || "Unknown District"}</TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>

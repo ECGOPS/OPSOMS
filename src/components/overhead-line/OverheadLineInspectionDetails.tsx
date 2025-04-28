@@ -46,11 +46,11 @@ export function OverheadLineInspectionDetails({
         <CardContent className="grid grid-cols-2 gap-4">
           <div>
             <p className="text-sm font-medium text-muted-foreground">Region</p>
-            <p>{getRegionName(inspection.regionId)}</p>
+            <p>{inspection.region || "Unknown"}</p>
           </div>
           <div>
             <p className="text-sm font-medium text-muted-foreground">District</p>
-            <p>{getDistrictName(inspection.districtId)}</p>
+            <p>{inspection.district || "Unknown"}</p>
           </div>
           <div>
             <p className="text-sm font-medium text-muted-foreground">Feeder Name</p>
@@ -70,11 +70,17 @@ export function OverheadLineInspectionDetails({
           </div>
           <div>
             <p className="text-sm font-medium text-muted-foreground">Created At</p>
-            <p>{format(new Date(inspection.createdAt), "dd/MM/yyyy HH:mm")}</p>
+            <p>{inspection.date 
+              ? `${inspection.date}${inspection.time ? ` ${inspection.time}` : ''}`
+              : inspection.createdAt && inspection.createdAt !== "" && !isNaN(new Date(inspection.createdAt).getTime())
+              ? format(new Date(inspection.createdAt), "dd/MM/yyyy HH:mm")
+              : new Date().toLocaleDateString()}</p>
           </div>
           <div>
             <p className="text-sm font-medium text-muted-foreground">Last Updated</p>
-            <p>{format(new Date(inspection.updatedAt), "dd/MM/yyyy HH:mm")}</p>
+            <p>{inspection.updatedAt && inspection.updatedAt !== "" && !isNaN(new Date(inspection.updatedAt).getTime())
+              ? format(new Date(inspection.updatedAt), "dd/MM/yyyy HH:mm")
+              : new Date().toLocaleDateString()}</p>
           </div>
         </CardContent>
       </Card>
