@@ -48,7 +48,7 @@ export function StatsOverview({ op5Faults, controlOutages }: StatsOverviewProps)
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-      <Card className="bg-gray-50 dark:bg-gray-800/30 shadow-md animate-fade-up animate-duration-500 animate-delay-0">
+      <Card className="bg-red-50 border border-red-200 shadow-md animate-fade-up animate-duration-500 animate-delay-0">
         <CardHeader className="p-4 pb-2">
           <CardTitle>Total Faults</CardTitle>
           <CardDescription>Number of reported OP5 faults</CardDescription>
@@ -61,7 +61,7 @@ export function StatsOverview({ op5Faults, controlOutages }: StatsOverviewProps)
         </CardContent>
       </Card>
 
-      <Card className="bg-gray-50 dark:bg-gray-800/30 shadow-md animate-fade-up animate-duration-500 animate-delay-100">
+      <Card className="bg-orange-50 border border-orange-200 shadow-md animate-fade-up animate-duration-500 animate-delay-100">
         <CardHeader className="p-4 pb-2">
           <CardTitle>Total Outages</CardTitle>
           <CardDescription>Number of control system outages</CardDescription>
@@ -74,7 +74,7 @@ export function StatsOverview({ op5Faults, controlOutages }: StatsOverviewProps)
         </CardContent>
       </Card>
 
-      <Card className="bg-gray-50 dark:bg-gray-800/30 shadow-md animate-fade-up animate-duration-500 animate-delay-200">
+      <Card className="bg-blue-50 border border-blue-200 shadow-md animate-fade-up animate-duration-500 animate-delay-200">
         <CardHeader className="p-4 pb-2">
           <CardTitle>Affected Population</CardTitle>
           <CardDescription>Total population affected by faults</CardDescription>
@@ -87,7 +87,7 @@ export function StatsOverview({ op5Faults, controlOutages }: StatsOverviewProps)
         </CardContent>
       </Card>
 
-      <Card className="bg-gray-50 dark:bg-gray-800/30 shadow-md animate-fade-up animate-duration-500 animate-delay-300">
+      <Card className="bg-green-50 border border-green-200 shadow-md animate-fade-up animate-duration-500 animate-delay-300">
         <CardHeader className="p-4 pb-2">
           <CardTitle>Avg. Outage Time</CardTitle>
           <CardDescription>Average time to resolve a fault (hours)</CardDescription>

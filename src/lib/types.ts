@@ -1,5 +1,6 @@
 import { type ClassValue } from "clsx";
 import { LoadMonitoringData } from "./asset-types";
+import { DateRange } from "react-day-picker";
 
 export type UserRole = "district_engineer" | "regional_engineer" | "global_engineer" | "technician" | "system_admin" | null;
 
@@ -95,14 +96,30 @@ export type StatsOverviewProps = {
   controlOutages: ControlSystemOutage[];
 };
 
-export type FilterBarProps = {
-  setFilterRegion: (regionId: string) => void;
-  setFilterDistrict: (districtId: string) => void;
+export interface FilterBarProps {
+  setFilterRegion: (region: string | undefined) => void;
+  setFilterDistrict: (district: string | undefined) => void;
   setFilterStatus: (status: "all" | "active" | "resolved") => void;
   filterStatus: "all" | "active" | "resolved";
   onRefresh: () => void;
   isRefreshing: boolean;
-};
+  // Advanced filter props
+  setFilterFaultType: (type: string) => void;
+  setDateRange: (range: DateRange) => void;
+  setSelectedDay: (day: Date | undefined) => void;
+  setSelectedMonth: (month: number | undefined) => void;
+  setSelectedMonthYear: (year: number | undefined) => void;
+  setSelectedYear: (year: number | undefined) => void;
+  setDateFilterType: (type: "range" | "day" | "month" | "year") => void;
+  // Current values
+  filterFaultType: string;
+  dateRange: DateRange;
+  selectedDay: Date | undefined;
+  selectedMonth: number | undefined;
+  selectedMonthYear: number | undefined;
+  selectedYear: number | undefined;
+  dateFilterType: "range" | "day" | "month" | "year";
+}
 
 export interface BaseAsset {
   id: string;

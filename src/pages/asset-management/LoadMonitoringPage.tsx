@@ -49,6 +49,7 @@ export default function LoadMonitoringPage() {
   const [selectedMonth, setSelectedMonth] = useState<Date | null>(null);
   const [selectedRegion, setSelectedRegion] = useState<string | null>(null);
   const [selectedDistrict, setSelectedDistrict] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
 
   // Filter districts based on selected region
   const filteredDistricts = useMemo(() => {
@@ -98,8 +99,20 @@ export default function LoadMonitoringPage() {
       filtered = filtered.filter(record => record.districtId === selectedDistrict);
     }
     
+    // Apply search filter
+    if (searchTerm.trim() !== "") {
+      const lower = searchTerm.toLowerCase();
+      filtered = filtered.filter(record =>
+        (record.substationName && record.substationName.toLowerCase().includes(lower)) ||
+        (record.substationNumber && record.substationNumber.toLowerCase().includes(lower)) ||
+        (record.region && record.region.toLowerCase().includes(lower)) ||
+        (record.district && record.district.toLowerCase().includes(lower)) ||
+        (record.location && record.location.toLowerCase().includes(lower))
+      );
+    }
+    
     return filtered;
-  }, [loadMonitoringRecords, user, selectedDate, selectedMonth, selectedRegion, selectedDistrict]);
+  }, [loadMonitoringRecords, user, selectedDate, selectedMonth, selectedRegion, selectedDistrict, searchTerm]);
 
   // Format percentage loads when records change
   useEffect(() => {
@@ -405,78 +418,60 @@ export default function LoadMonitoringPage() {
   };
 
   const handleExportAllToCSV = () => {
-    // Create CSV content
-    const csvContent = [
-      ["Load Monitoring Records Report"],
-      ["Generated on", new Date().toLocaleDateString()],
-      [],
-      ["Record Details"]
+    // Define headers
+    const headers = [
+      "Date",
+      "Time",
+      "Substation Name",
+      "Substation Number",
+      "Region",
+      "District",
+      "Location",
+      "Rating (KVA)",
+      "Peak Load Status",
+      "Created By",
+      "Rated Load (A)",
+      "Red Phase Bulk Load (A)",
+      "Yellow Phase Bulk Load (A)",
+      "Blue Phase Bulk Load (A)",
+      "Average Current (A)",
+      "Percentage Load (%)",
+      "10% Rated Neutral (A)",
+      "Calculated Neutral (A)",
+      "Load Status"
     ];
 
-    // Add each record with all details
-    filteredRecords.forEach((record, index) => {
-      // Add a separator between records
-      if (index > 0) {
-        csvContent.push([]);
-      }
-
-      // Add basic information
-      csvContent.push(
-        ["Record #", (index + 1).toString()],
-        ["Date", formatDate(record.date)],
-        ["Time", record.time],
-        ["Substation Name", record.substationName],
-        ["Substation Number", record.substationNumber],
-        ["Region", record.region],
-        ["District", record.district],
-        ["Location", record.location],
-        ["Rating (KVA)", record.rating.toString()],
-        ["Peak Load Status", record.peakLoadStatus],
-        ["Created By", record.createdBy?.name || 'Unknown'],
-        [],
-        ["Feeder Legs Information"],
-        ["Leg", "Red Phase (A)", "Yellow Phase (A)", "Blue Phase (A)", "Neutral (A)"]
-      );
-
-      // Add feeder legs data
-      record.feederLegs.forEach((leg, legIndex) => {
-        csvContent.push([
-          `Leg ${legIndex + 1}`,
-          leg.redPhaseCurrent.toFixed(2),
-          leg.yellowPhaseCurrent.toFixed(2),
-          leg.bluePhaseCurrent.toFixed(2),
-          leg.neutralCurrent.toFixed(2)
-        ]);
-      });
-
-      // Add calculated load information
-      csvContent.push(
-        [],
-        ["Calculated Load Information"],
-        ["Metric", "Value"],
-        ["Rated Load (A)", record.ratedLoad.toFixed(2)],
-        ["Red Phase Bulk Load (A)", record.redPhaseBulkLoad.toFixed(2)],
-        ["Yellow Phase Bulk Load (A)", record.yellowPhaseBulkLoad.toFixed(2)],
-        ["Blue Phase Bulk Load (A)", record.bluePhaseBulkLoad.toFixed(2)],
-        ["Average Current (A)", record.averageCurrent.toFixed(2)],
-        ["Percentage Load (%)", record.percentageLoad.toFixed(2)],
-        ["10% Rated Neutral (A)", record.tenPercentFullLoadNeutral.toFixed(2)],
-        ["Calculated Neutral (A)", record.calculatedNeutral.toFixed(2)]
-      );
-
-      // Add load status
+    // Add each record as a single row
+    const rows = filteredRecords.map(record => {
       const loadStatus = getLoadStatus(record.percentageLoad);
-      csvContent.push(
-        [],
-        ["Load Status", loadStatus.status]
-      );
+      return [
+        formatDate(record.date),
+        record.time,
+        `"${record.substationName || ''}"`,
+        `"${record.substationNumber || ''}"`,
+        `"${record.region || ''}"`,
+        `"${record.district || ''}"`,
+        `"${record.location || ''}"`,
+        record.rating,
+        record.peakLoadStatus,
+        `"${record.createdBy?.name || 'Unknown'}"`,
+        record.ratedLoad?.toFixed(2) ?? '',
+        record.redPhaseBulkLoad?.toFixed(2) ?? '',
+        record.yellowPhaseBulkLoad?.toFixed(2) ?? '',
+        record.bluePhaseBulkLoad?.toFixed(2) ?? '',
+        record.averageCurrent?.toFixed(2) ?? '',
+        record.percentageLoad?.toFixed(2) ?? '',
+        record.tenPercentFullLoadNeutral?.toFixed(2) ?? '',
+        record.calculatedNeutral?.toFixed(2) ?? '',
+        loadStatus.status
+      ];
     });
 
-    // Convert to CSV string
-    const csvString = csvContent.map(row => row.join(",")).join("\n");
-    
+    // Combine headers and rows
+    const csvContent = [headers, ...rows].map(row => row.join(",")).join("\n");
+
     // Create and download file
-    const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
     link.setAttribute("href", url);
@@ -485,7 +480,6 @@ export default function LoadMonitoringPage() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    
     toast.success("All records exported to CSV successfully");
   };
 
@@ -495,6 +489,7 @@ export default function LoadMonitoringPage() {
     setSelectedMonth(null);
     setSelectedRegion(null);
     setSelectedDistrict(null);
+    setSearchTerm("");
   };
 
   return (
@@ -584,12 +579,23 @@ export default function LoadMonitoringPage() {
             )}
           </div>
 
+          {/* Search Bar */}
+          <div className="mb-4 flex justify-end">
+            <input
+              type="text"
+              placeholder="Search by substation, number, region, district, or location..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="border rounded px-3 py-2 w-full max-w-xs focus:outline-none focus:ring focus:border-blue-300"
+            />
+          </div>
+
           {/* Reset Filters Button */}
           <div className="flex justify-end mb-4">
             <Button
               variant="outline"
               onClick={handleResetFilters}
-              disabled={!selectedDate && !selectedMonth && !selectedRegion && !selectedDistrict}
+              disabled={!selectedDate && !selectedMonth && !selectedRegion && !selectedDistrict && !searchTerm}
               className="w-full sm:w-auto"
             >
               Reset Filters
@@ -599,7 +605,7 @@ export default function LoadMonitoringPage() {
           {/* Table Section */}
           <Card>
             <CardContent className="p-0 sm:p-6">
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto relative">
                 <Table>
                   <TableCaption>List of load monitoring records</TableCaption>
                   <TableHeader className="sticky top-0 bg-background z-10">
@@ -613,7 +619,7 @@ export default function LoadMonitoringPage() {
                       <TableHead className="whitespace-nowrap">Load Status</TableHead>
                       <TableHead className="whitespace-nowrap">Peak Status</TableHead>
                       <TableHead className="whitespace-nowrap">Created By</TableHead>
-                      <TableHead className="whitespace-nowrap">Actions</TableHead>
+                      <TableHead className="whitespace-nowrap sticky right-0 bg-background">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -623,9 +629,17 @@ export default function LoadMonitoringPage() {
                       const loadStatus = getLoadStatus(record.percentageLoad);
                       
                       return (
-                        <TableRow key={record.id}>
+                        <TableRow 
+                          key={record.id}
+                          className="cursor-pointer hover:bg-muted/50"
+                          onClick={() => handleView(record.id)}
+                        >
                           <TableCell className="whitespace-nowrap">{formatDate(record.date)}</TableCell>
-                          <TableCell className="whitespace-nowrap">{record.substationName}</TableCell>
+                          <TableCell className="whitespace-nowrap">{
+                            record.substationName && record.substationNumber
+                              ? `${record.substationName} (${record.substationNumber})`
+                              : record.substationName || record.substationNumber || "-"
+                          }</TableCell>
                           <TableCell className="whitespace-nowrap">{region?.name || 'Unknown'}</TableCell>
                           <TableCell className="whitespace-nowrap">{district?.name || 'Unknown'}</TableCell>
                           <TableCell className="whitespace-nowrap">{record.rating}</TableCell>
@@ -637,7 +651,7 @@ export default function LoadMonitoringPage() {
                           </TableCell>
                           <TableCell className="whitespace-nowrap">{record.peakLoadStatus}</TableCell>
                           <TableCell className="whitespace-nowrap">{record.createdBy?.name || 'Unknown'}</TableCell>
-                          <TableCell>
+                          <TableCell className="sticky right-0 bg-background">
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <Button variant="ghost" className="h-8 w-8 p-0">
@@ -664,7 +678,10 @@ export default function LoadMonitoringPage() {
                                   (user?.role === 'regional_engineer' && record.region === user.region) ||
                                   (user?.role === 'district_engineer' && record.district === user.district)) && (
                                   <>
-                                    <DropdownMenuItem onClick={() => handleEdit(record.id)}>
+                                    <DropdownMenuItem onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleEdit(record.id);
+                                    }}>
                                       Edit
                                     </DropdownMenuItem>
                                     <DropdownMenuSeparator />

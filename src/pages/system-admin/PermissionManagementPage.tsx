@@ -412,7 +412,7 @@ export default function PermissionManagementPage() {
 
         {/* Edit Permissions Dialog */}
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent className="w-[95vw] sm:max-w-[600px]">
+          <DialogContent className="w-[98vw] max-w-[98vw] sm:max-w-[600px] overflow-y-auto max-h-[90vh]">
             <DialogHeader>
               <DialogTitle className="text-lg sm:text-xl font-semibold">
                 Edit Permissions for {editingFeature?.replace('_', ' ').toUpperCase()}
@@ -424,11 +424,11 @@ export default function PermissionManagementPage() {
             <div className="py-4">
               <div className="space-y-4">
                 {allRoles.map((role) => (
-                  <div key={role} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <span className="font-medium text-gray-700">
+                  <div key={role} className="flex flex-col xs:flex-row xs:items-center justify-between p-3 bg-gray-50 rounded-lg gap-2 xs:gap-0">
+                    <span className="font-medium text-gray-700 mb-2 xs:mb-0">
                       {role.replace('_', ' ').toUpperCase()}
                     </span>
-                    <div className="flex items-center space-x-4">
+                    <div className="flex flex-wrap gap-3 xs:gap-4 w-full xs:w-auto">
                       <div className="flex items-center space-x-2">
                         <Checkbox
                           checked={viewPermissions.includes(role)}
@@ -439,8 +439,8 @@ export default function PermissionManagementPage() {
                         <Label>View</Label>
                       </div>
                       <div className="flex items-center space-x-2">
-                    <Checkbox
-                      checked={editPermissions.includes(role)}
+                        <Checkbox
+                          checked={editPermissions.includes(role)}
                           onCheckedChange={() => handlePermissionToggle(role, 'edit')}
                           disabled={!viewPermissions.includes(role)}
                           className="h-5 w-5"
@@ -453,9 +453,9 @@ export default function PermissionManagementPage() {
                           checked={deletePermissions.includes(role)}
                           onCheckedChange={() => handlePermissionToggle(role, 'delete')}
                           disabled={!viewPermissions.includes(role) || !editPermissions.includes(role)}
-                      className="h-5 w-5"
+                          className="h-5 w-5"
                           aria-label={`Allow ${role} to delete`}
-                    />
+                        />
                         <Label>Delete</Label>
                       </div>
                     </div>

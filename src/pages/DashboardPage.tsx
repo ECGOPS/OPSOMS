@@ -9,9 +9,11 @@ import { FaultCard } from "@/components/dashboard/FaultCard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { PlusCircle, AlertTriangle, ZapOff, RefreshCw, Filter } from "lucide-react";
-import { OP5Fault, ControlSystemOutage } from "@/lib/types";
+import { OP5Fault, ControlSystemOutage, FaultType } from "@/lib/types";
 import { getUserRegionAndDistrict } from "@/utils/user-utils";
 import { PermissionService } from "@/services/PermissionService";
+import { DateRange } from "react-day-picker";
+import { format, isWithinInterval, isSameDay, isSameMonth, isSameYear } from "date-fns";
 
 export default function DashboardPage() {
   const { isAuthenticated, user } = useAuth();
@@ -31,6 +33,15 @@ export default function DashboardPage() {
   });
   const [selectedRegion, setSelectedRegion] = useState<string>("");
   const [selectedDistrict, setSelectedDistrict] = useState<string>("");
+  
+  // Advanced filter states
+  const [filterFaultType, setFilterFaultType] = useState<string>("all");
+  const [dateRange, setDateRange] = useState<DateRange>({ from: undefined, to: undefined });
+  const [selectedDay, setSelectedDay] = useState<Date | undefined>(undefined);
+  const [selectedMonth, setSelectedMonth] = useState<number | undefined>(undefined);
+  const [selectedMonthYear, setSelectedMonthYear] = useState<number | undefined>(undefined);
+  const [selectedYear, setSelectedYear] = useState<number | undefined>(undefined);
+  const [dateFilterType, setDateFilterType] = useState<"range" | "day" | "month" | "year">("range");
   
   // Set initial filter values based on user role
   useEffect(() => {
@@ -77,10 +88,29 @@ export default function DashboardPage() {
     console.log('[Dashboard] Loading faults with filters:', { 
       filterRegion, 
       filterDistrict, 
-      filterStatus 
+      filterStatus,
+      filterFaultType,
+      dateFilterType,
+      dateRange,
+      selectedDay,
+      selectedMonth,
+      selectedMonthYear,
+      selectedYear
     });
     loadFaults();
-  }, [filterRegion, filterDistrict, filterStatus, getFilteredFaults]);
+  }, [
+    filterRegion, 
+    filterDistrict, 
+    filterStatus, 
+    filterFaultType,
+    dateFilterType,
+    dateRange,
+    selectedDay,
+    selectedMonth,
+    selectedMonthYear,
+    selectedYear,
+    getFilteredFaults
+  ]);
   
   const loadFaults = () => {
     console.log('[Dashboard] loadFaults called');
@@ -90,18 +120,74 @@ export default function DashboardPage() {
       controlCount: filteredFaults.controlOutages.length
     });
     
-    // Filter by status if needed
+    // Apply status filter
+    let statusFilteredOP5 = filteredFaults.op5Faults;
+    let statusFilteredControl = filteredFaults.controlOutages;
+    
     if (filterStatus !== "all") {
-      const filteredOP5 = filteredFaults.op5Faults.filter(f => f.status === filterStatus);
-      const filteredControl = filteredFaults.controlOutages.filter(f => f.status === filterStatus);
-      
-      setFaults({
-        op5Faults: filteredOP5,
-        controlOutages: filteredControl
-      });
-    } else {
-      setFaults(filteredFaults);
+      statusFilteredOP5 = filteredFaults.op5Faults.filter(f => f.status === filterStatus);
+      statusFilteredControl = filteredFaults.controlOutages.filter(f => f.status === filterStatus);
     }
+    
+    // Apply fault type filter
+    let typeFilteredOP5 = statusFilteredOP5;
+    let typeFilteredControl = statusFilteredControl;
+    
+    if (filterFaultType !== "all") {
+      typeFilteredOP5 = statusFilteredOP5.filter(f => f.faultType === filterFaultType);
+      typeFilteredControl = statusFilteredControl.filter(f => f.faultType === filterFaultType);
+    }
+    
+    // Apply date filters
+    let dateFilteredOP5 = typeFilteredOP5;
+    let dateFilteredControl = typeFilteredControl;
+    
+    if (dateFilterType === "range" && dateRange.from && dateRange.to) {
+      dateFilteredOP5 = typeFilteredOP5.filter(f => {
+        const faultDate = new Date(f.occurrenceDate);
+        return isWithinInterval(faultDate, { start: dateRange.from, end: dateRange.to });
+      });
+      
+      dateFilteredControl = typeFilteredControl.filter(f => {
+        const faultDate = new Date(f.occurrenceDate);
+        return isWithinInterval(faultDate, { start: dateRange.from, end: dateRange.to });
+      });
+    } else if (dateFilterType === "day" && selectedDay) {
+      dateFilteredOP5 = typeFilteredOP5.filter(f => {
+        const faultDate = new Date(f.occurrenceDate);
+        return isSameDay(faultDate, selectedDay);
+      });
+      
+      dateFilteredControl = typeFilteredControl.filter(f => {
+        const faultDate = new Date(f.occurrenceDate);
+        return isSameDay(faultDate, selectedDay);
+      });
+    } else if (dateFilterType === "month" && selectedMonth !== undefined && selectedMonthYear !== undefined) {
+      dateFilteredOP5 = typeFilteredOP5.filter(f => {
+        const faultDate = new Date(f.occurrenceDate);
+        return isSameMonth(faultDate, new Date(selectedMonthYear, selectedMonth));
+      });
+      
+      dateFilteredControl = typeFilteredControl.filter(f => {
+        const faultDate = new Date(f.occurrenceDate);
+        return isSameMonth(faultDate, new Date(selectedMonthYear, selectedMonth));
+      });
+    } else if (dateFilterType === "year" && selectedYear !== undefined) {
+      dateFilteredOP5 = typeFilteredOP5.filter(f => {
+        const faultDate = new Date(f.occurrenceDate);
+        return isSameYear(faultDate, new Date(selectedYear, 0));
+      });
+      
+      dateFilteredControl = typeFilteredControl.filter(f => {
+        const faultDate = new Date(f.occurrenceDate);
+        return isSameYear(faultDate, new Date(selectedYear, 0));
+      });
+    }
+    
+    setFaults({
+      op5Faults: dateFilteredOP5,
+      controlOutages: dateFilteredControl
+    });
   };
   
   const handleRefresh = () => {
@@ -161,6 +247,22 @@ export default function DashboardPage() {
           filterStatus={filterStatus}
           onRefresh={handleRefresh}
           isRefreshing={isRefreshing}
+          // Pass advanced filter props
+          setFilterFaultType={setFilterFaultType}
+          setDateRange={setDateRange}
+          setSelectedDay={setSelectedDay}
+          setSelectedMonth={setSelectedMonth}
+          setSelectedMonthYear={setSelectedMonthYear}
+          setSelectedYear={setSelectedYear}
+          setDateFilterType={setDateFilterType}
+          // Pass current values
+          filterFaultType={filterFaultType}
+          dateRange={dateRange}
+          selectedDay={selectedDay}
+          selectedMonth={selectedMonth}
+          selectedMonthYear={selectedMonthYear}
+          selectedYear={selectedYear}
+          dateFilterType={dateFilterType}
         />
         
         <Tabs defaultValue="all" className="mt-8">
@@ -200,6 +302,13 @@ export default function DashboardPage() {
                     setFilterDistrict(undefined);
                   }
                   setFilterStatus("all");
+                  setFilterFaultType("all");
+                  setDateRange({ from: undefined, to: undefined });
+                  setSelectedDay(undefined);
+                  setSelectedMonth(undefined);
+                  setSelectedMonthYear(undefined);
+                  setSelectedYear(undefined);
+                  setDateFilterType("range");
                 }}>
                   Clear filters
                 </Button>
@@ -233,6 +342,13 @@ export default function DashboardPage() {
                   setFilterRegion(undefined);
                   setFilterDistrict(undefined);
                   setFilterStatus("all");
+                  setFilterFaultType("all");
+                  setDateRange({ from: undefined, to: undefined });
+                  setSelectedDay(undefined);
+                  setSelectedMonth(undefined);
+                  setSelectedMonthYear(undefined);
+                  setSelectedYear(undefined);
+                  setDateFilterType("range");
                 }}>
                   Clear filters
                 </Button>
@@ -262,6 +378,13 @@ export default function DashboardPage() {
                   setFilterRegion(undefined);
                   setFilterDistrict(undefined);
                   setFilterStatus("all");
+                  setFilterFaultType("all");
+                  setDateRange({ from: undefined, to: undefined });
+                  setSelectedDay(undefined);
+                  setSelectedMonth(undefined);
+                  setSelectedMonthYear(undefined);
+                  setSelectedYear(undefined);
+                  setDateFilterType("range");
                 }}>
                   Clear filters
                 </Button>

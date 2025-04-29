@@ -254,10 +254,22 @@ export function Navbar() {
                 <Menu />
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="flex flex-col">
-              <nav className="flex flex-col gap-4 mt-8">
+            <SheetContent side="left" className="flex flex-col overflow-y-auto">
+              {/* Move Log Out button to the top for mobile */}
+              {isAuthenticated && (
+                <div className="space-y-3 mb-4">
+                  <div className="flex items-center gap-2">
+                    <User size={16} />
+                    <span className="font-medium">{user?.name || "User"}</span>
+                  </div>
+                  <Button variant="outline" className="w-full" onClick={handleLogout}>
+                    <LogOut size={16} className="mr-2" />
+                    Log Out
+                  </Button>
+                </div>
+              )}
+              <nav className="flex flex-col gap-4 mt-4">
                 <NavLinks />
-                
                 {/* Mobile Asset Management links */}
                 {isAuthenticated && (
                   <div className="space-y-3">
@@ -290,7 +302,6 @@ export function Navbar() {
                     </div>
                   </div>
                 )}
-
                 {/* Mobile Admin Links */}
                 {user?.role === "system_admin" && (
                   <div className="space-y-3">
@@ -324,32 +335,18 @@ export function Navbar() {
                   </div>
                 )}
               </nav>
-              
               <Separator className="my-4" />
-              
-              <div className="mt-auto">
-                {isAuthenticated ? (
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <User size={16} />
-                      <span className="font-medium">{user?.name || "User"}</span>
-                    </div>
-                    <Button variant="outline" className="w-full" onClick={handleLogout}>
-                      <LogOut size={16} className="mr-2" />
-                      Log Out
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-2">
-                    <Button variant="outline" className="w-full" asChild>
-                      <Link to="/login">Log In</Link>
-                    </Button>
-                    <Button className="w-full" asChild>
-                      <Link to="/signup">Sign Up</Link>
-                    </Button>
-                  </div>
-                )}
-              </div>
+              {/* Remove duplicate Log Out button at the bottom */}
+              {!isAuthenticated && (
+                <div className="flex flex-col gap-2 mt-auto">
+                  <Button variant="outline" className="w-full" asChild>
+                    <Link to="/login">Log In</Link>
+                  </Button>
+                  <Button className="w-full" asChild>
+                    <Link to="/signup">Sign Up</Link>
+                  </Button>
+                </div>
+              )}
             </SheetContent>
           </Sheet>
         </div>

@@ -313,7 +313,7 @@ export function FaultCard({ fault, type }: FaultCardProps) {
       </CardContent>
       
       <CardFooter className="p-4 pt-4 bg-white/80 dark:bg-gray-800/50 mt-auto">
-        <div className="flex gap-2 w-full">
+        <div className="flex flex-col gap-2 w-full sm:flex-row">
           {canResolve() && (
             <Dialog open={isResolveOpen} onOpenChange={setIsResolveOpen}>
               <DialogTrigger asChild>

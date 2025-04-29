@@ -24,7 +24,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import {
-  PlusCircle, Eye, Pencil, Download, FileText, Trash2
+  PlusCircle, Eye, Pencil, Download, FileText, Trash2, MoreHorizontal, Edit
 } from "lucide-react";
 import { VITAsset, VITInspectionChecklist } from "@/lib/types";
 import {
@@ -218,8 +218,8 @@ export default function VITInspectionManagementPage() {
 function InspectionDetailsView({ inspection }: { inspection: VITInspectionChecklist }) {
   const { vitAssets, regions, districts } = useData();
   const asset = vitAssets.find(a => a.id === inspection.vitAssetId);
-  const region = asset ? regions.find(r => r.id === asset.regionId)?.name || "Unknown" : "Unknown";
-  const district = asset ? districts.find(d => d.id === asset.districtId)?.name || "Unknown" : "Unknown";
+  const region = asset?.region || "Unknown";
+  const district = asset?.district || "Unknown";
 
   const getStatusDisplay = (value: string) => {
     if (value === "Yes") return <span className="text-green-600 font-medium">Yes</span>;
@@ -365,12 +365,12 @@ function InspectionRecordsTable({ onViewDetails, onEditInspection, onViewAsset }
       roleBasedAccess = true;
     } else if (user?.role === "regional_engineer" && user.region) {
       const userRegion = regions.find(r => r.name === user.region);
-      roleBasedAccess = userRegion ? asset.regionId === userRegion.id : false;
+      roleBasedAccess = userRegion ? asset.region === userRegion.id : false;
     } else if ((user?.role === "district_engineer" || user?.role === "technician") && user.region && user.district) {
       const userRegion = regions.find(r => r.name === user.region);
       const userDistrict = districts.find(d => d.name === user.district);
       roleBasedAccess = userRegion && userDistrict ? 
-        asset.regionId === userRegion.id && asset.districtId === userDistrict.id : false;
+        asset.region === userRegion.id && asset.district === userDistrict.id : false;
     }
 
     if (!roleBasedAccess) return false;
@@ -378,8 +378,8 @@ function InspectionRecordsTable({ onViewDetails, onEditInspection, onViewAsset }
     // Then apply search filtering if there's a search term
     if (searchTerm) {
       const lowercaseSearch = searchTerm.toLowerCase();
-      const region = regions.find(r => r.id === asset.regionId)?.name || "";
-      const district = districts.find(d => d.id === asset.districtId)?.name || "";
+      const region = regions.find(r => r.id === asset.region)?.name || "";
+      const district = districts.find(d => d.id === asset.district)?.name || "";
       
       return (
         asset.serialNumber.toLowerCase().includes(lowercaseSearch) ||
@@ -407,8 +407,8 @@ function InspectionRecordsTable({ onViewDetails, onEditInspection, onViewAsset }
       return;
     }
     
-    const region = regions.find(r => r.id === asset.regionId)?.name || "Unknown";
-    const district = districts.find(d => d.id === asset.districtId)?.name || "Unknown";
+    const region = regions.find(r => r.id === asset.region)?.name || "Unknown";
+    const district = districts.find(d => d.id === asset.district)?.name || "Unknown";
     
     // Create PDF document
     const doc = new jsPDF();
@@ -508,8 +508,8 @@ function InspectionRecordsTable({ onViewDetails, onEditInspection, onViewAsset }
       return;
     }
     
-    const region = regions.find(r => r.id === asset.regionId)?.name || "Unknown";
-    const district = districts.find(d => d.id === asset.districtId)?.name || "Unknown";
+    const region = regions.find(r => r.id === asset.region)?.name || "Unknown";
+    const district = districts.find(d => d.id === asset.district)?.name || "Unknown";
     
     // Create CSV content
     const csvContent = [
@@ -590,140 +590,125 @@ function InspectionRecordsTable({ onViewDetails, onEditInspection, onViewAsset }
         />
       </div>
 
-      <div className="rounded-md border overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Asset</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Region</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">District</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Inspector</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Issues</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {filteredInspections.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="px-6 py-4 text-center text-sm text-gray-500">
-                  {searchTerm ? "No inspections found matching your search" : "No inspection records found"}
-                </td>
-              </tr>
-            ) : (
-              filteredInspections.map(inspection => {
-                const asset = vitAssets.find(a => a.id === inspection.vitAssetId);
-                if (!asset) return null;
-                
-                const region = regions.find(r => r.id === asset.regionId)?.name || "Unknown";
-                const district = districts.find(d => d.id === asset.districtId)?.name || "Unknown";
-                
-                // Count issues
-                const issuesCount = Object.entries(inspection).reduce((count, [key, value]) => {
-                  // Check only Yes/No fields for issues (Yes for negative fields, No for positive fields)
-                  if (key === 'rodentTermiteEncroachment' && value === 'Yes') return count + 1;
-                  if (key === 'batteryPowerLow' && value === 'Yes') return count + 1;
-                  if (key === 'gasLevelLow' && value === 'Yes') return count + 1;
-                  if (key === 'silicaGelCondition' && value === 'Bad') return count + 1;
-                  
-                  // All other boolean fields where "No" is an issue
-                  if (
-                    ['cleanDustFree', 'protectionButtonEnabled', 'recloserButtonEnabled', 
-                     'groundEarthButtonEnabled', 'acPowerOn', 'handleLockOn', 'remoteButtonEnabled', 
-                     'earthingArrangementAdequate', 'noFusesBlown', 'noDamageToBushings', 
-                     'noDamageToHVConnections', 'insulatorsClean', 'paintworkAdequate', 
-                     'ptFuseLinkIntact', 'noCorrosion', 'correctLabelling'].includes(key) && 
-                     value === 'No'
-                  ) {
-                    return count + 1;
-                  }
-                  
-                  return count;
-                }, 0);
-                
-                return (
-                  <tr key={inspection.id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(inspection.inspectionDate).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {asset.serialNumber}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {region}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {district}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {inspection.inspectedBy}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        issuesCount > 0 ? "bg-red-100 text-red-800" : "bg-green-100 text-green-800"
-                      }`}>
-                        {issuesCount} {issuesCount === 1 ? "issue" : "issues"}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                            <span className="sr-only">Open menu</span>
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              width="16"
-                              height="16"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              className="h-4 w-4"
-                            >
-                              <circle cx="12" cy="12" r="1" />
-                              <circle cx="19" cy="12" r="1" />
-                              <circle cx="5" cy="12" r="1" />
-                            </svg>
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => handleViewInspectionDetails(inspection)}>
-                            <Eye className="mr-2 h-4 w-4" />
-                            View Details
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleEditInspectionDetails(inspection)}>
-                            <Pencil className="mr-2 h-4 w-4" />
-                            Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => exportToPDF(inspection)}>
-                            <FileText className="mr-2 h-4 w-4" />
-                            Export to PDF
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => exportToCSV(inspection)}>
-                            <Download className="mr-2 h-4 w-4" />
-                            Export to CSV
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem 
-                            className="text-red-600" 
-                            onClick={() => handleDeleteInspection(inspection.id)}
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </td>
+      <div className="rounded-md border">
+        <div className="relative">
+          <div className="overflow-x-auto">
+            <div className="max-h-[calc(100vh-300px)] overflow-y-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50 sticky top-0 z-10">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 bg-gray-50">Date</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Asset</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Region</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">District</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Inspector</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Issues</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider sticky right-0 bg-gray-50">Actions</th>
                   </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {filteredInspections.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-4 text-center text-sm text-gray-500">
+                        {searchTerm ? "No inspections found matching your search" : "No inspection records found"}
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredInspections.map(inspection => {
+                      const asset = vitAssets.find(a => a.id === inspection.vitAssetId);
+                      if (!asset) return null;
+                      
+                      const region = asset.region || "Unknown";
+                      const district = asset.district || "Unknown";
+                      
+                      // Count issues
+                      const issuesCount = Object.entries(inspection).reduce((count, [key, value]) => {
+                        // Check only Yes/No fields for issues (Yes for negative fields, No for positive fields)
+                        if (key === 'rodentTermiteEncroachment' && value === 'Yes') return count + 1;
+                        if (key === 'batteryPowerLow' && value === 'Yes') return count + 1;
+                        if (key === 'gasLevelLow' && value === 'Yes') return count + 1;
+                        if (key === 'silicaGelCondition' && value === 'Bad') return count + 1;
+                        
+                        // All other boolean fields where "No" is an issue
+                        if (
+                          ['cleanDustFree', 'protectionButtonEnabled', 'recloserButtonEnabled', 
+                           'groundEarthButtonEnabled', 'acPowerOn', 'handleLockOn', 'remoteButtonEnabled', 
+                           'earthingArrangementAdequate', 'noFusesBlown', 'noDamageToBushings', 
+                           'noDamageToHVConnections', 'insulatorsClean', 'paintworkAdequate', 
+                           'ptFuseLinkIntact', 'noCorrosion', 'correctLabelling'].includes(key) && 
+                           value === 'No'
+                        ) {
+                          return count + 1;
+                        }
+                        
+                        return count;
+                      }, 0);
+                      
+                      return (
+                        <tr key={inspection.id}>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 sticky left-0 bg-white">
+                            {new Date(inspection.inspectionDate).toLocaleDateString()}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {asset.serialNumber}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {region}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {district}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {inspection.inspectedBy}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              issuesCount > 0 ? "bg-red-100 text-red-800" : "bg-green-100 text-green-800"
+                            }`}>
+                              {issuesCount} {issuesCount === 1 ? "issue" : "issues"}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium sticky right-0 bg-white">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" className="h-8 w-8 p-0">
+                                  <span className="sr-only">Open menu</span>
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => onViewDetails(inspection)}>
+                                  <Eye className="mr-2 h-4 w-4" />
+                                  View Details
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => onViewAsset(asset.id)}>
+                                  <FileText className="mr-2 h-4 w-4" />
+                                  View Asset
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => onEditInspection(inspection)}>
+                                  <Edit className="mr-2 h-4 w-4" />
+                                  Edit
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem 
+                                  onClick={() => handleDeleteInspection(inspection.id)}
+                                  className="text-red-600"
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
