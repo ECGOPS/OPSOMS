@@ -48,7 +48,7 @@ export interface AuthContextType {
   verifyStaffId: (staffId: string) => { isValid: boolean; staffInfo?: { name: string; role: UserRole; region?: string; district?: string } };
   staffIds: StaffIdEntry[];
   setStaffIds: React.Dispatch<React.SetStateAction<StaffIdEntry[]>>;
-  addStaffId: (entry: Omit<StaffIdEntry, "id"> & { customId?: string }) => void;
+  addStaffId: (entry: Omit<StaffIdEntry, "id"> & { customId?: string }) => Promise<string>;
   updateStaffId: (id: string, entry: Omit<StaffIdEntry, "id">) => void;
   deleteStaffId: (id: string) => void;
 }
@@ -559,6 +559,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       setStaffIds(prev => [...prev, { id, ...cleanedEntry }]);
       toast.success("Staff ID added successfully");
+      return id; // Return the ID for duplicate checking
     } catch (error) {
       console.error("Error adding staff ID:", error);
       let errorMessage = "Failed to add staff ID";
@@ -571,6 +572,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       
       toast.error(errorMessage);
+      throw error; // Re-throw the error to be caught by the caller
     }
   };
 

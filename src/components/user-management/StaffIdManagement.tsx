@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,15 +28,18 @@ import { Badge } from "@/components/ui/badge";
 import { Edit2, Trash2, Plus, Download, Upload, Search, Users, Filter } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { getFirestore, getDocs, collection, getCountFromServer, query, orderBy, limit, startAt } from "firebase/firestore";
+import { getFirestore, getDocs, collection, getCountFromServer, query, orderBy, limit, startAt, startAfter, where } from "firebase/firestore";
+import { Skeleton } from "@/components/ui/skeleton";
 
-export type StaffIdEntry = {
+export interface StaffIdEntry {
   id: string;
   name: string;
   role: UserRole;
-  region?: string;
-  district?: string;
-};
+  region: string;
+  district: string;
+  customId?: string;
+  createdAt?: string;
+}
 
 export function StaffIdManagement() {
   const { staffIds, setStaffIds, addStaffId, updateStaffId, deleteStaffId } = useAuth();
@@ -44,6 +47,7 @@ export function StaffIdManagement() {
   const [isAdding, setIsAdding] = useState(false);
   const [isEditing, setIsEditing] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [newEntry, setNewEntry] = useState<Omit<StaffIdEntry, "id"> & { customId?: string }>({
     name: "",
     role: "technician",
@@ -54,64 +58,22 @@ export function StaffIdManagement() {
   const [error, setError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filteredStaffIds, setFilteredStaffIds] = useState(staffIds);
+  const [filteredStaffIds, setFilteredStaffIds] = useState<StaffIdEntry[]>([]);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [roleFilter, setRoleFilter] = useState<UserRole | "all">("all");
   const [regionFilter, setRegionFilter] = useState<string>("all");
   const [districtFilter, setDistrictFilter] = useState<string>("all");
+  const [lastVisible, setLastVisible] = useState<any>(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [visibleItems, setVisibleItems] = useState(50);
+  const tableRef = useRef<HTMLDivElement>(null);
 
-  // Pagination state
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-  const [totalItems, setTotalItems] = useState(0);
-
-  // Optimize initial data loading with pagination
-  useEffect(() => {
-    const loadInitialData = async () => {
-      if (isInitialLoad) {
-        setIsLoading(true);
-        try {
-          const db = getFirestore();
-          const staffIdsRef = collection(db, "staffIds");
-          
-          // Get total count
-          const countSnapshot = await getCountFromServer(staffIdsRef);
-          setTotalItems(countSnapshot.data().count);
-
-          // Get first page
-          const q = query(
-            staffIdsRef,
-            orderBy("name"),
-            limit(pageSize)
-          );
-          
-          const staffIdsSnapshot = await getDocs(q);
-          const staffIdsList: StaffIdEntry[] = [];
-          staffIdsSnapshot.forEach((doc) => {
-            staffIdsList.push({ id: doc.id, ...doc.data() } as StaffIdEntry);
-          });
-          
-          setStaffIds(staffIdsList);
-          setFilteredStaffIds(staffIdsList);
-        } catch (error) {
-          console.error("Error loading staff IDs:", error);
-          toast.error("Failed to load staff IDs");
-        } finally {
-          setIsLoading(false);
-          setIsInitialLoad(false);
-        }
-      }
-    };
-
-    loadInitialData();
-  }, [isInitialLoad, setStaffIds, pageSize]);
-
-  // Optimize search filtering with pagination
-  useEffect(() => {
-    if (!staffIds) return;
+  // Memoize filtered results for better performance
+  const filteredResults = useMemo(() => {
+    if (!staffIds) return [];
     
     const lowerCaseSearchTerm = searchTerm.toLowerCase();
-    const filtered = staffIds.filter(idObj => {
+    return staffIds.filter(idObj => {
       const matchesSearch = 
         idObj.id.toLowerCase().includes(lowerCaseSearchTerm) ||
         idObj.name.toLowerCase().includes(lowerCaseSearchTerm) ||
@@ -124,48 +86,146 @@ export function StaffIdManagement() {
 
       return matchesSearch && matchesRole && matchesRegion && matchesDistrict;
     });
+  }, [staffIds, searchTerm, roleFilter, regionFilter, districtFilter]);
 
-    setTotalItems(filtered.length);
-    const startIndex = (currentPage - 1) * pageSize;
-    const endIndex = startIndex + pageSize;
-    setFilteredStaffIds(filtered.slice(startIndex, endIndex));
-  }, [staffIds, searchTerm, roleFilter, regionFilter, districtFilter, currentPage, pageSize]);
+  // Load all staff IDs when searching
+  useEffect(() => {
+    const loadAllStaffIds = async () => {
+      if (searchTerm || roleFilter !== "all" || regionFilter !== "all" || districtFilter !== "all") {
+        setIsLoading(true);
+        try {
+          const db = getFirestore();
+          const staffIdsRef = collection(db, "staffIds");
+          
+          // Load all staff IDs when searching or filtering
+          const q = query(
+            staffIdsRef,
+            orderBy("name")
+          );
+          
+          const staffIdsSnapshot = await getDocs(q);
+          const staffIdsList: StaffIdEntry[] = [];
+          staffIdsSnapshot.forEach((doc) => {
+            staffIdsList.push({ id: doc.id, ...doc.data() } as StaffIdEntry);
+          });
+          
+          setStaffIds(staffIdsList);
+          setFilteredStaffIds(staffIdsList);
+          setVisibleItems(staffIdsList.length);
+          setHasMore(false);
+        } catch (error) {
+          console.error("Error loading staff IDs:", error);
+          toast.error("Failed to load staff IDs");
+        } finally {
+          setIsLoading(false);
+        }
+      }
+    };
 
-  // Optimize refresh function with pagination
-  const refreshStaffIds = useCallback(async () => {
-    setIsLoading(true);
+    loadAllStaffIds();
+  }, [searchTerm, roleFilter, regionFilter, districtFilter]);
+
+  // Optimize initial data loading with chunked loading
+  useEffect(() => {
+    const loadInitialData = async () => {
+      if (isInitialLoad && !searchTerm && roleFilter === "all" && regionFilter === "all" && districtFilter === "all") {
+        setIsLoading(true);
+        try {
+          const db = getFirestore();
+          const staffIdsRef = collection(db, "staffIds");
+          
+          // Load first chunk of data
+          const q = query(
+            staffIdsRef,
+            orderBy("name"),
+            limit(50)
+          );
+          
+          const staffIdsSnapshot = await getDocs(q);
+          const staffIdsList: StaffIdEntry[] = [];
+          staffIdsSnapshot.forEach((doc) => {
+            staffIdsList.push({ id: doc.id, ...doc.data() } as StaffIdEntry);
+          });
+          
+          setStaffIds(staffIdsList);
+          setFilteredStaffIds(staffIdsList);
+          setLastVisible(staffIdsSnapshot.docs[staffIdsSnapshot.docs.length - 1]);
+          setHasMore(staffIdsSnapshot.docs.length === 50);
+        } catch (error) {
+          console.error("Error loading staff IDs:", error);
+          toast.error("Failed to load staff IDs");
+        } finally {
+          setIsLoading(false);
+          setIsInitialLoad(false);
+        }
+      }
+    };
+
+    loadInitialData();
+  }, [isInitialLoad, setStaffIds, searchTerm, roleFilter, regionFilter, districtFilter]);
+
+  // Load more data when scrolling (only when not searching/filtering)
+  const loadMore = useCallback(async () => {
+    if (!hasMore || isLoadingMore || searchTerm || roleFilter !== "all" || regionFilter !== "all" || districtFilter !== "all") return;
+
+    setIsLoadingMore(true);
     try {
       const db = getFirestore();
       const staffIdsRef = collection(db, "staffIds");
       
-      // Get total count
-      const countSnapshot = await getCountFromServer(staffIdsRef);
-      setTotalItems(countSnapshot.data().count);
-
-      // Get current page
       const q = query(
         staffIdsRef,
         orderBy("name"),
-        limit(pageSize),
-        startAt((currentPage - 1) * pageSize)
+        startAfter(lastVisible),
+        limit(50)
       );
       
       const staffIdsSnapshot = await getDocs(q);
-      const staffIdsList: StaffIdEntry[] = [];
+      const newStaffIds: StaffIdEntry[] = [];
       staffIdsSnapshot.forEach((doc) => {
-        staffIdsList.push({ id: doc.id, ...doc.data() } as StaffIdEntry);
+        newStaffIds.push({ id: doc.id, ...doc.data() } as StaffIdEntry);
       });
       
-      setStaffIds(staffIdsList);
-      setFilteredStaffIds(staffIdsList);
-      toast.success(`${staffIdsList.length} staff IDs loaded`);
+      setStaffIds(prev => [...prev, ...newStaffIds]);
+      setFilteredStaffIds(prev => [...prev, ...newStaffIds]);
+      setLastVisible(staffIdsSnapshot.docs[staffIdsSnapshot.docs.length - 1]);
+      setHasMore(staffIdsSnapshot.docs.length === 50);
+      setVisibleItems(prev => prev + 50);
     } catch (error) {
-      console.error("Error refreshing staff IDs:", error);
-      toast.error("Failed to refresh staff IDs");
+      console.error("Error loading more staff IDs:", error);
+      toast.error("Failed to load more staff IDs");
     } finally {
-      setIsLoading(false);
+      setIsLoadingMore(false);
     }
-  }, [setStaffIds, currentPage, pageSize]);
+  }, [hasMore, isLoadingMore, lastVisible, setStaffIds, searchTerm, roleFilter, regionFilter, districtFilter]);
+
+  // Handle scroll to load more (only when not searching/filtering)
+  useEffect(() => {
+    const handleScroll = () => {
+      if (tableRef.current && !searchTerm && roleFilter === "all" && regionFilter === "all" && districtFilter === "all") {
+        const { scrollTop, scrollHeight, clientHeight } = tableRef.current;
+        if (scrollHeight - scrollTop <= clientHeight * 1.5) {
+          loadMore();
+        }
+      }
+    };
+
+    const currentRef = tableRef.current;
+    if (currentRef) {
+      currentRef.addEventListener('scroll', handleScroll);
+      return () => currentRef.removeEventListener('scroll', handleScroll);
+    }
+  }, [loadMore, searchTerm, roleFilter, regionFilter, districtFilter]);
+
+  // Update filtered results when filters change
+  useEffect(() => {
+    setFilteredStaffIds(filteredResults);
+    if (searchTerm || roleFilter !== "all" || regionFilter !== "all" || districtFilter !== "all") {
+      setVisibleItems(filteredResults.length);
+    } else {
+      setVisibleItems(50);
+    }
+  }, [filteredResults, searchTerm, roleFilter, regionFilter, districtFilter]);
 
   // Optimize add function
   const handleAdd = async () => {
@@ -302,6 +362,12 @@ export function StaffIdManagement() {
       
       let successCount = 0;
       let errorCount = 0;
+      let duplicateCount = 0;
+      const duplicateEntries: string[] = [];
+      
+      // Get existing staff IDs for duplicate checking
+      const existingStaffIds = new Set(staffIds.map(s => s.id.toLowerCase()));
+      const existingCustomIds = new Set(staffIds.map(s => s.customId?.toLowerCase()).filter(Boolean));
       
       for (const row of dataRows) {
         const [name, role, region, district, customId] = row.split(',').map(cell => cell.trim());
@@ -312,21 +378,59 @@ export function StaffIdManagement() {
             throw new Error(`Invalid role: ${role}`);
           }
 
-          addStaffId({
+          // Check for duplicate custom ID
+          if (customId && existingCustomIds.has(customId.toLowerCase())) {
+            duplicateCount++;
+            duplicateEntries.push(`${name} (Custom ID: ${customId})`);
+            continue;
+          }
+
+          // Add the staff ID
+          const newStaffId = await addStaffId({
             name,
             role: role as UserRole,
             region,
             district,
-            customId: customId || undefined
+            customId: customId || undefined,
+            createdAt: new Date().toISOString()
           });
-          successCount++;
+
+          // Add to existing sets to prevent duplicates within the same file
+          if (newStaffId) {
+            existingStaffIds.add(newStaffId.toLowerCase());
+            if (customId) {
+              existingCustomIds.add(customId.toLowerCase());
+            }
+            successCount++;
+          }
         } catch (error) {
           errorCount++;
           console.error(`Failed to add staff: ${name}`, error);
         }
       }
       
-      toast.success(`Upload complete: ${successCount} successful, ${errorCount} failed`);
+      // Show summary toast with details
+      let message = `Upload complete: ${successCount} successful`;
+      if (errorCount > 0) {
+        message += `, ${errorCount} failed`;
+      }
+      if (duplicateCount > 0) {
+        message += `, ${duplicateCount} duplicates skipped`;
+      }
+      
+      toast.success(message, {
+        description: duplicateCount > 0 ? (
+          <div className="mt-2">
+            <p className="font-medium">Duplicate entries:</p>
+            <ul className="list-disc list-inside text-sm">
+              {duplicateEntries.map((entry, index) => (
+                <li key={index}>{entry}</li>
+              ))}
+            </ul>
+          </div>
+        ) : undefined,
+        duration: duplicateCount > 0 ? 10000 : 5000, // Show longer if there are duplicates
+      });
     } catch (error) {
       console.error('Error processing file:', error);
       toast.error('Failed to process the CSV file');
@@ -351,6 +455,39 @@ Admin User,system_admin,,,ECGADMIN`;
     const a = document.createElement('a');
     a.href = url;
     a.download = 'staff_id_sample.csv';
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  };
+
+  const exportToCSV = () => {
+    // Create CSV header
+    const headers = ['Staff ID', 'Name', 'Role', 'Region', 'District', 'Custom ID', 'Created At'];
+    
+    // Convert staff data to CSV rows
+    const rows = staffIds.map(staff => [
+      staff.id,
+      staff.name,
+      staff.role,
+      staff.region || '',
+      staff.district || '',
+      staff.customId || '',
+      staff.createdAt || ''
+    ]);
+    
+    // Combine headers and rows
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n');
+    
+    // Create and download the file
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `staff_ids_${new Date().toISOString().split('T')[0]}.csv`;
     document.body.appendChild(a);
     a.click();
     window.URL.revokeObjectURL(url);
@@ -392,6 +529,10 @@ Admin User,system_admin,,,ECGADMIN`;
                 <Download className="w-4 h-4 mr-2" />
                 Download Sample CSV
               </Button>
+              <Button variant="outline" size="sm" onClick={exportToCSV} className="w-full sm:w-auto">
+                <Download className="w-4 h-4 mr-2" />
+                Export Staff Data
+              </Button>
               <Button variant="outline" size="sm" asChild className="w-full sm:w-auto">
                 <Label htmlFor="csv-upload">
                   <Upload className="w-4 h-4 mr-2" />
@@ -423,8 +564,8 @@ Admin User,system_admin,,,ECGADMIN`;
               />
             </div>
             <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-              <Button variant="outline" onClick={refreshStaffIds} disabled={isLoading} className="w-full sm:w-auto">
-                {isLoading ? "Loading..." : "Refresh"}
+              <Button variant="outline" onClick={resetFilters} disabled={isLoading} className="w-full sm:w-auto">
+                Reset Filters
               </Button>
               <Button onClick={() => setIsAdding(true)} className="w-full sm:w-auto">Add New Staff ID</Button>
             </div>
@@ -468,6 +609,7 @@ Admin User,system_admin,,,ECGADMIN`;
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Regions</SelectItem>
+                    <SelectItem value="none">None</SelectItem>
                     {regions?.map(region => (
                       <SelectItem key={region.id} value={region.name}>
                         {region.name}
@@ -576,6 +718,7 @@ Admin User,system_admin,,,ECGADMIN`;
                         <SelectValue placeholder="Select region" />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="none">None</SelectItem>
                         {regions?.map(region => (
                           <SelectItem key={region.id} value={region.name}>
                             {region.name}
@@ -620,9 +763,16 @@ Admin User,system_admin,,,ECGADMIN`;
           <h3 className="text-lg font-medium">Registered Staff IDs</h3>
           
           {isLoading ? (
-            <div className="flex flex-col items-center justify-center p-10">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-              <p className="mt-4 text-sm text-muted-foreground">Loading staff IDs...</p>
+            <div className="space-y-2">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="flex items-center space-x-4 p-4 border rounded-lg">
+                  <Skeleton className="h-12 w-12 rounded-full" />
+                  <div className="space-y-2 flex-1">
+                    <Skeleton className="h-4 w-[250px]" />
+                    <Skeleton className="h-4 w-[200px]" />
+                  </div>
+                </div>
+              ))}
             </div>
           ) : filteredStaffIds.length === 0 ? (
             <div className="text-center p-10">
@@ -630,179 +780,138 @@ Admin User,system_admin,,,ECGADMIN`;
               <p className="text-sm mt-2">Create a new staff ID by clicking the "Add New Staff ID" button above</p>
             </div>
           ) : (
-            <>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader className="sticky top-0 bg-background z-10">
-                    <TableRow>
-                      <TableHead className="whitespace-nowrap">Staff ID</TableHead>
-                      <TableHead className="whitespace-nowrap">Name</TableHead>
-                      <TableHead className="whitespace-nowrap">Role</TableHead>
-                      <TableHead className="whitespace-nowrap">Region</TableHead>
-                      <TableHead className="whitespace-nowrap">District</TableHead>
-                      <TableHead className="whitespace-nowrap">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredStaffIds.map(entry => (
-                      <TableRow key={entry.id}>
-                        <TableCell className="whitespace-nowrap">{entry.id}</TableCell>
-                        <TableCell className="whitespace-nowrap">
-                          {isEditing === entry.id ? (
-                            <Input
-                              value={entry.name}
-                              onChange={(e) => {
-                                const updatedEntry = { ...entry, name: e.target.value };
-                                updateStaffId(entry.id, updatedEntry);
-                              }}
-                              className="w-full"
-                            />
-                          ) : (
-                            entry.name
-                          )}
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap">
-                          {isEditing === entry.id ? (
-                            <Select
-                              value={entry.role}
-                              onValueChange={(value) => {
-                                const updatedEntry = { ...entry, role: value as UserRole };
-                                updateStaffId(entry.id, updatedEntry);
-                              }}
-                            >
-                              <SelectTrigger className="w-full">
-                                <SelectValue placeholder="Select role" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="system_admin">System Admin</SelectItem>
-                                <SelectItem value="global_engineer">Global Engineer</SelectItem>
-                                <SelectItem value="regional_engineer">Regional Engineer</SelectItem>
-                                <SelectItem value="district_engineer">District Engineer</SelectItem>
-                                <SelectItem value="technician">Technician</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          ) : (
-                            <Badge className={getRoleBadgeColor(entry.role)}>
-                              {getRoleLabel(entry.role)}
-                            </Badge>
-                          )}
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap">
-                          {isEditing === entry.id ? (
-                            <Select
-                              value={entry.region}
-                              onValueChange={(value) => {
-                                const updatedEntry = { ...entry, region: value, district: undefined };
-                                updateStaffId(entry.id, updatedEntry);
-                              }}
-                            >
-                              <SelectTrigger className="w-full">
-                                <SelectValue placeholder="Select region" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {regions?.map(region => (
-                                  <SelectItem key={region.id} value={region.name}>
-                                    {region.name}
+            <div ref={tableRef} className="h-[600px] overflow-auto">
+              <Table>
+                <TableHeader className="sticky top-0 bg-background z-10">
+                  <TableRow>
+                    <TableHead className="whitespace-nowrap">Staff ID</TableHead>
+                    <TableHead className="whitespace-nowrap">Name</TableHead>
+                    <TableHead className="whitespace-nowrap">Role</TableHead>
+                    <TableHead className="whitespace-nowrap">Region</TableHead>
+                    <TableHead className="whitespace-nowrap">District</TableHead>
+                    <TableHead className="whitespace-nowrap">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredStaffIds.slice(0, visibleItems).map(entry => (
+                    <TableRow key={entry.id}>
+                      <TableCell className="whitespace-nowrap">{entry.id}</TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {isEditing === entry.id ? (
+                          <Input
+                            value={entry.name}
+                            onChange={(e) => {
+                              const updatedEntry = { ...entry, name: e.target.value };
+                              updateStaffId(entry.id, updatedEntry);
+                            }}
+                            className="w-full"
+                          />
+                        ) : (
+                          entry.name
+                        )}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {isEditing === entry.id ? (
+                          <Select
+                            value={entry.role}
+                            onValueChange={(value) => {
+                              const updatedEntry = { ...entry, role: value as UserRole };
+                              updateStaffId(entry.id, updatedEntry);
+                            }}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Select role" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="system_admin">System Admin</SelectItem>
+                              <SelectItem value="global_engineer">Global Engineer</SelectItem>
+                              <SelectItem value="regional_engineer">Regional Engineer</SelectItem>
+                              <SelectItem value="district_engineer">District Engineer</SelectItem>
+                              <SelectItem value="technician">Technician</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <Badge className={getRoleBadgeColor(entry.role)}>
+                            {getRoleLabel(entry.role)}
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {isEditing === entry.id ? (
+                          <Select
+                            value={entry.region}
+                            onValueChange={(value) => {
+                              const updatedEntry = { ...entry, region: value };
+                              updateStaffId(entry.id, updatedEntry);
+                            }}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Select region" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">None</SelectItem>
+                              {regions?.map(region => (
+                                <SelectItem key={region.id} value={region.name}>
+                                  {region.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          entry.region || "-"
+                        )}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {isEditing === entry.id ? (
+                          <Select
+                            value={entry.district}
+                            onValueChange={(value) => {
+                              const updatedEntry = { ...entry, district: value };
+                              updateStaffId(entry.id, updatedEntry);
+                            }}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Select district" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {districts
+                                ?.filter(d => d.regionId === regions?.find(r => r.name === entry.region)?.id)
+                                ?.map(district => (
+                                  <SelectItem key={district.id} value={district.name}>
+                                    {district.name}
                                   </SelectItem>
                                 ))}
-                              </SelectContent>
-                            </Select>
-                          ) : (
-                            entry.region || "-"
-                          )}
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap">
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          entry.district || "-"
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-2">
                           {isEditing === entry.id ? (
-                            <Select
-                              value={entry.district}
-                              onValueChange={(value) => {
-                                const updatedEntry = { ...entry, district: value };
-                                updateStaffId(entry.id, updatedEntry);
-                              }}
-                            >
-                              <SelectTrigger className="w-full">
-                                <SelectValue placeholder="Select district" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {districts
-                                  ?.filter(d => d.regionId === regions?.find(r => r.name === entry.region)?.id)
-                                  ?.map(district => (
-                                    <SelectItem key={district.id} value={district.name}>
-                                      {district.name}
-                                    </SelectItem>
-                                  ))}
-                              </SelectContent>
-                            </Select>
+                            <>
+                              <Button variant="outline" size="sm" onClick={() => setIsEditing(null)} className="w-full sm:w-auto">Cancel</Button>
+                              <Button size="sm" onClick={() => handleUpdate(entry.id)} className="w-full sm:w-auto">Save</Button>
+                            </>
                           ) : (
-                            entry.district || "-"
+                            <>
+                              <Button variant="outline" size="sm" onClick={() => setIsEditing(entry.id)} className="w-full sm:w-auto">Edit</Button>
+                              <Button variant="destructive" size="sm" onClick={() => handleDelete(entry.id)} className="w-full sm:w-auto">Delete</Button>
+                            </>
                           )}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap gap-2">
-                            {isEditing === entry.id ? (
-                              <>
-                                <Button variant="outline" size="sm" onClick={() => setIsEditing(null)} className="w-full sm:w-auto">Cancel</Button>
-                                <Button size="sm" onClick={() => handleUpdate(entry.id)} className="w-full sm:w-auto">Save</Button>
-                              </>
-                            ) : (
-                              <>
-                                <Button variant="outline" size="sm" onClick={() => setIsEditing(entry.id)} className="w-full sm:w-auto">Edit</Button>
-                                <Button variant="destructive" size="sm" onClick={() => handleDelete(entry.id)} className="w-full sm:w-auto">Delete</Button>
-                              </>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-              
-              {/* Pagination Controls */}
-              <div className="flex items-center justify-between px-2">
-                <div className="flex items-center gap-2">
-                  <p className="text-sm text-muted-foreground">
-                    Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, totalItems)} of {totalItems} entries
-                  </p>
-                  <Select
-                    value={pageSize.toString()}
-                    onValueChange={(value) => {
-                      setPageSize(Number(value));
-                      setCurrentPage(1);
-                    }}
-                  >
-                    <SelectTrigger className="h-8 w-[70px]">
-                      <SelectValue placeholder={pageSize.toString()} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="10">10</SelectItem>
-                      <SelectItem value="25">25</SelectItem>
-                      <SelectItem value="50">50</SelectItem>
-                      <SelectItem value="100">100</SelectItem>
-                    </SelectContent>
-                  </Select>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              {isLoadingMore && (
+                <div className="flex justify-center p-4">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                 </div>
-                
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                    disabled={currentPage === 1}
-                  >
-                    Previous
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(totalItems / pageSize)))}
-                    disabled={currentPage === Math.ceil(totalItems / pageSize)}
-                  >
-                    Next
-                  </Button>
-                </div>
-              </div>
-            </>
+              )}
+            </div>
           )}
         </div>
       </CardContent>
