@@ -1,7 +1,10 @@
 import { VITAsset } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { LocationMap } from "./LocationMap";
+import { db } from "@/config/firebase";
+import { collection, query, where, getDocs } from "firebase/firestore";
 
 interface AssetInfoCardProps {
   asset: VITAsset;
@@ -9,51 +12,108 @@ interface AssetInfoCardProps {
   getDistrictName: (id: string) => string;
 }
 
+const formatDate = (timestamp: any) => {
+  if (!timestamp) return "Not available";
+  
+  // Handle Firestore timestamp
+  if (timestamp?.seconds) {
+    return new Date(timestamp.seconds * 1000).toLocaleString();
+  }
+  
+  // Handle string date
+  const date = new Date(timestamp);
+  return !isNaN(date.getTime()) ? date.toLocaleString() : "Invalid date";
+};
+
 export const AssetInfoCard = ({ asset, getRegionName, getDistrictName }: AssetInfoCardProps) => {
   const [isPhotoDialogOpen, setIsPhotoDialogOpen] = useState(false);
+  const [creatorName, setCreatorName] = useState<string>("Loading...");
+
+  useEffect(() => {
+    const fetchCreatorName = async () => {
+      try {
+        const usersRef = collection(db, "users");
+        const q = query(usersRef, where("email", "==", asset.createdBy));
+        const querySnapshot = await getDocs(q);
+        
+        if (!querySnapshot.empty) {
+          const userData = querySnapshot.docs[0].data();
+          setCreatorName(userData.name || asset.createdBy);
+        } else {
+          setCreatorName(asset.createdBy);
+        }
+      } catch (error) {
+        console.error("Error fetching creator name:", error);
+        setCreatorName(asset.createdBy);
+      }
+    };
+
+    if (asset.createdBy) {
+      fetchCreatorName();
+    }
+  }, [asset.createdBy]);
 
   return (
     <Card>
       <CardContent className="p-6">
         <div className="space-y-6">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div>
-              <p className="text-sm font-medium text-muted-foreground">Region</p>
-              <p className="text-base">{asset.region}</p>
+              <h3 className="font-semibold">Region</h3>
+              <p>{asset.region}</p>
             </div>
             <div>
-              <p className="text-sm font-medium text-muted-foreground">District</p>
-              <p className="text-base">{asset.district}</p>
+              <h3 className="font-semibold">District</h3>
+              <p>{asset.district}</p>
             </div>
             <div>
-              <p className="text-sm font-medium text-muted-foreground">Voltage Level</p>
-              <p className="text-base">{asset.voltageLevel}</p>
+              <h3 className="font-semibold">Voltage Level</h3>
+              <p>{asset.voltageLevel}</p>
             </div>
             <div>
-              <p className="text-sm font-medium text-muted-foreground">Type of Unit</p>
-              <p className="text-base">{asset.typeOfUnit}</p>
+              <h3 className="font-semibold">Type of Unit</h3>
+              <p>{asset.typeOfUnit}</p>
             </div>
             <div>
-              <p className="text-sm font-medium text-muted-foreground">Serial Number</p>
-              <p className="text-base">{asset.serialNumber}</p>
+              <h3 className="font-semibold">Serial Number</h3>
+              <p>{asset.serialNumber}</p>
             </div>
             <div>
-              <p className="text-sm font-medium text-muted-foreground">Location</p>
-              <p className="text-base">{asset.location}</p>
+              <h3 className="font-semibold">Location</h3>
+              <p>{asset.location}</p>
             </div>
             <div>
-              <p className="text-sm font-medium text-muted-foreground">GPS Coordinates</p>
-              <p className="text-base">{asset.gpsCoordinates}</p>
+              <h3 className="font-semibold">GPS Coordinates</h3>
+              <p>{asset.gpsCoordinates || "Not specified"}</p>
             </div>
             <div>
-              <p className="text-sm font-medium text-muted-foreground">Status</p>
-              <p className="text-base">{asset.status}</p>
+              <h3 className="font-semibold">Status</h3>
+              <p>{asset.status}</p>
             </div>
             <div>
-              <p className="text-sm font-medium text-muted-foreground">Protection</p>
-              <p className="text-base">{asset.protection}</p>
+              <h3 className="font-semibold">Protection</h3>
+              <p>{asset.protection || "Not specified"}</p>
+            </div>
+            <div>
+              <h3 className="font-semibold">Created By</h3>
+              <p>{creatorName}</p>
+            </div>
+            <div>
+              <h3 className="font-semibold">Created At</h3>
+              <p>{formatDate(asset.createdAt)}</p>
+            </div>
+            <div>
+              <h3 className="font-semibold">Last Updated</h3>
+              <p>{formatDate(asset.updatedAt)}</p>
             </div>
           </div>
+
+          {asset.gpsCoordinates && (
+            <div className="mt-6">
+              <p className="text-sm font-medium text-muted-foreground mb-2">Location Map</p>
+              <LocationMap coordinates={asset.gpsCoordinates} assetName={`${asset.typeOfUnit} - ${asset.serialNumber}`} />
+            </div>
+          )}
           
           {asset.photoUrl && (
             <div className="mt-6">

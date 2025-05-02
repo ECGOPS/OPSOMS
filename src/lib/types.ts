@@ -180,8 +180,8 @@ export type VITAsset = {
   status: VITStatus;
   protection: string;
   photoUrl?: string;
-  createdAt: string;
-  updatedAt: string;
+  createdAt: any; // Firestore Timestamp
+  updatedAt: any; // Firestore Timestamp
   createdBy: string;
 };
 

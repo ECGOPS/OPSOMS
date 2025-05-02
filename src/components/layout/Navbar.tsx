@@ -211,7 +211,7 @@ export function Navbar() {
       <div className="container flex h-16 items-center justify-between">
         <div className="flex items-center gap-2">
           <Link to="/" className="flex items-center gap-2">
-            <img src="/lovable-uploads/ecg-logo.png" alt="ECG Logo" className="h-10 w-auto" />
+            <img src="/ecg-images/ecg-logo.png" alt="ECG Logo" className="h-10 w-auto" />
             <span className="font-bold text-base md:text-lg">ECG Outage Management System</span>
           </Link>
         </div>

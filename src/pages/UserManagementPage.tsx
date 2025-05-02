@@ -9,6 +9,7 @@ import { DistrictPopulationForm } from "@/components/user-management/DistrictPop
 import { StaffIdManagement } from "@/components/user-management/StaffIdManagement";
 import { AccessControlWrapper } from "@/components/access-control/AccessControlWrapper";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 
 export default function UserManagementPage() {
   const { isAuthenticated, user } = useAuth();
@@ -53,39 +54,62 @@ export default function UserManagementPage() {
 
   return (
     <Layout>
-      <div className="container mx-auto p-4">
-        <div className="flex flex-col space-y-4">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <h1 className="text-2xl font-bold">User Management</h1>
+      <div className="container mx-auto px-4 py-6">
+        <div className="flex flex-col space-y-6">
+          {/* Header Section */}
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gradient-to-r from-primary/10 via-primary/5 to-background p-6 rounded-lg border">
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight">User Management</h1>
+              <p className="text-muted-foreground mt-1">Manage system users, roles, and permissions</p>
+            </div>
             {isSystemAdmin && (
-              <Button onClick={() => navigate('/system-admin/permissions')}>
+              <Button 
+                onClick={() => navigate('/system-admin/permissions')}
+                className="bg-primary/10 hover:bg-primary/20 text-primary"
+              >
+                <Settings className="mr-2 h-4 w-4" />
                 Manage Permissions
               </Button>
             )}
           </div>
           
-          <Tabs defaultValue="users" className="w-full">
-            <TabsList className="w-full flex flex-col sm:flex-row h-auto sm:h-10">
-              <TabsTrigger value="users" className="w-full sm:w-auto py-2 sm:py-0">
-                Users
-              </TabsTrigger>
-              <TabsTrigger value="staff-ids" className="w-full sm:w-auto py-2 sm:py-0">
-                Staff IDs
-              </TabsTrigger>
-            </TabsList>
-            
-            <TabsContent value="users" className="mt-4">
-              <AccessControlWrapper requiredRole="global_engineer">
-                <UsersList />
-              </AccessControlWrapper>
-            </TabsContent>
-            
-            <TabsContent value="staff-ids" className="mt-4">
-              <AccessControlWrapper requiredRole="system_admin">
-                <StaffIdManagement />
-              </AccessControlWrapper>
-            </TabsContent>
-          </Tabs>
+          {/* Main Content */}
+          <Card className="border-none shadow-sm">
+            <CardContent className="p-0">
+              <Tabs defaultValue={defaultTab} className="w-full">
+                <TabsList className="w-full flex h-auto rounded-lg bg-primary/10 p-1 gap-1">
+                  <TabsTrigger 
+                    value="users" 
+                    className="flex-1 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground py-2 rounded-md hover:bg-primary/20 transition-colors"
+                  >
+                    <Users className="mr-2 h-4 w-4" />
+                    <span className="font-medium">Users</span>
+                  </TabsTrigger>
+                  <TabsTrigger 
+                    value="staff-ids" 
+                    className="flex-1 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground py-2 rounded-md hover:bg-primary/20 transition-colors"
+                  >
+                    <IdCard className="mr-2 h-4 w-4" />
+                    <span className="font-medium">Staff IDs</span>
+                  </TabsTrigger>
+                </TabsList>
+                
+                <div className="p-4">
+                  <TabsContent value="users" className="mt-0">
+                    <AccessControlWrapper requiredRole="global_engineer">
+                      <UsersList />
+                    </AccessControlWrapper>
+                  </TabsContent>
+                  
+                  <TabsContent value="staff-ids" className="mt-0">
+                    <AccessControlWrapper requiredRole="system_admin">
+                      <StaffIdManagement />
+                    </AccessControlWrapper>
+                  </TabsContent>
+                </div>
+              </Tabs>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </Layout>

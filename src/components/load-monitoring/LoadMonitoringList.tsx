@@ -3,10 +3,21 @@ import { Link } from 'react-router-dom';
 import { LoadMonitoringData } from '@/lib/asset-types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { format, parse } from 'date-fns';
 
 interface LoadMonitoringListProps {
   records: LoadMonitoringData[];
 }
+
+const formatDateOnly = (dateStr: string) => {
+  try {
+    const date = new Date(dateStr);
+    return format(date, 'MMM d, yyyy');
+  } catch (error) {
+    console.error('Error formatting date:', error);
+    return dateStr;
+  }
+};
 
 export function LoadMonitoringList({ records }: LoadMonitoringListProps) {
   if (records.length === 0) {
@@ -35,8 +46,7 @@ export function LoadMonitoringList({ records }: LoadMonitoringListProps) {
                 <p><strong>Substation No:</strong> {record.substationNumber}</p>
                 <p><strong>Location:</strong> {record.location}</p>
                 <p><strong>Rating:</strong> {record.rating} MW</p>
-                <p><strong>Date:</strong> {record.date}</p>
-                <p><strong>Time:</strong> {record.time}</p>
+                <p><strong>Date:</strong> {formatDateOnly(record.date)}</p>
                 <p><strong>Percentage Load:</strong> {record.percentageLoad}%</p>
               </div>
             </CardContent>

@@ -126,7 +126,7 @@ export default function InspectionDetailsPage() {
           </div>
         </div>
 
-        <Card className="mb-8">
+        <Card className="mb-8 bg-blue-50">
           <CardHeader className="border-b">
             <div>
               <CardTitle className="text-2xl">Inspection Details</CardTitle>
@@ -135,7 +135,7 @@ export default function InspectionDetailsPage() {
               </CardDescription>
             </div>
           </CardHeader>
-          <CardContent className="pt-6">
+          <CardContent className="pt-6 bg-gray-50">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <div className="bg-muted/50 p-4 rounded-lg">
                 <p className="text-sm font-medium text-muted-foreground mb-1">Region</p>
@@ -231,7 +231,7 @@ export default function InspectionDetailsPage() {
           </CardHeader>
           <CardContent className="pt-6">
             <Tabs defaultValue={activeTab} value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="grid w-full grid-cols-4 mb-6">
+              <TabsList className="flex w-full overflow-x-auto whitespace-nowrap gap-2 mb-6 scrollbar-thin scrollbar-thumb-muted-foreground/30 scrollbar-track-transparent">
                 <TabsTrigger value="general" key="general-tab">General Building</TabsTrigger>
                 <TabsTrigger value="control" key="control-tab">Control Equipment</TabsTrigger>
                 <TabsTrigger value="transformer" key="transformer-tab">Power Transformer</TabsTrigger>
@@ -240,7 +240,16 @@ export default function InspectionDetailsPage() {
 
               <TabsContent value="general" key="general-content" className="space-y-4">
                 {getItemsByCategory("General Building").map((item) => (
-                  <div key={`general-${item.id}`} className="border rounded-lg p-4 bg-white shadow-sm hover:shadow-md transition-shadow">
+                  <div
+                    key={`general-${item.id}`}
+                    className={`border rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow ${
+                      item.status === 'good'
+                        ? 'bg-green-50'
+                        : item.status === 'bad'
+                        ? 'bg-red-50'
+                        : 'bg-white'
+                    }`}
+                  >
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
                         <h3 className="font-medium text-lg mb-2">{item.name}</h3>
@@ -267,7 +276,16 @@ export default function InspectionDetailsPage() {
 
               <TabsContent value="control" key="control-content" className="space-y-4">
                 {getItemsByCategory("Control Equipment").map((item) => (
-                  <div key={`control-${item.id}`} className="border rounded-lg p-4 bg-white shadow-sm hover:shadow-md transition-shadow">
+                  <div
+                    key={`control-${item.id}`}
+                    className={`border rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow ${
+                      item.status === 'good'
+                        ? 'bg-green-50'
+                        : item.status === 'bad'
+                        ? 'bg-red-50'
+                        : 'bg-white'
+                    }`}
+                  >
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
                         <h3 className="font-medium text-lg mb-2">{item.name}</h3>
@@ -294,7 +312,16 @@ export default function InspectionDetailsPage() {
 
               <TabsContent value="transformer" key="transformer-content" className="space-y-4">
                 {getItemsByCategory("Power Transformer").map((item) => (
-                  <div key={`transformer-${item.id}`} className="border rounded-lg p-4 bg-white shadow-sm hover:shadow-md transition-shadow">
+                  <div
+                    key={`transformer-${item.id}`}
+                    className={`border rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow ${
+                      item.status === 'good'
+                        ? 'bg-green-50'
+                        : item.status === 'bad'
+                        ? 'bg-red-50'
+                        : 'bg-white'
+                    }`}
+                  >
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
                         <h3 className="font-medium text-lg mb-2">{item.name}</h3>
@@ -321,7 +348,16 @@ export default function InspectionDetailsPage() {
 
               <TabsContent value="outdoor" key="outdoor-content" className="space-y-4">
                 {getItemsByCategory("Outdoor Equipment").map((item) => (
-                  <div key={`outdoor-${item.id}`} className="border rounded-lg p-4 bg-white shadow-sm hover:shadow-md transition-shadow">
+                  <div
+                    key={`outdoor-${item.id}`}
+                    className={`border rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow ${
+                      item.status === 'good'
+                        ? 'bg-green-50'
+                        : item.status === 'bad'
+                        ? 'bg-red-50'
+                        : 'bg-white'
+                    }`}
+                  >
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
                         <h3 className="font-medium text-lg mb-2">{item.name}</h3>

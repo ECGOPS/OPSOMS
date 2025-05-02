@@ -38,12 +38,28 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { format } from "date-fns";
+import { EditOutlined, DeleteOutlined } from "@ant-design/icons";
 
 export default function LoadMonitoringPage() {
   const { user } = useAuth();
   const { regions, districts, loadMonitoringRecords, deleteLoadMonitoringRecord } = useData();
   const navigate = useNavigate();
   
+  const formatTimeWithAMPM = (time: string) => {
+    if (!time) return '-';
+    try {
+      const [hours, minutes] = time.split(':');
+      const hour = parseInt(hours, 10);
+      const ampm = hour >= 12 ? 'PM' : 'AM';
+      const formattedHour = hour % 12 || 12;
+      return `${formattedHour}:${minutes} ${ampm}`;
+    } catch (error) {
+      console.error('Error formatting time:', error);
+      return time;
+    }
+  };
+
   const [formattedPercentageLoads, setFormattedPercentageLoads] = useState<Record<string, string>>({});
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<Date | null>(null);
@@ -446,7 +462,7 @@ export default function LoadMonitoringPage() {
       const loadStatus = getLoadStatus(record.percentageLoad);
       return [
         formatDate(record.date),
-        record.time,
+        formatTimeWithAMPM(record.time),
         `"${record.substationName || ''}"`,
         `"${record.substationNumber || ''}"`,
         `"${record.region || ''}"`,
@@ -611,6 +627,7 @@ export default function LoadMonitoringPage() {
                   <TableHeader className="sticky top-0 bg-background z-10">
                     <TableRow>
                       <TableHead className="whitespace-nowrap">Date</TableHead>
+                      <TableHead className="whitespace-nowrap">Time</TableHead>
                       <TableHead className="whitespace-nowrap">Substation</TableHead>
                       <TableHead className="whitespace-nowrap">Region</TableHead>
                       <TableHead className="whitespace-nowrap">District</TableHead>
@@ -634,7 +651,8 @@ export default function LoadMonitoringPage() {
                           className="cursor-pointer hover:bg-muted/50"
                           onClick={() => handleView(record.id)}
                         >
-                          <TableCell className="whitespace-nowrap">{formatDate(record.date)}</TableCell>
+                          <TableCell className="whitespace-nowrap">{format(new Date(record.date), 'MMM d, yyyy')}</TableCell>
+                          <TableCell className="whitespace-nowrap">{formatTimeWithAMPM(record.time)}</TableCell>
                           <TableCell className="whitespace-nowrap">{
                             record.substationName && record.substationNumber
                               ? `${record.substationName} (${record.substationNumber})`

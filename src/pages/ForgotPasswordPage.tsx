@@ -35,7 +35,7 @@ export default function ForgotPasswordPage() {
           <CardHeader className="text-center">
             <div className="mx-auto mb-4">
               <img 
-                src="/lovable-uploads/ecg-logo.png" 
+                src="/ecg-images/ecg-logo.png" 
                 alt="ECG Logo" 
                 className="h-16 w-auto mx-auto"
               />

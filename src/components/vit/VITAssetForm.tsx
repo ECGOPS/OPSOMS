@@ -21,6 +21,7 @@ import { useNavigate } from "react-router-dom";
 import Webcam from "react-webcam";
 import { db } from "@/config/firebase";
 import { collection, addDoc, updateDoc, doc, serverTimestamp } from "firebase/firestore";
+import { LocationMap } from "./LocationMap";
 
 interface VITAssetFormProps {
   asset?: VITAsset;
@@ -416,7 +417,7 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
         <CardTitle>{asset ? "Edit VIT Asset" : "Add New VIT Asset"}</CardTitle>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="region">Region *</Label>
@@ -536,28 +537,32 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
           
           <div className="space-y-2">
             <Label htmlFor="gpsCoordinates">GPS Coordinates</Label>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
               <Input
                 id="gpsCoordinates"
                 value={gpsCoordinates}
                 onChange={(e) => setGpsCoordinates(e.target.value)}
-                placeholder="Latitude, Longitude"
-                className="flex-1"
+                placeholder="e.g., 5.603717, -0.186964"
               />
-              <Button 
+              <Button
                 type="button"
                 variant="outline"
+                size="icon"
                 onClick={handleGetLocation}
                 disabled={isGettingLocation}
               >
                 {isGettingLocation ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                  <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  <MapPin className="h-4 w-4 mr-1" />
+                  <MapPin className="h-4 w-4" />
                 )}
-                Get Location
               </Button>
             </div>
+            {gpsCoordinates && (
+              <div className="mt-4">
+                <LocationMap coordinates={gpsCoordinates} assetName={`VIT Asset ${serialNumber}`} />
+              </div>
+            )}
           </div>
           
           <div className="space-y-2">

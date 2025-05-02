@@ -78,11 +78,33 @@ export const calculateDurationHours = (occurrenceDate: string, restorationDate: 
 };
 
 // Format a date object to a readable string
-export const formatDate = (date: string | Date): string => {
-  if (date instanceof Date) {
-    return date.toISOString().split('T')[0];
+export const formatDate = (timestamp: any) => {
+  if (!timestamp) return "Not available";
+  
+  try {
+    // Handle Firestore timestamp
+    if (timestamp?.seconds) {
+      const date = new Date(timestamp.seconds * 1000);
+      return date.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric', 
+        year: 'numeric' 
+      });
+    }
+    
+    // Handle string date
+    const date = new Date(timestamp);
+    return !isNaN(date.getTime()) 
+      ? date.toLocaleDateString('en-US', { 
+          month: 'short', 
+          day: 'numeric', 
+          year: 'numeric' 
+        })
+      : "Invalid date";
+  } catch (error) {
+    console.error("Error formatting date:", error);
+    return "Invalid date";
   }
-  return date;
 };
 
 // Format duration in hours to hours with two decimal places

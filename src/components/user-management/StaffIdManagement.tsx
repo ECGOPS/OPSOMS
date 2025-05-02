@@ -25,7 +25,7 @@ import { useData } from "@/contexts/DataContext";
 import { toast } from "@/components/ui/sonner";
 import { UserRole } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
-import { Edit2, Trash2, Plus, Download, Upload, Search } from "lucide-react";
+import { Edit2, Trash2, Plus, Download, Upload, Search, Users, Filter } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { getFirestore, getDocs, collection } from "firebase/firestore";
@@ -56,6 +56,9 @@ export function StaffIdManagement() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filteredStaffIds, setFilteredStaffIds] = useState(staffIds);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [roleFilter, setRoleFilter] = useState<UserRole | "all">("all");
+  const [regionFilter, setRegionFilter] = useState<string>("all");
+  const [districtFilter, setDistrictFilter] = useState<string>("all");
 
   // Optimize initial data loading
   useEffect(() => {
@@ -89,14 +92,27 @@ export function StaffIdManagement() {
     if (!staffIds) return;
     
     const lowerCaseSearchTerm = searchTerm.toLowerCase();
-    const filtered = staffIds.filter(idObj => 
-      idObj.id.toLowerCase().includes(lowerCaseSearchTerm) ||
-      idObj.name.toLowerCase().includes(lowerCaseSearchTerm) ||
-      (idObj.region && idObj.region.toLowerCase().includes(lowerCaseSearchTerm)) ||
-      (idObj.district && idObj.district.toLowerCase().includes(lowerCaseSearchTerm))
-    );
+    const filtered = staffIds.filter(idObj => {
+      // Search term filter
+      const matchesSearch = 
+        idObj.id.toLowerCase().includes(lowerCaseSearchTerm) ||
+        idObj.name.toLowerCase().includes(lowerCaseSearchTerm) ||
+        (idObj.region && idObj.region.toLowerCase().includes(lowerCaseSearchTerm)) ||
+        (idObj.district && idObj.district.toLowerCase().includes(lowerCaseSearchTerm));
+
+      // Role filter
+      const matchesRole = roleFilter === "all" || idObj.role === roleFilter;
+
+      // Region filter
+      const matchesRegion = regionFilter === "all" || idObj.region === regionFilter;
+
+      // District filter
+      const matchesDistrict = districtFilter === "all" || idObj.district === districtFilter;
+
+      return matchesSearch && matchesRole && matchesRegion && matchesDistrict;
+    });
     setFilteredStaffIds(filtered);
-  }, [staffIds, searchTerm]);
+  }, [staffIds, searchTerm, roleFilter, regionFilter, districtFilter]);
 
   // Optimize refresh function
   const refreshStaffIds = useCallback(async () => {
@@ -309,14 +325,23 @@ Admin User,system_admin,,,ECGADMIN`;
     document.body.removeChild(a);
   };
 
+  // Add reset filters function
+  const resetFilters = () => {
+    setSearchTerm("");
+    setRoleFilter("all");
+    setRegionFilter("all");
+    setDistrictFilter("all");
+  };
+
   return (
     <Card className="w-full">
       <CardHeader>
         <CardTitle>Staff ID Management</CardTitle>
-        <CardDescription>
+        <CardDescription className="mb-6">
           Manage staff IDs and their associated information
         </CardDescription>
       </CardHeader>
+      
       <CardContent className="space-y-6">
         <Alert>
           <AlertTitle>CSV Upload Guide</AlertTitle>
@@ -353,22 +378,108 @@ Admin User,system_admin,,,ECGADMIN`;
           </AlertDescription>
         </Alert>
 
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div className="relative w-full sm:w-auto sm:min-w-[300px]">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="Search staff IDs..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-8 w-full"
-            />
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="relative w-full sm:w-auto sm:min-w-[300px]">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="search"
+                placeholder="Search staff IDs..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-8 w-full"
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={refreshStaffIds} disabled={isLoading}>
+                {isLoading ? "Loading..." : "Refresh"}
+              </Button>
+              <Button onClick={() => setIsAdding(true)}>Add New Staff ID</Button>
+            </div>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={refreshStaffIds} disabled={isLoading}>
-              {isLoading ? "Loading..." : "Refresh"}
-            </Button>
-            <Button onClick={() => setIsAdding(true)}>Add New Staff ID</Button>
+
+          <div className="flex flex-col gap-4">
+            <div className="flex justify-between items-center">
+              <h3 className="text-sm font-medium text-muted-foreground">Filters</h3>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={resetFilters}
+                className="text-xs"
+              >
+                Reset Filters
+              </Button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label>Filter by Role</Label>
+                <Select value={roleFilter} onValueChange={(value) => setRoleFilter(value as UserRole | "all")}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Roles</SelectItem>
+                    <SelectItem value="system_admin">System Admin</SelectItem>
+                    <SelectItem value="global_engineer">Global Engineer</SelectItem>
+                    <SelectItem value="regional_engineer">Regional Engineer</SelectItem>
+                    <SelectItem value="district_engineer">District Engineer</SelectItem>
+                    <SelectItem value="technician">Technician</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Filter by Region</Label>
+                <Select value={regionFilter} onValueChange={setRegionFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select region" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Regions</SelectItem>
+                    {regions?.map(region => (
+                      <SelectItem key={region.id} value={region.name}>
+                        {region.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Filter by District</Label>
+                <Select value={districtFilter} onValueChange={setDistrictFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select district" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Districts</SelectItem>
+                    {districts
+                      ?.filter(d => regionFilter === "all" || d.regionId === regions?.find(r => r.name === regionFilter)?.id)
+                      ?.map(district => (
+                        <SelectItem key={district.id} value={district.name}>
+                          {district.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-4 mt-2">
+            <div className="flex items-center gap-2 bg-primary/5 px-4 py-2 rounded-md">
+              <Users className="h-4 w-4 text-primary" />
+              <span className="text-sm">Total Staff:</span>
+              <span className="font-bold text-primary">{staffIds.length}</span>
+            </div>
+            <div className="flex items-center gap-2 bg-muted/10 px-4 py-2 rounded-md">
+              <Filter className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm">Showing:</span>
+              <span className="font-bold text-muted-foreground">{filteredStaffIds.length}</span>
+              {filteredStaffIds.length !== staffIds.length && (
+                <span className="text-sm text-muted-foreground">of {staffIds.length}</span>
+              )}
+            </div>
           </div>
         </div>
 

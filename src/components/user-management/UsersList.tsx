@@ -25,7 +25,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useData } from "@/contexts/DataContext";
-import { EditIcon, PlusCircle, Trash2, Copy, KeyRound, Search } from "lucide-react";
+import { EditIcon, PlusCircle, Trash2, Copy, KeyRound, Search, Users } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 import { validateUserRoleAssignment, getFilteredRegionsAndDistricts } from "@/utils/user-utils";
 import { hashPassword } from "@/utils/security";
@@ -366,25 +366,51 @@ export function UsersList() {
   }, [users, searchTerm]);
   
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {/* Search and Add User Section */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div className="relative w-full sm:w-auto sm:min-w-[300px]">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-muted/30 p-3 rounded-md">
+        <div className="relative w-full sm:w-auto sm:min-w-[250px]">
+          <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             type="search"
             placeholder="Search users..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-8 w-full"
+            className="pl-8 w-full bg-background h-9 text-sm"
           />
         </div>
+
         {canManageUsers && (
-          <Button onClick={() => setIsAddDialogOpen(true)} className="w-full sm:w-auto">
-            <PlusCircle size={16} className="mr-2" />
-            Add User
+          <Button 
+            onClick={() => setIsAddDialogOpen(true)} 
+            className="w-full sm:w-auto bg-primary hover:bg-primary/90 h-9 text-sm px-3"
+          >
+            <PlusCircle size={15} className="mr-2" />
+            Add New User
           </Button>
         )}
+      </div>
+      
+      {/* User Stats Dashboard */}
+      <div className="flex justify-center mb-4">
+        <div className="inline-flex gap-3">
+          <div className="bg-primary/10 rounded-md px-4 py-2">
+            <div className="flex flex-col items-center">
+              <span className="text-xs font-medium text-muted-foreground">Active Users</span>
+              <span className="text-lg font-bold text-primary">
+                {users?.filter(user => !user.disabled).length || 0}
+              </span>
+            </div>
+          </div>
+          <div className="bg-destructive/10 rounded-md px-4 py-2">
+            <div className="flex flex-col items-center">
+              <span className="text-xs font-medium text-muted-foreground">Disabled Users</span>
+              <span className="text-lg font-bold text-destructive">
+                {users?.filter(user => user.disabled).length || 0}
+              </span>
+            </div>
+          </div>
+        </div>
       </div>
       
       {/* Users Table Section */}
@@ -394,80 +420,110 @@ export function UsersList() {
           <p className="mt-4 text-sm text-muted-foreground">Loading user data...</p>
         </div>
       ) : users && users.length > 0 ? (
-        <Card>
+        <Card className="border-none shadow-sm">
           <CardContent className="p-0">
             <div className="overflow-x-auto">
               <Table>
-                <TableCaption>List of system users</TableCaption>
+                <TableCaption className="mt-4">Total users: {filteredUsers.length}</TableCaption>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead className="whitespace-nowrap">Name</TableHead>
-                    <TableHead className="whitespace-nowrap">Email</TableHead>
-                    <TableHead className="whitespace-nowrap">Role</TableHead>
-                    <TableHead className="whitespace-nowrap">Region</TableHead>
-                    <TableHead className="whitespace-nowrap">District</TableHead>
-                    <TableHead className="whitespace-nowrap">Staff ID</TableHead>
-                    <TableHead className="whitespace-nowrap">Status</TableHead>
-                    <TableHead className="whitespace-nowrap">Actions</TableHead>
+                  <TableRow className="bg-muted/50 hover:bg-muted/50">
+                    <TableHead className="whitespace-nowrap font-semibold min-w-[180px]">Name</TableHead>
+                    <TableHead className="whitespace-nowrap font-semibold min-w-[220px] hidden sm:table-cell">Email</TableHead>
+                    <TableHead className="whitespace-nowrap font-semibold min-w-[160px]">Role</TableHead>
+                    <TableHead className="whitespace-nowrap font-semibold min-w-[140px] hidden md:table-cell">Region</TableHead>
+                    <TableHead className="whitespace-nowrap font-semibold min-w-[140px] hidden md:table-cell">District</TableHead>
+                    <TableHead className="whitespace-nowrap font-semibold min-w-[120px] hidden lg:table-cell">Staff ID</TableHead>
+                    <TableHead className="whitespace-nowrap font-semibold min-w-[100px] hidden sm:table-cell">Status</TableHead>
+                    <TableHead className="whitespace-nowrap font-semibold text-right sticky right-0 bg-muted/50 min-w-[180px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredUsers.length > 0 ? (
                     filteredUsers.map((user) => (
-                      <TableRow key={user.id}>
-                        <TableCell className="whitespace-nowrap">{user.name}</TableCell>
-                        <TableCell className="whitespace-nowrap">{user.email}</TableCell>
+                      <TableRow key={user.id} className="group">
+                        <TableCell className="font-medium">
+                          <div className="flex flex-col">
+                            <span>{user.name}</span>
+                            <span className="text-sm text-muted-foreground sm:hidden">{user.email}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="hidden sm:table-cell text-muted-foreground">{user.email}</TableCell>
                         <TableCell>
-                          <Badge className={getRoleBadgeColor(user.role)}>
+                          <Badge className={`${getRoleBadgeColor(user.role)} px-2 py-0.5`}>
                             {getRoleLabel(user.role)}
                           </Badge>
+                          <div className="flex flex-col gap-1 mt-1 sm:hidden">
+                            <Badge variant={user.disabled ? "destructive" : "default"} className="w-fit">
+                              {user.disabled ? "Disabled" : "Active"}
+                            </Badge>
+                          </div>
                         </TableCell>
-                        <TableCell className="whitespace-nowrap">{user.region || "-"}</TableCell>
-                        <TableCell className="whitespace-nowrap">{user.district || "-"}</TableCell>
-                        <TableCell className="whitespace-nowrap">{user.staffId || "-"}</TableCell>
-                        <TableCell>
-                          <Badge variant={user.disabled ? "destructive" : "default"}>
+                        <TableCell className="hidden md:table-cell text-muted-foreground">{user.region || "-"}</TableCell>
+                        <TableCell className="hidden md:table-cell text-muted-foreground">{user.district || "-"}</TableCell>
+                        <TableCell className="hidden lg:table-cell text-muted-foreground">{user.staffId || "-"}</TableCell>
+                        <TableCell className="hidden sm:table-cell">
+                          <Badge 
+                            variant={user.disabled ? "destructive" : "default"}
+                            className="px-2 py-0.5"
+                          >
                             {user.disabled ? "Disabled" : "Active"}
                           </Badge>
                         </TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap gap-2">
+                        <TableCell className="p-0 sticky right-0 bg-background">
+                          <div className="flex justify-end items-center gap-2 px-4 py-2 bg-background">
                             {canManageUsers && (
-                              <>
+                              <div className="flex items-center gap-1 sm:gap-2">
                                 <Button
-                                  variant="outline"
+                                  variant="ghost"
                                   size="icon"
-                                  onClick={() => openEditDialog(user)}
-                                  className="h-8 w-8"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openEditDialog(user);
+                                  }}
+                                  className="h-8 w-8 hover:bg-muted"
+                                  title="Edit user"
                                 >
                                   <EditIcon className="h-4 w-4" />
                                 </Button>
                                 <Button
-                                  variant="outline"
+                                  variant="ghost"
                                   size="icon"
-                                  onClick={() => handleResetPassword(user.id)}
-                                  className="h-8 w-8"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleResetPassword(user.id);
+                                  }}
+                                  className="h-8 w-8 hover:bg-muted"
+                                  title="Reset password"
                                 >
                                   <KeyRound className="h-4 w-4" />
                                 </Button>
                                 {isSystemAdmin && (
                                   <Button
-                                    variant="outline"
+                                    variant="ghost"
                                     size="icon"
-                                    onClick={() => openDeleteDialog(user)}
-                                    className="h-8 w-8"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openDeleteDialog(user);
+                                    }}
+                                    className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                    title="Delete user"
                                   >
                                     <Trash2 className="h-4 w-4" />
                                   </Button>
                                 )}
-                              </>
+                              </div>
                             )}
                             {isSystemAdmin && (
                               <Button
-                                variant="outline"
+                                variant={user.disabled ? "outline" : "ghost"}
                                 size="sm"
-                                onClick={() => handleDisableUser(user)}
-                                className="h-8"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDisableUser(user);
+                                }}
+                                className={`h-8 px-2 sm:px-3 text-sm min-w-[60px] sm:min-w-[70px] ${
+                                  user.disabled ? 'hover:bg-primary/10 hover:text-primary' : 'hover:bg-destructive/10 hover:text-destructive'
+                                }`}
                               >
                                 {user.disabled ? "Enable" : "Disable"}
                               </Button>
@@ -479,7 +535,10 @@ export function UsersList() {
                   ) : (
                     <TableRow>
                       <TableCell colSpan={8} className="h-24 text-center">
-                        {searchTerm ? 'No users match your search.' : 'No users found.'}
+                        <div className="flex flex-col items-center justify-center text-muted-foreground">
+                          <Users className="h-8 w-8 mb-2" />
+                          {searchTerm ? 'No users match your search.' : 'No users found.'}
+                        </div>
                       </TableCell>
                     </TableRow>
                   )}
@@ -489,9 +548,10 @@ export function UsersList() {
           </CardContent>
         </Card>
       ) : (
-        <div className="text-center py-10 border rounded-lg">
+        <div className="text-center py-10 border rounded-lg bg-muted/10">
+          <Users className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
           <p className="text-muted-foreground">No users found</p>
-          <p className="text-sm mt-2">Create a new user by clicking the "Add User" button above</p>
+          <p className="text-sm mt-2 text-muted-foreground">Create a new user by clicking the "Add User" button above</p>
         </div>
       )}
       
@@ -499,88 +559,92 @@ export function UsersList() {
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
         <DialogContent className="w-[95vw] sm:max-w-[600px]">
           <DialogHeader>
-            <DialogTitle>Add New User</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="text-xl font-semibold">Add New User</DialogTitle>
+            <DialogDescription className="text-muted-foreground">
               Fill in the details to create a new user account.
             </DialogDescription>
           </DialogHeader>
           
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label htmlFor="name">Full Name</Label>
-              <Input
-                id="name"
-                placeholder="John Doe"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="name@example.com"
-                value={newEmail}
-                onChange={(e) => setNewEmail(e.target.value)}
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="role">Role</Label>
-              <Select value={newRole || ""} onValueChange={(value) => setNewRole(value as UserRole)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select role" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="system_admin">System Administrator</SelectItem>
-                  <SelectItem value="global_engineer">Global Engineer</SelectItem>
-                  <SelectItem value="regional_engineer">Regional Engineer</SelectItem>
-                  <SelectItem value="district_engineer">District Engineer</SelectItem>
-                  <SelectItem value="technician">Technician</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            {(newRole === "district_engineer" || newRole === "regional_engineer" || newRole === "technician") && (
+          <div className="space-y-4 py-4">
+            <div className="grid gap-4">
               <div className="space-y-2">
-                <Label htmlFor="region">Region</Label>
-                <Select value={newRegion} onValueChange={setNewRegion}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select region" />
+                <Label htmlFor="name">Full Name</Label>
+                <Input
+                  id="name"
+                  placeholder="John Doe"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  className="w-full"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="name@example.com"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  className="w-full"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="role">Role</Label>
+                <Select value={newRole || ""} onValueChange={(value) => setNewRole(value as UserRole)}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select role" />
                   </SelectTrigger>
                   <SelectContent>
-                    {filteredRegions.map(region => (
-                      <SelectItem key={region.id} value={region.name}>
-                        {region.name}
-                      </SelectItem>
-                    ))}
+                    <SelectItem value="system_admin">System Administrator</SelectItem>
+                    <SelectItem value="global_engineer">Global Engineer</SelectItem>
+                    <SelectItem value="regional_engineer">Regional Engineer</SelectItem>
+                    <SelectItem value="district_engineer">District Engineer</SelectItem>
+                    <SelectItem value="technician">Technician</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-            )}
-            
-            {(newRole === "district_engineer" || newRole === "technician") && newRegion && (
-              <div className="space-y-2">
-                <Label htmlFor="district">District</Label>
-                <Select value={newDistrict} onValueChange={setNewDistrict}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select district" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableDistricts.map(district => (
-                      <SelectItem key={district.id} value={district.name}>
-                        {district.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+              
+              {(newRole === "district_engineer" || newRole === "regional_engineer" || newRole === "technician") && (
+                <div className="space-y-2">
+                  <Label htmlFor="region">Region</Label>
+                  <Select value={newRegion} onValueChange={setNewRegion}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select region" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {filteredRegions.map(region => (
+                        <SelectItem key={region.id} value={region.name}>
+                          {region.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              
+              {(newRole === "district_engineer" || newRole === "technician") && newRegion && (
+                <div className="space-y-2">
+                  <Label htmlFor="district">District</Label>
+                  <Select value={newDistrict} onValueChange={setNewDistrict}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select district" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableDistricts.map(district => (
+                        <SelectItem key={district.id} value={district.name}>
+                          {district.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
           </div>
           
-          <div className="flex flex-col sm:flex-row justify-end gap-2">
+          <div className="flex flex-col sm:flex-row justify-end gap-2 mt-6">
             <Button 
               variant="outline" 
               onClick={() => {

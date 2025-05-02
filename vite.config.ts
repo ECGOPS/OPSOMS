@@ -1,24 +1,21 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
-import { componentTagger } from "lovable-tagger";
 import { VitePWA } from 'vite-plugin-pwa';
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
   server: {
     host: true,
-    port: 3000,
+    port: 5173,
     strictPort: true,
     cors: true,
   },
   plugins: [
     react(),
-    mode === 'development' &&
-    componentTagger(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'lovable-uploads/ecg-logo.png'],
+      includeAssets: ['favicon.ico', 'ecg-images/ecg-logo.png'],
       manifest: {
         name: 'ECG Outage Management System',
         short_name: 'ECG OMS',
@@ -28,17 +25,17 @@ export default defineConfig(({ mode }) => ({
         display: 'standalone',
         icons: [
           {
-            src: '/lovable-uploads/ecg-logo.png',
+            src: '/ecg-images/ecg-logo.png',
             sizes: '192x192',
             type: 'image/png'
           },
           {
-            src: '/lovable-uploads/ecg-logo.png',
+            src: '/ecg-images/ecg-logo.png',
             sizes: '512x512',
             type: 'image/png'
           },
           {
-            src: '/lovable-uploads/ecg-logo.png',
+            src: '/ecg-images/ecg-logo.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'any maskable'

@@ -174,20 +174,21 @@ export function VITAssetsTable({ assets: propAssets, onAddAsset, onEditAsset, on
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="font-medium">Created At</TableHead>
+              <TableHead className="font-medium">Region</TableHead>
+              <TableHead className="font-medium">District</TableHead>
               <TableHead className="font-medium">Serial Number</TableHead>
               <TableHead className="font-medium">Type</TableHead>
               <TableHead className="font-medium">Voltage</TableHead>
               <TableHead className="font-medium">Location</TableHead>
               <TableHead className="font-medium">Status</TableHead>
-              <TableHead className="font-medium">Region</TableHead>
-              <TableHead className="font-medium">District</TableHead>
               <TableHead className="text-right font-medium">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filteredAssets.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-10 text-muted-foreground">
+                <TableCell colSpan={9} className="text-center py-10 text-muted-foreground">
                   {searchTerm 
                     ? "No assets found matching your search criteria" 
                     : "No VIT assets found. Add some to get started!"}
@@ -196,6 +197,9 @@ export function VITAssetsTable({ assets: propAssets, onAddAsset, onEditAsset, on
             ) : (
               filteredAssets.map((asset) => (
                 <TableRow key={asset.id}>
+                  <TableCell>{formatDate(asset.createdAt)}</TableCell>
+                  <TableCell>{asset.region || "Unknown Region"}</TableCell>
+                  <TableCell>{asset.district || "Unknown District"}</TableCell>
                   <TableCell className="font-medium">{asset.serialNumber}</TableCell>
                   <TableCell>{asset.typeOfUnit}</TableCell>
                   <TableCell>{asset.voltageLevel}</TableCell>
@@ -207,8 +211,6 @@ export function VITAssetsTable({ assets: propAssets, onAddAsset, onEditAsset, on
                       {asset.status}
                     </Badge>
                   </TableCell>
-                  <TableCell>{asset.region || "Unknown Region"}</TableCell>
-                  <TableCell>{asset.district || "Unknown District"}</TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>

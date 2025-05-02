@@ -10,6 +10,23 @@ import { useData } from "@/contexts/DataContext";
 import { useNavigate, useParams } from "react-router-dom";
 import { formatDate } from "@/utils/calculations"; // Import formatDate
 import { ArrowLeft } from "lucide-react"; // For back button
+import { format } from 'date-fns';
+
+// Helper function to format time
+const formatTime = (timeStr: string) => {
+  try {
+    // Create a base date to work with (today's date)
+    const baseDate = new Date();
+    // Parse the time string and set it on today's date
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    baseDate.setHours(hours, minutes);
+    // Format the time in 12-hour format with AM/PM
+    return format(baseDate, 'h:mm a');
+  } catch (error) {
+    console.error('Error formatting time:', error, timeStr);
+    return timeStr; // Return original string if parsing fails
+  }
+};
 
 // Helper component to display a detail item
 const DetailItem = ({ label, value }: { label: string; value: string | number | undefined }) => (
@@ -120,10 +137,10 @@ export default function LoadMonitoringDetailsPage() {
       } catch (error) {
         console.error("Error fetching load monitoring record:", error);
         toast.error("Failed to load record details.");
-      navigate("/asset-management/load-monitoring");
+        navigate("/asset-management/load-monitoring");
       } finally {
-      setIsLoading(false);
-    }
+        setIsLoading(false);
+      }
     };
 
     fetchRecordData();
@@ -139,7 +156,7 @@ export default function LoadMonitoringDetailsPage() {
     return <Layout><div>Record not found.</div></Layout>;
   }
 
- return (
+  return (
     <Layout>
       <div className="container mx-auto py-8">
         <div className="flex items-center justify-between mb-6">
@@ -158,7 +175,7 @@ export default function LoadMonitoringDetailsPage() {
               </CardHeader>
               <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                  <DetailItem label="Date" value={formatDate(record.date)} />
-                 <DetailItem label="Time" value={record.time} />
+                 <DetailItem label="Time" value={formatTime(record.time)} />
                  <DetailItem label="Region" value={record.region} />
                  <DetailItem label="District" value={record.district} />
                  <DetailItem label="Substation Name" value={record.substationName} />
