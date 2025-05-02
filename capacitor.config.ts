@@ -2,7 +2,7 @@ import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'app.ecg.faultmaster',
-  appName: 'ECG Fault Master',
+  appName: 'ECG OMS',
   webDir: 'dist',
   bundledWebRuntime: false,
   server: {

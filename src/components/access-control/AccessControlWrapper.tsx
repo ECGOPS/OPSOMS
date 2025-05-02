@@ -55,8 +55,8 @@ export function AccessControlWrapper({
 
       // Check district population access
       if (type === 'district_population') {
-        if (!permissionService.canManageDistrictPopulation(user?.role || null)) {
-          console.log('Access denied: Cannot manage district population');
+        if (!permissionService.canAccessFeature(user?.role || null, 'district_population')) {
+          console.log('Access denied: Cannot access district population feature');
           toast.error("You don't have permission to access district population");
           setIsAuthorized(false);
           navigate('/');

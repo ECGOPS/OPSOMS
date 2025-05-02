@@ -1,6 +1,8 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
 
-interface FaultMasterDB extends DBSchema {
+type StoreName = 'op5-faults' | 'control-outages' | 'vit-assets' | 'vit-inspections' | 'substation-inspections' | 'load-monitoring' | 'pending-sync';
+
+interface ECGOMSDB extends DBSchema {
   'op5-faults': {
     key: string;
     value: any;
@@ -34,60 +36,79 @@ interface FaultMasterDB extends DBSchema {
   'pending-sync': {
     key: string;
     value: {
+      id: string;
       type: string;
       action: 'create' | 'update' | 'delete';
       data: any;
       timestamp: number;
     };
+    indexes: { 'by-timestamp': number };
   };
 }
 
-let db: IDBPDatabase<FaultMasterDB> | null = null;
+let db: IDBPDatabase<ECGOMSDB> | null = null;
 
 export async function initDB() {
   if (!db) {
-    db = await openDB<FaultMasterDB>('faultmaster-db', 1, {
+    db = await openDB<ECGOMSDB>('ecg-oms-db', 1, {
       upgrade(db) {
         // OP5 Faults
-        const op5FaultsStore = db.createObjectStore('op5-faults', { keyPath: 'id' });
-        op5FaultsStore.createIndex('by-date', 'occurrenceDate');
+        if (!db.objectStoreNames.contains('op5-faults')) {
+          const op5Store = db.createObjectStore('op5-faults', { keyPath: 'id' });
+          op5Store.createIndex('by-date', 'occurrenceDate');
+        }
 
         // Control Outages
-        const controlOutagesStore = db.createObjectStore('control-outages', { keyPath: 'id' });
-        controlOutagesStore.createIndex('by-date', 'occurrenceDate');
+        if (!db.objectStoreNames.contains('control-outages')) {
+          const controlStore = db.createObjectStore('control-outages', { keyPath: 'id' });
+          controlStore.createIndex('by-date', 'occurrenceDate');
+        }
 
         // VIT Assets
-        const vitAssetsStore = db.createObjectStore('vit-assets', { keyPath: 'id' });
-        vitAssetsStore.createIndex('by-region', 'regionId');
+        if (!db.objectStoreNames.contains('vit-assets')) {
+          const vitStore = db.createObjectStore('vit-assets', { keyPath: 'id' });
+          vitStore.createIndex('by-region', 'regionId');
+        }
 
         // VIT Inspections
-        const vitInspectionsStore = db.createObjectStore('vit-inspections', { keyPath: 'id' });
-        vitInspectionsStore.createIndex('by-asset', 'vitAssetId');
+        if (!db.objectStoreNames.contains('vit-inspections')) {
+          const vitInspectionStore = db.createObjectStore('vit-inspections', { keyPath: 'id' });
+          vitInspectionStore.createIndex('by-asset', 'assetId');
+        }
 
         // Substation Inspections
-        const substationInspectionsStore = db.createObjectStore('substation-inspections', { keyPath: 'id' });
-        substationInspectionsStore.createIndex('by-date', 'date');
+        if (!db.objectStoreNames.contains('substation-inspections')) {
+          const substationStore = db.createObjectStore('substation-inspections', { keyPath: 'id' });
+          substationStore.createIndex('by-date', 'inspectionDate');
+        }
 
         // Load Monitoring
-        const loadMonitoringStore = db.createObjectStore('load-monitoring', { keyPath: 'id' });
-        loadMonitoringStore.createIndex('by-date', 'date');
+        if (!db.objectStoreNames.contains('load-monitoring')) {
+          const loadStore = db.createObjectStore('load-monitoring', { keyPath: 'id' });
+          loadStore.createIndex('by-date', 'timestamp');
+        }
 
         // Pending Sync
-        db.createObjectStore('pending-sync', { keyPath: 'timestamp' });
-      },
+        if (!db.objectStoreNames.contains('pending-sync')) {
+          const pendingSyncStore = db.createObjectStore('pending-sync', { keyPath: 'id' });
+          pendingSyncStore.createIndex('by-timestamp', 'timestamp');
+        }
+      }
     });
   }
   return db;
 }
 
-export async function addToPendingSync(type: string, action: 'create' | 'update' | 'delete', data: any) {
+export async function addToPendingSync(storeName: StoreName, action: 'create' | 'update' | 'delete', data: any) {
   const db = await initDB();
-  await db.add('pending-sync', {
-    type,
+  const pendingSyncItem = {
+    id: crypto.randomUUID(),
+    type: storeName,
     action,
     data,
-    timestamp: Date.now(),
-  });
+    timestamp: Date.now()
+  };
+  await db.add('pending-sync', pendingSyncItem);
 }
 
 export async function getPendingSyncItems() {
@@ -101,30 +122,30 @@ export async function clearPendingSyncItem(timestamp: number) {
 }
 
 // Generic CRUD operations for each store
-export async function addItem(storeName: keyof FaultMasterDB, item: any) {
+export async function addItem(storeName: StoreName, item: any) {
   const db = await initDB();
   await db.add(storeName, item);
   await addToPendingSync(storeName, 'create', item);
 }
 
-export async function updateItem(storeName: keyof FaultMasterDB, item: any) {
+export async function updateItem(storeName: StoreName, item: any) {
   const db = await initDB();
   await db.put(storeName, item);
   await addToPendingSync(storeName, 'update', item);
 }
 
-export async function deleteItem(storeName: keyof FaultMasterDB, id: string) {
+export async function deleteItem(storeName: StoreName, id: string | number) {
   const db = await initDB();
-  await db.delete(storeName, id);
-  await addToPendingSync(storeName, 'delete', { id });
+  await db.delete(storeName, id.toString());
+  await addToPendingSync(storeName, 'delete', { id: id.toString() });
 }
 
-export async function getAllItems(storeName: keyof FaultMasterDB) {
+export async function getAllItems(storeName: StoreName) {
   const db = await initDB();
   return db.getAll(storeName);
 }
 
-export async function getItem(storeName: keyof FaultMasterDB, id: string) {
+export async function getItem(storeName: StoreName, id: string | number) {
   const db = await initDB();
-  return db.get(storeName, id);
+  return db.get(storeName, id.toString());
 } 

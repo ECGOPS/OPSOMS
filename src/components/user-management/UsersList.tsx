@@ -427,47 +427,51 @@ export function UsersList() {
                 <TableCaption className="mt-4">Total users: {filteredUsers.length}</TableCaption>
                 <TableHeader>
                   <TableRow className="bg-muted/50 hover:bg-muted/50">
-                    <TableHead className="whitespace-nowrap font-semibold min-w-[180px]">Name</TableHead>
-                    <TableHead className="whitespace-nowrap font-semibold min-w-[220px] hidden sm:table-cell">Email</TableHead>
-                    <TableHead className="whitespace-nowrap font-semibold min-w-[160px]">Role</TableHead>
-                    <TableHead className="whitespace-nowrap font-semibold min-w-[140px] hidden md:table-cell">Region</TableHead>
-                    <TableHead className="whitespace-nowrap font-semibold min-w-[140px] hidden md:table-cell">District</TableHead>
-                    <TableHead className="whitespace-nowrap font-semibold min-w-[120px] hidden lg:table-cell">Staff ID</TableHead>
-                    <TableHead className="whitespace-nowrap font-semibold min-w-[100px] hidden sm:table-cell">Status</TableHead>
-                    <TableHead className="whitespace-nowrap font-semibold text-right sticky right-0 bg-muted/50 min-w-[180px]">Actions</TableHead>
+                    <TableHead className="whitespace-nowrap font-semibold min-w-[180px]">User Details</TableHead>
+                    <TableHead className="whitespace-nowrap font-semibold min-w-[160px]">Role & Status</TableHead>
+                    <TableHead className="whitespace-nowrap font-semibold min-w-[180px] text-right sticky right-0 bg-muted/50">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredUsers.length > 0 ? (
-                    filteredUsers.map((user) => (
+                    filteredUsers.map(user => (
                       <TableRow key={user.id} className="group">
                         <TableCell className="font-medium">
-                          <div className="flex flex-col">
-                            <span>{user.name}</span>
-                            <span className="text-sm text-muted-foreground sm:hidden">{user.email}</span>
+                          <div className="flex flex-col gap-1">
+                            <div className="flex flex-col">
+                              <span className="font-semibold">{user.name}</span>
+                              <span className="text-sm text-muted-foreground">{user.email}</span>
+                            </div>
+                            <div className="flex flex-col gap-0.5 text-sm text-muted-foreground">
+                              <div className="flex items-center gap-1">
+                                <span className="font-medium">Region:</span>
+                                <span>{user.region || "-"}</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <span className="font-medium">District:</span>
+                                <span>{user.district || "-"}</span>
+                              </div>
+                              {user.staffId && (
+                                <div className="flex items-center gap-1">
+                                  <span className="font-medium">Staff ID:</span>
+                                  <span>{user.staffId}</span>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </TableCell>
-                        <TableCell className="hidden sm:table-cell text-muted-foreground">{user.email}</TableCell>
                         <TableCell>
-                          <Badge className={`${getRoleBadgeColor(user.role)} px-2 py-0.5`}>
-                            {getRoleLabel(user.role)}
-                          </Badge>
-                          <div className="flex flex-col gap-1 mt-1 sm:hidden">
-                            <Badge variant={user.disabled ? "destructive" : "default"} className="w-fit">
+                          <div className="flex flex-col gap-2">
+                            <Badge className={`${getRoleBadgeColor(user.role)} px-2 py-0.5 w-fit`}>
+                              {getRoleLabel(user.role)}
+                            </Badge>
+                            <Badge 
+                              variant={user.disabled ? "destructive" : "default"} 
+                              className="w-fit"
+                            >
                               {user.disabled ? "Disabled" : "Active"}
                             </Badge>
                           </div>
-                        </TableCell>
-                        <TableCell className="hidden md:table-cell text-muted-foreground">{user.region || "-"}</TableCell>
-                        <TableCell className="hidden md:table-cell text-muted-foreground">{user.district || "-"}</TableCell>
-                        <TableCell className="hidden lg:table-cell text-muted-foreground">{user.staffId || "-"}</TableCell>
-                        <TableCell className="hidden sm:table-cell">
-                          <Badge 
-                            variant={user.disabled ? "destructive" : "default"}
-                            className="px-2 py-0.5"
-                          >
-                            {user.disabled ? "Disabled" : "Active"}
-                          </Badge>
                         </TableCell>
                         <TableCell className="p-0 sticky right-0 bg-background">
                           <div className="flex justify-end items-center gap-2 px-4 py-2 bg-background">
@@ -534,7 +538,7 @@ export function UsersList() {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={8} className="h-24 text-center">
+                      <TableCell colSpan={3} className="h-24 text-center">
                         <div className="flex flex-col items-center justify-center text-muted-foreground">
                           <Users className="h-8 w-8 mb-2" />
                           {searchTerm ? 'No users match your search.' : 'No users found.'}

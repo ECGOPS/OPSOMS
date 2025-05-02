@@ -1,4 +1,4 @@
-# FaultMaster Technical Documentation
+# ECG OMS Technical Documentation
 
 ## Table of Contents
 1. [System Architecture](#system-architecture)
@@ -203,8 +203,8 @@ npm run start
 
 ### Environment Variables
 ```env
-VITE_API_URL=https://api.faultmaster.com
-VITE_APP_NAME=FaultMaster
+VITE_API_URL=https://api.ecg-oms.com
+VITE_APP_NAME=ECG OMS
 VITE_ENV=production
 ```
 

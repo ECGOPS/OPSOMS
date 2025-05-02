@@ -166,7 +166,7 @@ export function Navbar() {
           )}
           
           {/* District Population Menu - Show for district engineers and above */}
-          {showMenuItem("global_engineer") && (
+          {showMenuItem("district_engineer") && (
             <NavLink 
               to="/district-population" 
               className={cn(

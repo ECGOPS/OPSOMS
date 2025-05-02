@@ -1,5 +1,4 @@
-import React from 'react';
-import { useState } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from "react-router-dom";
 import { useData } from "@/contexts/DataContext";
 import { Layout } from "@/components/layout/Layout";
@@ -52,6 +51,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { AccessControlWrapper } from '@/components/access-control/AccessControlWrapper';
 import { useAuth } from "@/contexts/AuthContext";
+import { getFirestore, collection, query, where, orderBy, limit, startAfter, getCountFromServer, getDocs } from 'firebase/firestore';
+import { debounce } from 'lodash';
 
 // Add type declaration for jsPDF with autotable extensions
 declare module "jspdf" {
@@ -65,6 +66,8 @@ declare module "jspdf" {
 
 export default function VITInspectionManagementPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const { vitAssets, vitInspections, regions, districts, setVITInspections } = useData();
   const [activeTab, setActiveTab] = useState("assets");
   const [isAssetFormOpen, setIsAssetFormOpen] = useState(false);
   const [isInspectionFormOpen, setIsInspectionFormOpen] = useState(false);
@@ -73,6 +76,229 @@ export default function VITInspectionManagementPage() {
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
   const [selectedInspection, setSelectedInspection] = useState<VITInspectionChecklist | null>(null);
   const [isEditInspectionOpen, setIsEditInspectionOpen] = useState(false);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [totalItems, setTotalItems] = useState(0);
+  const [lastVisible, setLastVisible] = useState<any>(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Filter states
+  const [selectedRegion, setSelectedRegion] = useState<string | null>(null);
+  const [selectedDistrict, setSelectedDistrict] = useState<string | null>(null);
+  const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+
+  // Cache for frequently accessed data
+  const [dataCache, setDataCache] = useState<{ [key: string]: any[] }>({});
+  const [totalCountCache, setTotalCountCache] = useState<{ [key: string]: number }>({});
+
+  // Build cache key based on current filters
+  const getCacheKey = useCallback(() => {
+    return `${selectedRegion}-${selectedDistrict}-${selectedStatus}-${searchTerm}-${user?.role}-${user?.region}-${user?.district}`;
+  }, [selectedRegion, selectedDistrict, selectedStatus, searchTerm, user]);
+
+  // Optimize data loading with pagination and caching
+  const loadData = useCallback(async (resetPagination = false) => {
+    setIsLoading(true);
+    try {
+      const db = getFirestore();
+      const inspectionsRef = collection(db, "vitInspections");
+      
+      // Build query based on filters
+      let q = query(inspectionsRef);
+      
+      // Apply role-based filtering
+      if (user?.role === 'regional_engineer') {
+        q = query(q, where("region", "==", user.region));
+      } else if (user?.role === 'district_engineer' || user?.role === 'technician') {
+        q = query(q, where("district", "==", user.district));
+      }
+
+      // Apply additional filters
+      if (selectedRegion) {
+        q = query(q, where("region", "==", selectedRegion));
+      }
+      if (selectedDistrict) {
+        q = query(q, where("district", "==", selectedDistrict));
+      }
+      if (searchTerm) {
+        // Use compound queries for better performance
+        q = query(
+          q,
+          where("inspectedBy", ">=", searchTerm),
+          where("inspectedBy", "<=", searchTerm + '\uf8ff')
+        );
+      }
+
+      // Get total count from cache or server
+      const cacheKey = getCacheKey();
+      let totalCount = totalCountCache[cacheKey];
+      
+      if (!totalCount) {
+        const countSnapshot = await getCountFromServer(q);
+        totalCount = countSnapshot.data().count;
+        setTotalCountCache(prev => ({ ...prev, [cacheKey]: totalCount }));
+      }
+      
+      setTotalItems(totalCount);
+      
+      // Reset pagination if filters changed
+      if (resetPagination) {
+        setCurrentPage(1);
+        setLastVisible(null);
+        setHasMore(true);
+      }
+      
+      // Apply pagination with optimized query
+      q = query(
+        q,
+        orderBy("inspectionDate", "desc"),
+        limit(pageSize)
+      );
+      
+      if (lastVisible && !resetPagination) {
+        q = query(q, startAfter(lastVisible));
+      }
+
+      const querySnapshot = await getDocs(q);
+      const newInspections = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        vitAssetId: doc.data().vitAssetId || "",
+        region: doc.data().region || "",
+        district: doc.data().district || "",
+        inspectionDate: doc.data().inspectionDate || new Date().toISOString(),
+        inspectedBy: doc.data().inspectedBy || "unknown",
+        rodentTermiteEncroachment: doc.data().rodentTermiteEncroachment || "No",
+        cleanDustFree: doc.data().cleanDustFree || "No",
+        protectionButtonEnabled: doc.data().protectionButtonEnabled || "No",
+        recloserButtonEnabled: doc.data().recloserButtonEnabled || "No",
+        groundEarthButtonEnabled: doc.data().groundEarthButtonEnabled || "No",
+        acPowerOn: doc.data().acPowerOn || "No",
+        batteryPowerLow: doc.data().batteryPowerLow || "No",
+        handleLockOn: doc.data().handleLockOn || "No",
+        remoteButtonEnabled: doc.data().remoteButtonEnabled || "No",
+        gasLevelLow: doc.data().gasLevelLow || "No",
+        earthingArrangementAdequate: doc.data().earthingArrangementAdequate || "No",
+        noFusesBlown: doc.data().noFusesBlown || "No",
+        noDamageToBushings: doc.data().noDamageToBushings || "No",
+        noDamageToHVConnections: doc.data().noDamageToHVConnections || "No",
+        insulatorsClean: doc.data().insulatorsClean || "No",
+        paintworkAdequate: doc.data().paintworkAdequate || "No",
+        ptFuseLinkIntact: doc.data().ptFuseLinkIntact || "No",
+        noCorrosion: doc.data().noCorrosion || "No",
+        silicaGelCondition: doc.data().silicaGelCondition || "Good",
+        correctLabelling: doc.data().correctLabelling || "No",
+        remarks: doc.data().remarks || "",
+        createdBy: doc.data().createdBy || "unknown",
+        createdAt: doc.data().createdAt || new Date().toISOString(),
+        updatedAt: doc.data().updatedAt || new Date().toISOString()
+      })) as VITInspectionChecklist[];
+
+      // Update cache with paginated data
+      const updatedCache = { ...dataCache };
+      const pageKey = `${cacheKey}-${currentPage}`;
+      updatedCache[pageKey] = newInspections;
+      setDataCache(updatedCache);
+      
+      // Update last visible document for pagination
+      if (querySnapshot.docs.length > 0) {
+        setLastVisible(querySnapshot.docs[querySnapshot.docs.length - 1]);
+      }
+      
+      setHasMore(querySnapshot.docs.length === pageSize);
+      
+      // Update inspections with paginated data
+      if (resetPagination) {
+        setVITInspections(newInspections);
+      } else {
+        setVITInspections(prev => [...prev, ...newInspections]);
+      }
+    } catch (err) {
+      setError("Failed to load inspections");
+      console.error("Error loading inspections:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user, currentPage, pageSize, lastVisible, selectedRegion, selectedDistrict, searchTerm, dataCache, totalCountCache, getCacheKey, setVITInspections]);
+
+  // Load data on mount and when filters change
+  useEffect(() => {
+    loadData(true);
+  }, [selectedRegion, selectedDistrict, selectedStatus, searchTerm]);
+
+  // Load more data when scrolling
+  const handleLoadMore = useCallback(() => {
+    if (!isLoading && hasMore) {
+      setCurrentPage(prev => prev + 1);
+      loadData();
+    }
+  }, [isLoading, hasMore, loadData]);
+
+  // Optimize filtered inspections with useMemo and virtual scrolling
+  const filteredInspections = useMemo(() => {
+    if (!vitInspections) return [];
+    
+    let filtered = vitInspections;
+    
+    // Apply role-based filtering
+    if (user?.role === 'regional_engineer') {
+      filtered = filtered.filter(inspection => inspection.region === user.region);
+    } else if (user?.role === 'district_engineer' || user?.role === 'technician') {
+      filtered = filtered.filter(inspection => inspection.district === user.district);
+    }
+    
+    // Apply region filter
+    if (selectedRegion) {
+      filtered = filtered.filter(inspection => inspection.region === selectedRegion);
+    }
+    
+    // Apply district filter
+    if (selectedDistrict) {
+      filtered = filtered.filter(inspection => inspection.district === selectedDistrict);
+    }
+    
+    // Apply search term
+    if (searchTerm) {
+      const lowerCaseSearchTerm = searchTerm.toLowerCase();
+      filtered = filtered.filter(inspection => 
+        inspection.inspectedBy?.toLowerCase().includes(lowerCaseSearchTerm) ||
+        inspection.remarks?.toLowerCase().includes(lowerCaseSearchTerm)
+      );
+    }
+    
+    return filtered;
+  }, [vitInspections, user, selectedRegion, selectedDistrict, searchTerm]);
+
+  // Add debounced search
+  const debouncedSearch = useCallback(
+    debounce((value: string) => {
+      setSearchTerm(value);
+    }, 300),
+    []
+  );
+
+  // Add infinite scroll handler
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLDivElement;
+    if (
+      target.scrollHeight - target.scrollTop === target.clientHeight &&
+      !isLoading &&
+      hasMore
+    ) {
+      handleLoadMore();
+    }
+  }, [isLoading, hasMore, handleLoadMore]);
+
+  // Add cleanup for debounced search
+  useEffect(() => {
+    return () => {
+      debouncedSearch.cancel();
+    };
+  }, [debouncedSearch]);
 
   const handleAddAsset = () => {
     setSelectedAsset(null);

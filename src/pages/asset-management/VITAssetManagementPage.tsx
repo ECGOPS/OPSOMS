@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { AccessControlWrapper } from '@/components/access-control/AccessControlWrapper';
 import { useData } from '@/contexts/DataContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -6,30 +6,188 @@ import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
 import { VITAssetList } from '@/components/asset-management/VITAssetList';
 import { Skeleton } from '@/components/ui/skeleton';
+import { getFirestore, collection, query, where, orderBy, limit, startAfter, getCountFromServer, getDocs } from 'firebase/firestore';
+import { VITAsset } from '@/lib/types';
 
 export function VITAssetManagementPage() {
   const { user } = useAuth();
-  const { vitAssets, regions, districts } = useData();
+  const { vitAssets, regions, districts, setVITAssets } = useData();
   const [isLoading, setIsLoading] = useState(true);
-  const [filteredAssets, setFilteredAssets] = useState([]);
+  const [error, setError] = useState<string | null>(null);
 
-  // Filter assets based on user's role and region/district
-  useEffect(() => {
-    if (vitAssets && regions && districts) {
-      const filtered = vitAssets.filter(asset => {
-        if (user?.role === 'global_engineer') return true;
-        if (user?.role === 'regional_engineer') {
-          return asset.region === user.region;
-        }
-        if (user?.role === 'district_engineer' || user?.role === 'technician') {
-          return asset.district === user.district;
-        }
-        return false;
-      });
-      setFilteredAssets(filtered);
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [totalItems, setTotalItems] = useState(0);
+  const [lastVisible, setLastVisible] = useState<any>(null);
+  const [hasMore, setHasMore] = useState(true);
+
+  // Filter states
+  const [selectedRegion, setSelectedRegion] = useState<string | null>(null);
+  const [selectedDistrict, setSelectedDistrict] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+
+  // Cache for frequently accessed data
+  const [dataCache, setDataCache] = useState<{ [key: string]: any[] }>({});
+  const [totalCountCache, setTotalCountCache] = useState<{ [key: string]: number }>({});
+
+  // Build cache key based on current filters
+  const getCacheKey = useCallback(() => {
+    return `${selectedRegion}-${selectedDistrict}-${searchTerm}-${user?.role}-${user?.region}-${user?.district}`;
+  }, [selectedRegion, selectedDistrict, searchTerm, user]);
+
+  // Optimize data loading with pagination and caching
+  const loadData = useCallback(async (resetPagination = false) => {
+    setIsLoading(true);
+    try {
+      const db = getFirestore();
+      const assetsRef = collection(db, "vitAssets");
+      
+      // Build query based on filters
+      let q = query(assetsRef);
+      
+      // Apply role-based filtering
+      if (user?.role === 'regional_engineer') {
+        q = query(q, where("region", "==", user.region));
+      } else if (user?.role === 'district_engineer' || user?.role === 'technician') {
+        q = query(q, where("district", "==", user.district));
+      }
+
+      // Apply additional filters
+      if (selectedRegion) {
+        q = query(q, where("region", "==", selectedRegion));
+      }
+      if (selectedDistrict) {
+        q = query(q, where("district", "==", selectedDistrict));
+      }
+      if (searchTerm) {
+        q = query(q, where("serialNumber", ">=", searchTerm), where("serialNumber", "<=", searchTerm + '\uf8ff'));
+      }
+
+      // Get total count from cache or server
+      const cacheKey = getCacheKey();
+      let totalCount = totalCountCache[cacheKey];
+      
+      if (!totalCount) {
+        const countSnapshot = await getCountFromServer(q);
+        totalCount = countSnapshot.data().count;
+        setTotalCountCache(prev => ({ ...prev, [cacheKey]: totalCount }));
+      }
+      
+      setTotalItems(totalCount);
+      
+      // Reset pagination if filters changed
+      if (resetPagination) {
+        setCurrentPage(1);
+        setLastVisible(null);
+        setHasMore(true);
+      }
+      
+      // Apply pagination
+      q = query(
+        q,
+        orderBy("updatedAt", "desc"),
+        limit(pageSize)
+      );
+      
+      if (lastVisible && !resetPagination) {
+        q = query(q, startAfter(lastVisible));
+      }
+
+      const querySnapshot = await getDocs(q);
+      const newAssets = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        region: doc.data().region || "",
+        district: doc.data().district || "",
+        voltageLevel: doc.data().voltageLevel || "",
+        typeOfUnit: doc.data().typeOfUnit || "",
+        serialNumber: doc.data().serialNumber || "",
+        location: doc.data().location || "",
+        gpsCoordinates: doc.data().gpsCoordinates || "",
+        status: doc.data().status || "Operational",
+        protection: doc.data().protection || "",
+        photoUrl: doc.data().photoUrl || "",
+        createdBy: doc.data().createdBy || "unknown",
+        createdAt: doc.data().createdAt || new Date(),
+        updatedAt: doc.data().updatedAt || new Date()
+      })) as VITAsset[];
+
+      // Update cache
+      const updatedCache = { ...dataCache };
+      const pageKey = `${cacheKey}-${currentPage}`;
+      updatedCache[pageKey] = newAssets;
+      setDataCache(updatedCache);
+      
+      // Update last visible document for pagination
+      if (querySnapshot.docs.length > 0) {
+        setLastVisible(querySnapshot.docs[querySnapshot.docs.length - 1]);
+      }
+      
+      setHasMore(querySnapshot.docs.length === pageSize);
+      
+      // Update assets
+      if (resetPagination) {
+        setVITAssets(newAssets);
+      } else {
+        setVITAssets(prev => [...prev, ...newAssets]);
+      }
+    } catch (err) {
+      setError("Failed to load assets");
+      console.error("Error loading assets:", err);
+    } finally {
       setIsLoading(false);
     }
-  }, [vitAssets, regions, districts, user]);
+  }, [user, currentPage, pageSize, lastVisible, selectedRegion, selectedDistrict, searchTerm, dataCache, totalCountCache, getCacheKey, setVITAssets]);
+
+  // Load data on mount and when filters change
+  useEffect(() => {
+    loadData(true);
+  }, [selectedRegion, selectedDistrict, searchTerm]);
+
+  // Load more data when scrolling
+  const handleLoadMore = useCallback(() => {
+    if (!isLoading && hasMore) {
+      setCurrentPage(prev => prev + 1);
+      loadData();
+    }
+  }, [isLoading, hasMore, loadData]);
+
+  // Optimize filtered assets with useMemo
+  const filteredAssets = useMemo(() => {
+    if (!vitAssets) return [];
+    
+    let filtered = vitAssets;
+    
+    // Apply role-based filtering
+    if (user?.role === 'regional_engineer') {
+      filtered = filtered.filter(asset => asset.region === user.region);
+    } else if (user?.role === 'district_engineer' || user?.role === 'technician') {
+      filtered = filtered.filter(asset => asset.district === user.district);
+    }
+    
+    // Apply region filter
+    if (selectedRegion) {
+      filtered = filtered.filter(asset => asset.region === selectedRegion);
+    }
+    
+    // Apply district filter
+    if (selectedDistrict) {
+      filtered = filtered.filter(asset => asset.district === selectedDistrict);
+    }
+    
+    // Apply search term
+    if (searchTerm) {
+      const lowerCaseSearchTerm = searchTerm.toLowerCase();
+      filtered = filtered.filter(asset => 
+        asset.serialNumber?.toLowerCase().includes(lowerCaseSearchTerm) ||
+        asset.location?.toLowerCase().includes(lowerCaseSearchTerm) ||
+        asset.typeOfUnit?.toLowerCase().includes(lowerCaseSearchTerm)
+      );
+    }
+    
+    return filtered;
+  }, [vitAssets, user, selectedRegion, selectedDistrict, searchTerm]);
 
   if (isLoading) {
     return (
@@ -49,6 +207,16 @@ export function VITAssetManagementPage() {
     );
   }
 
+  if (error) {
+    return (
+      <AccessControlWrapper type="asset">
+        <div className="container mx-auto p-4">
+          <div className="text-red-500">{error}</div>
+        </div>
+      </AccessControlWrapper>
+    );
+  }
+
   return (
     <AccessControlWrapper type="asset">
       <div className="container mx-auto p-4">
@@ -59,7 +227,12 @@ export function VITAssetManagementPage() {
           </Button>
         </div>
         
-        <VITAssetList assets={filteredAssets} />
+        <VITAssetList 
+          assets={filteredAssets} 
+          onLoadMore={handleLoadMore}
+          hasMore={hasMore}
+          isLoading={isLoading}
+        />
       </div>
     </AccessControlWrapper>
   );

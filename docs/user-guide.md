@@ -1,4 +1,4 @@
-# FaultMaster User Guide
+# ECG OMS User Guide
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -10,7 +10,7 @@
 7. [Troubleshooting](#troubleshooting)
 
 ## Introduction
-FaultMaster is a comprehensive fault management system designed for power distribution networks. This guide will help you understand and effectively use the system's features.
+ECG OMS is a comprehensive fault management system designed for power distribution networks. This guide will help you understand and effectively use the system's features.
 
 ## Getting Started
 
@@ -135,6 +135,6 @@ The dashboard provides an overview of:
 
 ### Support
 For additional support:
-- Email: support@faultmaster.com
+- Email: support@ecg-oms.com
 - Phone: +1 (555) 123-4567
-- Online Help Center: help.faultmaster.com 
+- Online Help Center: help.ecg-oms.com 
