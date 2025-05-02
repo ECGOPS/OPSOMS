@@ -39,6 +39,13 @@ export type District = {
   name: string;
   population: RegionPopulation;
   lastPopulationReset?: string; // Date when population was last reset
+  populationHistory?: {
+    rural: number;
+    urban: number;
+    metro: number;
+    updatedBy: string;
+    updatedAt: string;
+  }[];
 };
 
 export type FaultType = "Planned" | "Unplanned" | "Emergency" | "Load Shedding" | "GridCo Outages";

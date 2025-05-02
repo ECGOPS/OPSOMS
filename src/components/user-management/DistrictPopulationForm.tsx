@@ -19,8 +19,17 @@ import {
   CardHeader, 
   CardTitle 
 } from "@/components/ui/card";
-import { Loader2 } from "lucide-react";
+import { Loader2, History } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { format } from "date-fns";
 
 export function DistrictPopulationForm() {
   const { regions, districts, updateDistrict } = useData();
@@ -32,6 +41,7 @@ export function DistrictPopulationForm() {
   const [ruralPopulation, setRuralPopulation] = useState<number>(0);
   const [urbanPopulation, setUrbanPopulation] = useState<number>(0);
   const [metroPopulation, setMetroPopulation] = useState<number>(0);
+  const [showHistory, setShowHistory] = useState(false);
   
   // Set initial values based on user role
   useEffect(() => {
@@ -109,12 +119,30 @@ export function DistrictPopulationForm() {
     setIsSubmitting(true);
     
     try {
+      const district = districts.find(d => d.id === selectedDistrict);
+      if (!district) {
+        throw new Error("District not found");
+      }
+
+      const currentPopulation = {
+        rural: ruralPopulation,
+        urban: urbanPopulation,
+        metro: metroPopulation
+      };
+
+      // Create new history entry
+      const newHistoryEntry = {
+        ...currentPopulation,
+        updatedBy: user?.name || "Unknown",
+        updatedAt: new Date().toISOString()
+      };
+
+      // Get existing history or create new array
+      const existingHistory = district.populationHistory || [];
+      
       await updateDistrict(selectedDistrict, {
-        population: {
-          rural: ruralPopulation,
-          urban: urbanPopulation,
-          metro: metroPopulation
-        }
+        population: currentPopulation,
+        populationHistory: [...existingHistory, newHistoryEntry]
       });
       
       toast.success("District population updated successfully");
@@ -142,6 +170,9 @@ export function DistrictPopulationForm() {
       })
     : [];
   
+  const selectedDistrictData = districts.find(d => d.id === selectedDistrict);
+  const populationHistory = selectedDistrictData?.populationHistory || [];
+
   return (
     <Card>
       <CardHeader>
@@ -227,6 +258,50 @@ export function DistrictPopulationForm() {
                 onChange={(e) => setMetroPopulation(parseInt(e.target.value) || 0)}
               />
             </div>
+          </div>
+          
+          <div className="mt-6">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowHistory(!showHistory)}
+              className="flex items-center gap-2"
+            >
+              <History className="h-4 w-4" />
+              {showHistory ? "Hide History" : "Show History"}
+            </Button>
+            
+            {showHistory && populationHistory.length > 0 && (
+              <div className="mt-4">
+                <h3 className="text-lg font-semibold mb-2">Population History</h3>
+                <div className="border rounded-md">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Updated By</TableHead>
+                        <TableHead>Rural</TableHead>
+                        <TableHead>Urban</TableHead>
+                        <TableHead>Metro</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {populationHistory
+                        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+                        .map((entry, index) => (
+                          <TableRow key={index}>
+                            <TableCell>{format(new Date(entry.updatedAt), 'MMM d, yyyy HH:mm')}</TableCell>
+                            <TableCell>{entry.updatedBy}</TableCell>
+                            <TableCell>{entry.rural.toLocaleString()}</TableCell>
+                            <TableCell>{entry.urban.toLocaleString()}</TableCell>
+                            <TableCell>{entry.metro.toLocaleString()}</TableCell>
+                          </TableRow>
+                        ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            )}
           </div>
         </form>
       </CardContent>
