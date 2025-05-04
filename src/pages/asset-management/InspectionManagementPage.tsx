@@ -117,6 +117,14 @@ export default function InspectionManagementPage() {
       );
     }
     
+    // Sort by date (and inspectionDate) descending so most recent is first
+    filtered = filtered.slice().sort((a, b) => {
+      // Prefer inspectionDate if available, else fallback to date
+      const dateA = new Date(a.inspectionDate || a.date);
+      const dateB = new Date(b.inspectionDate || b.date);
+      return dateB.getTime() - dateA.getTime();
+    });
+    
     return filtered;
   }, [savedInspections, user, selectedDate, selectedMonth, selectedRegion, selectedDistrict, searchTerm]);
 

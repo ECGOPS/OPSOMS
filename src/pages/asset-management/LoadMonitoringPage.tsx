@@ -127,6 +127,13 @@ export default function LoadMonitoringPage() {
       );
     }
     
+    // Sort by date (and time) descending so most recent is first
+    filtered = filtered.slice().sort((a, b) => {
+      const dateA = new Date(`${a.date}T${a.time || '00:00'}`);
+      const dateB = new Date(`${b.date}T${b.time || '00:00'}`);
+      return dateB.getTime() - dateA.getTime();
+    });
+
     return filtered;
   }, [loadMonitoringRecords, user, selectedDate, selectedMonth, selectedRegion, selectedDistrict, searchTerm]);
 
@@ -134,7 +141,7 @@ export default function LoadMonitoringPage() {
   useEffect(() => {
     const formatted: Record<string, string> = {};
     filteredRecords.forEach(record => {
-      formatted[record.id] = record.percentageLoad?.toFixed(2) ?? "0.00";
+      formatted[record.id] = typeof record.percentageLoad === 'number' ? record.percentageLoad.toFixed(2) : "0.00";
     });
     setFormattedPercentageLoads(formatted);
   }, [filteredRecords]);
@@ -269,10 +276,10 @@ export default function LoadMonitoringPage() {
         currentY -= lineHeight;
 
         const legInfo = [
-          ['Red Phase Current', `${leg.redPhaseCurrent.toFixed(2)} A`],
-          ['Yellow Phase Current', `${leg.yellowPhaseCurrent.toFixed(2)} A`],
-          ['Blue Phase Current', `${leg.bluePhaseCurrent.toFixed(2)} A`],
-          ['Neutral Current', `${leg.neutralCurrent.toFixed(2)} A`]
+          ['Red Phase Current', `${typeof leg.redPhaseCurrent === 'number' ? leg.redPhaseCurrent.toFixed(2) : '0.00'} A`],
+          ['Yellow Phase Current', `${typeof leg.yellowPhaseCurrent === 'number' ? leg.yellowPhaseCurrent.toFixed(2) : '0.00'} A`],
+          ['Blue Phase Current', `${typeof leg.bluePhaseCurrent === 'number' ? leg.bluePhaseCurrent.toFixed(2) : '0.00'} A`],
+          ['Neutral Current', `${typeof leg.neutralCurrent === 'number' ? leg.neutralCurrent.toFixed(2) : '0.00'} A`]
         ];
 
         legInfo.forEach(([label, value]) => {
@@ -301,14 +308,14 @@ export default function LoadMonitoringPage() {
       currentY -= lineHeight;
 
       const loadInfo = [
-        ['Rated Load', `${record.ratedLoad.toFixed(2)} A`],
-        ['Red Phase Bulk Load', `${record.redPhaseBulkLoad.toFixed(2)} A`],
-        ['Yellow Phase Bulk Load', `${record.yellowPhaseBulkLoad.toFixed(2)} A`],
-        ['Blue Phase Bulk Load', `${record.bluePhaseBulkLoad.toFixed(2)} A`],
-        ['Average Current', `${record.averageCurrent.toFixed(2)} A`],
-        ['Percentage Load', `${record.percentageLoad.toFixed(2)}%`],
-        ['10% Rated Neutral', `${record.tenPercentFullLoadNeutral.toFixed(2)} A`],
-        ['Calculated Neutral', `${record.calculatedNeutral.toFixed(2)} A`]
+        ['Rated Load', `${typeof record.ratedLoad === 'number' ? record.ratedLoad.toFixed(2) : '0.00'} A`],
+        ['Red Phase Bulk Load', `${typeof record.redPhaseBulkLoad === 'number' ? record.redPhaseBulkLoad.toFixed(2) : '0.00'} A`],
+        ['Yellow Phase Bulk Load', `${typeof record.yellowPhaseBulkLoad === 'number' ? record.yellowPhaseBulkLoad.toFixed(2) : '0.00'} A`],
+        ['Blue Phase Bulk Load', `${typeof record.bluePhaseBulkLoad === 'number' ? record.bluePhaseBulkLoad.toFixed(2) : '0.00'} A`],
+        ['Average Current', `${typeof record.averageCurrent === 'number' ? record.averageCurrent.toFixed(2) : '0.00'} A`],
+        ['Percentage Load', `${typeof record.percentageLoad === 'number' ? record.percentageLoad.toFixed(2) : '0.00'}%`],
+        ['10% Rated Neutral', `${typeof record.tenPercentFullLoadNeutral === 'number' ? record.tenPercentFullLoadNeutral.toFixed(2) : '0.00'} A`],
+        ['Calculated Neutral', `${typeof record.calculatedNeutral === 'number' ? record.calculatedNeutral.toFixed(2) : '0.00'} A`]
       ];
 
       loadInfo.forEach(([label, value]) => {
@@ -324,7 +331,7 @@ export default function LoadMonitoringPage() {
 
       // Add load status
       currentY -= lineHeight;
-      const loadStatus = getLoadStatus(record.percentageLoad);
+      const loadStatus = getLoadStatus(typeof record.percentageLoad === 'number' ? record.percentageLoad : 0);
       page.drawText(`Load Status: ${loadStatus.status}`, {
         x: margin,
         y: currentY,
@@ -388,10 +395,10 @@ export default function LoadMonitoringPage() {
     record.feederLegs.forEach((leg, index) => {
       csvContent.push([
         `Leg ${index + 1}`,
-        leg.redPhaseCurrent.toFixed(2),
-        leg.yellowPhaseCurrent.toFixed(2),
-        leg.bluePhaseCurrent.toFixed(2),
-        leg.neutralCurrent.toFixed(2)
+        typeof leg.redPhaseCurrent === 'number' ? leg.redPhaseCurrent.toFixed(2) : '0.00',
+        typeof leg.yellowPhaseCurrent === 'number' ? leg.yellowPhaseCurrent.toFixed(2) : '0.00',
+        typeof leg.bluePhaseCurrent === 'number' ? leg.bluePhaseCurrent.toFixed(2) : '0.00',
+        typeof leg.neutralCurrent === 'number' ? leg.neutralCurrent.toFixed(2) : '0.00'
       ]);
     });
 
@@ -399,18 +406,18 @@ export default function LoadMonitoringPage() {
       [],
       ["Calculated Load Information"],
       ["Metric", "Value"],
-      ["Rated Load (A)", record.ratedLoad.toFixed(2)],
-      ["Red Phase Bulk Load (A)", record.redPhaseBulkLoad.toFixed(2)],
-      ["Yellow Phase Bulk Load (A)", record.yellowPhaseBulkLoad.toFixed(2)],
-      ["Blue Phase Bulk Load (A)", record.bluePhaseBulkLoad.toFixed(2)],
-      ["Average Current (A)", record.averageCurrent.toFixed(2)],
-      ["Percentage Load (%)", record.percentageLoad.toFixed(2)],
-      ["10% Rated Neutral (A)", record.tenPercentFullLoadNeutral.toFixed(2)],
-      ["Calculated Neutral (A)", record.calculatedNeutral.toFixed(2)]
+      ["Rated Load (A)", typeof record.ratedLoad === 'number' ? record.ratedLoad.toFixed(2) : '0.00'],
+      ["Red Phase Bulk Load (A)", typeof record.redPhaseBulkLoad === 'number' ? record.redPhaseBulkLoad.toFixed(2) : '0.00'],
+      ["Yellow Phase Bulk Load (A)", typeof record.yellowPhaseBulkLoad === 'number' ? record.yellowPhaseBulkLoad.toFixed(2) : '0.00'],
+      ["Blue Phase Bulk Load (A)", typeof record.bluePhaseBulkLoad === 'number' ? record.bluePhaseBulkLoad.toFixed(2) : '0.00'],
+      ["Average Current (A)", typeof record.averageCurrent === 'number' ? record.averageCurrent.toFixed(2) : '0.00'],
+      ["Percentage Load (%)", typeof record.percentageLoad === 'number' ? record.percentageLoad.toFixed(2) : '0.00'],
+      ["10% Rated Neutral (A)", typeof record.tenPercentFullLoadNeutral === 'number' ? record.tenPercentFullLoadNeutral.toFixed(2) : '0.00'],
+      ["Calculated Neutral (A)", typeof record.calculatedNeutral === 'number' ? record.calculatedNeutral.toFixed(2) : '0.00']
     );
 
     // Add load status
-    const loadStatus = getLoadStatus(record.percentageLoad);
+    const loadStatus = getLoadStatus(typeof record.percentageLoad === 'number' ? record.percentageLoad : 0);
     csvContent.push(
       [],
       ["Load Status", loadStatus.status]
@@ -459,7 +466,7 @@ export default function LoadMonitoringPage() {
 
     // Add each record as a single row
     const rows = filteredRecords.map(record => {
-      const loadStatus = getLoadStatus(record.percentageLoad);
+      const loadStatus = getLoadStatus(typeof record.percentageLoad === 'number' ? record.percentageLoad : 0);
       return [
         formatDate(record.date),
         formatTimeWithAMPM(record.time),
@@ -471,14 +478,14 @@ export default function LoadMonitoringPage() {
         record.rating,
         record.peakLoadStatus,
         `"${record.createdBy?.name || 'Unknown'}"`,
-        record.ratedLoad?.toFixed(2) ?? '',
-        record.redPhaseBulkLoad?.toFixed(2) ?? '',
-        record.yellowPhaseBulkLoad?.toFixed(2) ?? '',
-        record.bluePhaseBulkLoad?.toFixed(2) ?? '',
-        record.averageCurrent?.toFixed(2) ?? '',
-        record.percentageLoad?.toFixed(2) ?? '',
-        record.tenPercentFullLoadNeutral?.toFixed(2) ?? '',
-        record.calculatedNeutral?.toFixed(2) ?? '',
+        typeof record.ratedLoad === 'number' ? record.ratedLoad.toFixed(2) : '',
+        typeof record.redPhaseBulkLoad === 'number' ? record.redPhaseBulkLoad.toFixed(2) : '',
+        typeof record.yellowPhaseBulkLoad === 'number' ? record.yellowPhaseBulkLoad.toFixed(2) : '',
+        typeof record.bluePhaseBulkLoad === 'number' ? record.bluePhaseBulkLoad.toFixed(2) : '',
+        typeof record.averageCurrent === 'number' ? record.averageCurrent.toFixed(2) : '',
+        typeof record.percentageLoad === 'number' ? record.percentageLoad.toFixed(2) : '',
+        typeof record.tenPercentFullLoadNeutral === 'number' ? record.tenPercentFullLoadNeutral.toFixed(2) : '',
+        typeof record.calculatedNeutral === 'number' ? record.calculatedNeutral.toFixed(2) : '',
         loadStatus.status
       ];
     });
@@ -509,7 +516,7 @@ export default function LoadMonitoringPage() {
   };
 
   return (
-    <AccessControlWrapper type="load-monitoring">
+    <AccessControlWrapper type="asset">
       <Layout>
         <div className="container mx-auto p-4">
           {/* Header Section */}
@@ -643,7 +650,7 @@ export default function LoadMonitoringPage() {
                     {filteredRecords.map((record) => {
                       const region = regions.find(r => r.id === record.regionId);
                       const district = districts.find(d => d.id === record.districtId);
-                      const loadStatus = getLoadStatus(record.percentageLoad);
+                      const loadStatus = getLoadStatus(typeof record.percentageLoad === 'number' ? record.percentageLoad : 0);
                       
                       return (
                         <TableRow 

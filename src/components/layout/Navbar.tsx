@@ -190,9 +190,6 @@ export function Navbar() {
               <NavLink to="/system-admin/security" className="text-foreground hover:text-primary transition-colors">
                 Security Monitoring
               </NavLink>
-              <NavLink to="/test/security" className="text-foreground hover:text-primary transition-colors">
-                Security Testing
-              </NavLink>
             </>
           )}
 
@@ -324,12 +321,6 @@ export function Navbar() {
                         className="block text-sm text-muted-foreground hover:text-foreground"
                       >
                         Security Monitoring
-                      </NavLink>
-                      <NavLink 
-                        to="/test/security" 
-                        className="block text-sm text-muted-foreground hover:text-foreground"
-                      >
-                        Security Testing
                       </NavLink>
                     </div>
                   </div>

@@ -14,7 +14,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { VITAsset, VITStatus, VoltageLevel } from "@/lib/types";
-import { Loader2, MapPin, Camera, Upload } from "lucide-react";
+import { Loader2, MapPin, Camera, Upload, Info } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
@@ -43,8 +43,12 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
   const webcamRef = useRef<Webcam>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
   
-  const [regionId, setRegionId] = useState<string>(asset?.regionId || "");
-  const [districtId, setDistrictId] = useState<string>(asset?.districtId || "");
+  const [regionId, setRegionId] = useState<string>(
+    asset ? regions.find(r => r.name === asset.region)?.id || "" : ""
+  );
+  const [districtId, setDistrictId] = useState<string>(
+    asset ? districts.find(d => d.name === asset.district)?.id || "" : ""
+  );
   const [voltageLevel, setVoltageLevel] = useState<VoltageLevel>(asset?.voltageLevel || "11KV");
   const [typeOfUnit, setTypeOfUnit] = useState(asset?.typeOfUnit || "");
   const [serialNumber, setSerialNumber] = useState(asset?.serialNumber || "");
@@ -54,8 +58,8 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
   const [protection, setProtection] = useState(asset?.protection || "");
   const [photoUrl, setPhotoUrl] = useState(asset?.photoUrl || "");
   const [formData, setFormData] = useState<Partial<VITAsset>>({
-    regionId: asset?.regionId || "",
-    districtId: asset?.districtId || "",
+    region: asset?.region || "",
+    district: asset?.district || "",
     voltageLevel: asset?.voltageLevel || "11KV",
     typeOfUnit: asset?.typeOfUnit || "",
     serialNumber: asset?.serialNumber || "",
@@ -249,7 +253,7 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
             });
             break;
           case error.POSITION_UNAVAILABLE:
-            errorMessage += "Location information is unavailable. Please check your GPS settings and ensure you're not in airplane mode.";
+            errorMessage += "Location information is unavailable. Please check your GPS settings and ensure you're not in airplane mode. On some devices, an internet connection may be required for automatic detection. You can enter coordinates manually below.";
             toast.error(errorMessage);
             break;
           case error.TIMEOUT:
@@ -536,7 +540,12 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
           </div>
           
           <div className="space-y-2">
-            <Label htmlFor="gpsCoordinates">GPS Coordinates</Label>
+            <Label htmlFor="gpsCoordinates" className="flex items-center gap-1">
+              GPS Coordinates
+              <span title="On some devices and browsers, automatic location may require an internet connection. You can enter coordinates manually if needed.">
+                <Info className="w-4 h-4 text-muted-foreground cursor-pointer" />
+              </span>
+            </Label>
             <div className="flex items-center gap-2">
               <Input
                 id="gpsCoordinates"
@@ -600,12 +609,12 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
                 </div>
               )}
               
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => setIsCapturing(true)}
-                  className="flex-1"
+                  className="w-full sm:flex-1"
                 >
                   <Camera className="mr-2 h-4 w-4" />
                   Take Photo
@@ -614,7 +623,7 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
                 <Button
                   type="button"
                   variant="outline"
-                  className="flex-1"
+                  className="w-full sm:flex-1"
                   onClick={() => document.getElementById('file-upload')?.click()}
                 >
                   <Upload className="mr-2 h-4 w-4" />

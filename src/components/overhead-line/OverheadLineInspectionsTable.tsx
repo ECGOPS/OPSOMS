@@ -42,7 +42,14 @@ export function OverheadLineInspectionsTable({
 
   // Update sorted inspections whenever the inspections prop changes
   useEffect(() => {
-    setSortedInspections([...inspections]);
+    // Sort by date and time (if available), or createdAt, descending
+    const sorted = [...inspections].sort((a, b) => {
+      // Prefer date+time, fallback to createdAt
+      const dateA = new Date((a.date ? `${a.date}T${a.time || '00:00'}` : a.createdAt));
+      const dateB = new Date((b.date ? `${b.date}T${b.time || '00:00'}` : b.createdAt));
+      return dateB.getTime() - dateA.getTime();
+    });
+    setSortedInspections(sorted);
   }, [inspections]);
 
   const exportToPDF = (inspection: OverheadLineInspection) => {
