@@ -69,17 +69,20 @@ export default function DashboardPage() {
         return;
       }
       
-      const { regionId, districtId } = getUserRegionAndDistrict(user, regions, districts);
-      console.log('[Dashboard] Region/District IDs:', { regionId, districtId });
-      
-      if (regionId) {
-        setFilterRegion(regionId);
-        setSelectedRegion(regionId);
-      }
-      
-      if (districtId) {
-        setFilterDistrict(districtId);
-        setSelectedDistrict(districtId);
+      // Only set region/district filters if user is not a system admin or global engineer
+      if (user.role !== 'system_admin' && user.role !== 'global_engineer') {
+        const { regionId, districtId } = getUserRegionAndDistrict(user, regions, districts);
+        console.log('[Dashboard] Region/District IDs:', { regionId, districtId });
+        
+        if (regionId) {
+          setFilterRegion(regionId);
+          setSelectedRegion(regionId);
+        }
+        
+        if (districtId) {
+          setFilterDistrict(districtId);
+          setSelectedDistrict(districtId);
+        }
       }
     }
   }, [isAuthenticated, navigate, user, regions, districts]);
@@ -114,6 +117,18 @@ export default function DashboardPage() {
   
   const loadFaults = () => {
     console.log('[Dashboard] loadFaults called');
+    console.log('[Dashboard] Current filter states:', { 
+      filterRegion, 
+      filterDistrict, 
+      filterStatus,
+      filterFaultType,
+      dateFilterType,
+      dateRange,
+      selectedDay,
+      selectedMonth,
+      selectedMonthYear,
+      selectedYear
+    });
     const filteredFaults = getFilteredFaults(filterRegion, filterDistrict);
     console.log('[Dashboard] Filtered faults:', { 
       op5Count: filteredFaults.op5Faults.length,
@@ -128,6 +143,10 @@ export default function DashboardPage() {
       statusFilteredOP5 = filteredFaults.op5Faults.filter(f => f.status === filterStatus);
       statusFilteredControl = filteredFaults.controlOutages.filter(f => f.status === filterStatus);
     }
+    console.log('[Dashboard] After status filter:', { 
+      op5Count: statusFilteredOP5.length,
+      controlCount: statusFilteredControl.length
+    });
     
     // Apply fault type filter
     let typeFilteredOP5 = statusFilteredOP5;
@@ -137,6 +156,10 @@ export default function DashboardPage() {
       typeFilteredOP5 = statusFilteredOP5.filter(f => f.faultType === filterFaultType);
       typeFilteredControl = statusFilteredControl.filter(f => f.faultType === filterFaultType);
     }
+    console.log('[Dashboard] After fault type filter:', { 
+      op5Count: typeFilteredOP5.length,
+      controlCount: typeFilteredControl.length
+    });
     
     // Apply date filters
     let dateFilteredOP5 = typeFilteredOP5;
@@ -183,6 +206,10 @@ export default function DashboardPage() {
         return isSameYear(faultDate, new Date(selectedYear, 0));
       });
     }
+    console.log('[Dashboard] After date filter:', { 
+      op5Count: dateFilteredOP5.length,
+      controlCount: dateFilteredControl.length
+    });
     
     setFaults({
       op5Faults: dateFilteredOP5,
