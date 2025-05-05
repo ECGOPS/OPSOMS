@@ -381,7 +381,15 @@ export function OverheadLineInspectionsTable({
         </TableHeader>
         <TableBody>
           {sortedInspections.map((inspection) => (
-            <TableRow key={inspection.id}>
+            <TableRow
+              key={inspection.id}
+              onClick={e => {
+                // Prevent row click if clicking inside the Actions cell
+                if ((e.target as HTMLElement).closest('td')?.classList.contains('actions-cell')) return;
+                onView(inspection);
+              }}
+              className="cursor-pointer hover:bg-muted transition-colors"
+            >
               <TableCell>
                   {inspection.date 
                     ? `${inspection.date}${inspection.time ? ` ${inspection.time}` : ''}`
@@ -407,7 +415,7 @@ export function OverheadLineInspectionsTable({
                     {inspection.status ? inspection.status.charAt(0).toUpperCase() + inspection.status.slice(1) : "Unknown"}
                   </Badge>
               </TableCell>
-              <TableCell className="text-right">
+              <TableCell className="text-right actions-cell">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="sm" className="h-8 w-8 p-0">

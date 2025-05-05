@@ -816,11 +816,11 @@ export function VITInspectionForm({
           </div>
         </form>
       </CardContent>
-      <CardFooter className="flex justify-end gap-2">
-        <Button variant="outline" onClick={onCancel}>
+      <CardFooter className="flex flex-col sm:flex-row justify-end gap-2">
+        <Button variant="outline" onClick={onCancel} className="w-full sm:w-auto">
           Cancel
         </Button>
-        <Button onClick={handleSubmit} disabled={isSubmitting}>
+        <Button onClick={handleSubmit} disabled={isSubmitting} className="w-full sm:w-auto">
           {isSubmitting ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />

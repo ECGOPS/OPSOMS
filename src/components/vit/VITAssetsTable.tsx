@@ -196,7 +196,11 @@ export function VITAssetsTable({ assets: propAssets, onAddAsset, onEditAsset, on
               </TableRow>
             ) : (
               filteredAssets.map((asset) => (
-                <TableRow key={asset.id}>
+                <TableRow
+                  key={asset.id}
+                  onClick={() => handleViewDetails(asset.id)}
+                  className="cursor-pointer hover:bg-muted transition-colors"
+                >
                   <TableCell>{formatDate(asset.createdAt)}</TableCell>
                   <TableCell>{asset.region || "Unknown Region"}</TableCell>
                   <TableCell>{asset.district || "Unknown District"}</TableCell>

@@ -871,7 +871,15 @@ function InspectionRecordsTable({ onViewDetails, onEditInspection, onViewAsset }
                       }, 0);
                       
                       return (
-                        <tr key={inspection.id}>
+                        <tr
+                          key={inspection.id}
+                          onClick={e => {
+                            // Prevent row click if clicking inside the Actions cell
+                            if ((e.target as HTMLElement).closest('td')?.classList.contains('actions-cell')) return;
+                            onViewDetails(inspection);
+                          }}
+                          className="cursor-pointer hover:bg-muted transition-colors"
+                        >
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 sticky left-0 bg-white">
                             {new Date(inspection.inspectionDate).toLocaleDateString()}
                           </td>
@@ -894,7 +902,7 @@ function InspectionRecordsTable({ onViewDetails, onEditInspection, onViewAsset }
                               {issuesCount} {issuesCount === 1 ? "issue" : "issues"}
                             </span>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium sticky right-0 bg-white">
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium sticky right-0 bg-white actions-cell">
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <Button variant="ghost" className="h-8 w-8 p-0">

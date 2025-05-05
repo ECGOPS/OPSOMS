@@ -704,14 +704,22 @@ export default function InspectionManagementPage() {
                   );
                   
                   return (
-                    <TableRow key={inspection.id}>
+                    <TableRow
+                      key={inspection.id}
+                      onClick={e => {
+                        // Prevent row click if clicking inside the Actions cell
+                        if ((e.target as HTMLElement).closest('td')?.classList.contains('actions-cell')) return;
+                        navigate(`/asset-management/inspection-details/${inspection.id}`);
+                      }}
+                      className="cursor-pointer hover:bg-muted transition-colors"
+                    >
                       <TableCell>{formatDate(inspection.date)}</TableCell>
                       <TableCell>{inspection.substationNo}</TableCell>
                       <TableCell>{inspection.region}</TableCell>
                       <TableCell>{inspection.district}</TableCell>
                       <TableCell className="capitalize">{inspection.type}</TableCell>
                       <TableCell>{statusSummary}</TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right actions-cell">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" className="h-8 w-8 p-0">
