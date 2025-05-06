@@ -31,59 +31,83 @@ declare module "jspdf" {
  */
 export const exportInspectionToCsv = (inspection: VITInspectionChecklist, asset: VITAsset | null, getRegionName: (id: string) => string, getDistrictName: (id: string) => string) => {
   if (!asset) return;
-  
-  // Create headers
+
+  // Create headers and data as single rows
   const headers = [
-    "Field",
-    "Value"
+    "Asset Serial Number",
+    "Asset Type",
+    "Region",
+    "District",
+    "Inspection Date",
+    "Inspector",
+    "Rodent/Termite Encroachment",
+    "Clean & Dust Free",
+    "Protection Button Enabled",
+    "Recloser Button Enabled",
+    "Ground/Earth Button Enabled",
+    "AC Power On",
+    "Battery Power Low",
+    "Handle Lock On",
+    "Remote Button Enabled",
+    "Gas Level Low",
+    "Earthing Arrangement Adequate",
+    "No Fuses Blown",
+    "No Damage to Bushings",
+    "No Damage to HV Connections",
+    "Insulators Clean",
+    "Paintwork Adequate",
+    "PT Fuse Link Intact",
+    "No Corrosion",
+    "Silica Gel Condition",
+    "Correct Labelling",
+    "Remarks"
   ];
-  
-  // Create data rows
-  const dataRows = [
-    ["Asset Serial Number", asset?.serialNumber || ""],
-    ["Asset Type", asset?.typeOfUnit || ""],
-    ["Region", asset ? getRegionName(asset.region) : ""],
-    ["District", asset ? getDistrictName(asset.district) : ""],
-    ["Inspection Date", formatDate(inspection.inspectionDate)],
-    ["Inspector", inspection.inspectedBy],
-    ["Rodent/Termite Encroachment", inspection.rodentTermiteEncroachment],
-    ["Clean & Dust Free", inspection.cleanDustFree],
-    ["Protection Button Enabled", inspection.protectionButtonEnabled],
-    ["Recloser Button Enabled", inspection.recloserButtonEnabled],
-    ["Ground/Earth Button Enabled", inspection.groundEarthButtonEnabled],
-    ["AC Power On", inspection.acPowerOn],
-    ["Battery Power Low", inspection.batteryPowerLow],
-    ["Handle Lock On", inspection.handleLockOn],
-    ["Remote Button Enabled", inspection.remoteButtonEnabled],
-    ["Gas Level Low", inspection.gasLevelLow],
-    ["Earthing Arrangement Adequate", inspection.earthingArrangementAdequate],
-    ["No Fuses Blown", inspection.noFusesBlown],
-    ["No Damage to Bushings", inspection.noDamageToBushings],
-    ["No Damage to HV Connections", inspection.noDamageToHVConnections],
-    ["Insulators Clean", inspection.insulatorsClean],
-    ["Paintwork Adequate", inspection.paintworkAdequate],
-    ["PT Fuse Link Intact", inspection.ptFuseLinkIntact],
-    ["No Corrosion", inspection.noCorrosion],
-    ["Silica Gel Condition", inspection.silicaGelCondition],
-    ["Correct Labelling", inspection.correctLabelling],
-    ["Remarks", inspection.remarks]
+
+  const data = [
+    asset?.serialNumber || "",
+    asset?.typeOfUnit || "",
+    asset?.region || "Unknown",
+    asset?.district || "Unknown",
+    formatDate(inspection.inspectionDate),
+    inspection.inspectedBy,
+    inspection.rodentTermiteEncroachment,
+    inspection.cleanDustFree,
+    inspection.protectionButtonEnabled,
+    inspection.recloserButtonEnabled,
+    inspection.groundEarthButtonEnabled,
+    inspection.acPowerOn,
+    inspection.batteryPowerLow,
+    inspection.handleLockOn,
+    inspection.remoteButtonEnabled,
+    inspection.gasLevelLow,
+    inspection.earthingArrangementAdequate,
+    inspection.noFusesBlown,
+    inspection.noDamageToBushings,
+    inspection.noDamageToHVConnections,
+    inspection.insulatorsClean,
+    inspection.paintworkAdequate,
+    inspection.ptFuseLinkIntact,
+    inspection.noCorrosion,
+    inspection.silicaGelCondition,
+    inspection.correctLabelling,
+    inspection.remarks
   ];
-  
+
   // Combine headers and data
   const csvContent = [
-    headers.join(","), 
-    ...dataRows.map(row => `"${row[0]}","${row[1]}"`).join("\n")
+    headers.join(","),
+    data.map(v => `"${v}"`).join(",")
   ].join("\n");
-  
+
   // Create and trigger download
   const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
   const link = document.createElement("a");
   const url = URL.createObjectURL(blob);
-  
+
   link.setAttribute("href", url);
   link.setAttribute("download", `vit-inspection-${asset?.serialNumber}-${inspection.inspectionDate.split('T')[0]}.csv`);
   link.style.visibility = "hidden";
-  
+
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
@@ -98,8 +122,8 @@ export const exportInspectionToPDF = async (inspection: VITInspectionChecklist, 
       throw new Error("Asset information is required to generate the report");
     }
 
-    const region = getRegionName(asset.region) || "Unknown";
-    const district = getDistrictName(asset.district) || "Unknown";
+    const region = asset.region || "Unknown";
+    const district = asset.district || "Unknown";
     
     // Create PDF document with A4 size
     const pdfDoc = await PDFDocument.create();
