@@ -93,6 +93,50 @@ export default function AnalyticsPage() {
   });
   const [overviewRecentFaultsTab, setOverviewRecentFaultsTab] = useState<'all' | 'op5' | 'control'>('all');
   
+  // Add pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [activeTab, setActiveTab] = useState<'all' | 'op5' | 'control'>('all');
+
+  // Calculate paginated faults
+  const paginatedFaults = useMemo(() => {
+    let faultsToDisplay = filteredFaults;
+    
+    // Apply tab filtering
+    if (activeTab === 'op5') {
+      faultsToDisplay = filteredFaults.filter((f): f is OP5Fault => 'faultLocation' in f);
+    } else if (activeTab === 'control') {
+      faultsToDisplay = filteredFaults.filter((f): f is OP5Fault => !('faultLocation' in f));
+    }
+    
+    // Sort by date (most recent first)
+    faultsToDisplay = faultsToDisplay.sort((a, b) => 
+      new Date(b.occurrenceDate).getTime() - new Date(a.occurrenceDate).getTime()
+    );
+    
+    // Calculate pagination
+    const startIndex = (currentPage - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    
+    return faultsToDisplay.slice(startIndex, endIndex);
+  }, [filteredFaults, activeTab, currentPage, pageSize]);
+
+  // Calculate total pages
+  const totalPages = useMemo(() => {
+    let totalItems = filteredFaults.length;
+    if (activeTab === 'op5') {
+      totalItems = filteredFaults.filter((f): f is OP5Fault => 'faultLocation' in f).length;
+    } else if (activeTab === 'control') {
+      totalItems = filteredFaults.filter((f): f is OP5Fault => !('faultLocation' in f)).length;
+    }
+    return Math.ceil(totalItems / pageSize);
+  }, [filteredFaults, activeTab, pageSize]);
+
+  // Reset pagination when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterRegion, filterDistrict, filterFaultType, dateRange, startDate, endDate, activeTab]);
+
   useEffect(() => {
     if (!isAuthenticated) {
       navigate("/login");
@@ -980,23 +1024,9 @@ export default function AnalyticsPage() {
     setDetailsOpen(true);
   };
   
-  // Calculate the faults to show in the recent faults table based on the nested tab
-  const recentFaultsToShow = useMemo(() => {
-    let faultsToDisplay = filteredFaults;
-    if (overviewRecentFaultsTab === 'op5') {
-      faultsToDisplay = filteredFaults.filter((f): f is OP5Fault => 'faultLocation' in f);
-    } else if (overviewRecentFaultsTab === 'control') {
-      faultsToDisplay = filteredFaults.filter((f): f is OP5Fault => !('faultLocation' in f)); // Assuming control outage if not OP5
-    }
-    // Sort and slice *after* filtering by type
-    return faultsToDisplay
-      .sort((a, b) => new Date(b.occurrenceDate).getTime() - new Date(a.occurrenceDate).getTime()) // Sort by date descending
-      .slice(0, 7);
-  }, [filteredFaults, overviewRecentFaultsTab]);
-  
   // Function to export only the recent faults shown in the overview table
   const exportRecentFaultsToCSV = () => {
-    if (!recentFaultsToShow || recentFaultsToShow.length === 0) {
+    if (!paginatedFaults || paginatedFaults.length === 0) {
       toast({ title: "No data to export", description: "The recent faults table is empty." });
       return;
     }
@@ -1005,7 +1035,7 @@ export default function AnalyticsPage() {
       'ID', 'Type', 'Region', 'District', 'Occurrence Date', 'Status', 'Outage Duration', 'Customers Affected'
     ];
 
-    const dataRows = recentFaultsToShow.map((fault: any) => {
+    const dataRows = paginatedFaults.map((fault: any) => {
       const type = 'faultLocation' in fault ? 'OP5' : 'Control';
       const region = getRegionName(fault.regionId);
       const district = getDistrictName(fault.districtId);
@@ -1365,7 +1395,7 @@ export default function AnalyticsPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl sm:text-3xl font-bold text-purple-900">
-                {filteredFaults.filter((f: any) => 'customersAffected' in f).length}
+                {filteredFaults.filter((f: any) => 'loadMW' in f).length}
               </div>
               <p className="text-xs text-purple-700">
                 {filterRegion || filterDistrict ? `In selected area` : 'Across all regions'}
@@ -1621,8 +1651,8 @@ export default function AnalyticsPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {recentFaultsToShow.length > 0 ? (
-                          recentFaultsToShow.map((fault: any) => (
+                        {paginatedFaults.length > 0 ? (
+                          paginatedFaults.map((fault: any) => (
                             <TableRow key={fault.id}>
                               <TableCell className="font-medium text-xs sm:text-sm py-2 px-2 sm:px-4">{fault.id.substring(0, 8)}...</TableCell>
                               <TableCell className="text-xs sm:text-sm py-2 px-2 sm:px-4">{'faultLocation' in fault ? 'OP5' : 'Control'}</TableCell>
@@ -1665,6 +1695,45 @@ export default function AnalyticsPage() {
                     </Table>
                   </div>
                 </CardContent>
+                
+                {/* Add pagination controls */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between px-4 py-3 border-t">
+                    <div className="flex-1 text-sm text-muted-foreground">
+                      Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, filteredFaults.length)} of {filteredFaults.length} results
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                        disabled={currentPage === 1}
+                      >
+                        Previous
+                      </Button>
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: totalPages }, (_, i) => (
+                          <Button
+                            key={i + 1}
+                            variant={currentPage === i + 1 ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => setCurrentPage(i + 1)}
+                          >
+                            {i + 1}
+                          </Button>
+                        ))}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                        disabled={currentPage === totalPages}
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </Card>
             </TabsContent>
 

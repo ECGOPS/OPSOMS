@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Layout } from "@/components/layout/Layout";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate, Link } from "react-router-dom";
@@ -42,6 +42,11 @@ export default function DashboardPage() {
   const [selectedMonthYear, setSelectedMonthYear] = useState<number | undefined>(undefined);
   const [selectedYear, setSelectedYear] = useState<number | undefined>(undefined);
   const [dateFilterType, setDateFilterType] = useState<"range" | "day" | "month" | "year">("range");
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(12); // Show 12 items per page (3x4 grid)
+  const [activeTab, setActiveTab] = useState<"all" | "op5" | "control">("all");
   
   // Set initial filter values based on user role
   useEffect(() => {
@@ -226,6 +231,61 @@ export default function DashboardPage() {
     }, 1000);
   };
   
+  // Calculate paginated faults
+  const paginatedFaults = useMemo(() => {
+    // Get all faults based on current tab
+    let allFaults = [];
+    if (activeTab === "all") {
+      allFaults = [...faults.op5Faults, ...faults.controlOutages];
+    } else if (activeTab === "op5") {
+      allFaults = [...faults.op5Faults];
+    } else if (activeTab === "control") {
+      allFaults = [...faults.controlOutages];
+    }
+
+    // Sort by status (active first) then by date (newest first)
+    const sortedFaults = allFaults.sort((a, b) => {
+      if (a.status === "active" && b.status !== "active") return -1;
+      if (a.status !== "active" && b.status === "active") return 1;
+      return new Date(b.occurrenceDate).getTime() - new Date(a.occurrenceDate).getTime();
+    });
+
+    const startIndex = (currentPage - 1) * pageSize;
+    return sortedFaults.slice(startIndex, startIndex + pageSize);
+  }, [faults, currentPage, pageSize, activeTab]);
+
+  const totalPages = useMemo(() => {
+    let totalItems = 0;
+    if (activeTab === "all") {
+      totalItems = faults.op5Faults.length + faults.controlOutages.length;
+    } else if (activeTab === "op5") {
+      totalItems = faults.op5Faults.length;
+    } else if (activeTab === "control") {
+      totalItems = faults.controlOutages.length;
+    }
+    return Math.ceil(totalItems / pageSize);
+  }, [faults, pageSize, activeTab]);
+
+  // Reset pagination when tab changes or filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, filterRegion, filterDistrict, filterStatus, filterFaultType, dateFilterType, dateRange, selectedDay, selectedMonth, selectedMonthYear, selectedYear]);
+
+  // Add debug logging for pagination
+  useEffect(() => {
+    console.log('[Dashboard] Pagination state:', {
+      currentPage,
+      pageSize,
+      totalPages,
+      activeTab,
+      totalItems: activeTab === "all" 
+        ? faults.op5Faults.length + faults.controlOutages.length 
+        : activeTab === "op5" 
+          ? faults.op5Faults.length 
+          : faults.controlOutages.length
+    });
+  }, [currentPage, pageSize, totalPages, activeTab, faults]);
+  
   if (!isAuthenticated) {
     console.log('[Dashboard] Not authenticated, returning null');
     return null;
@@ -292,7 +352,7 @@ export default function DashboardPage() {
           dateFilterType={dateFilterType}
         />
         
-        <Tabs defaultValue="all" className="mt-8">
+        <Tabs defaultValue="all" className="mt-8" onValueChange={(value) => setActiveTab(value as "all" | "op5" | "control")}>
           <TabsList className="mb-6 grid w-full grid-cols-3 max-w-xs sm:max-w-sm md:max-w-md mx-auto bg-muted p-1 rounded-lg">
             <TabsTrigger 
               value="all"
@@ -341,23 +401,40 @@ export default function DashboardPage() {
                 </Button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {[...faults.op5Faults, ...faults.controlOutages]
-                  .sort((a, b) => {
-                    // Sort by status (active first) then by date (newest first)
-                    if (a.status === "active" && b.status !== "active") return -1;
-                    if (a.status !== "active" && b.status === "active") return 1;
-                    return new Date(b.occurrenceDate).getTime() - new Date(a.occurrenceDate).getTime();
-                  })
-                  .map(fault => (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {paginatedFaults.map(fault => (
                     <FaultCard 
                       key={fault.id} 
                       fault={fault} 
                       type={faults.op5Faults.some(f => f.id === fault.id) ? "op5" : "control"} 
                     />
-                  ))
-                }
-              </div>
+                  ))}
+                </div>
+
+                {/* Pagination Controls */}
+                {totalPages > 1 && (
+                  <div className="flex justify-center items-center gap-4 mt-6">
+                    <Button
+                      variant="outline"
+                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                      disabled={currentPage === 1}
+                    >
+                      Previous
+                    </Button>
+                    <span className="text-sm">
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                      disabled={currentPage >= totalPages}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                )}
+              </>
             )}
           </TabsContent>
           
@@ -381,19 +458,36 @@ export default function DashboardPage() {
                 </Button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {faults.op5Faults
-                  .sort((a, b) => {
-                    // Sort by status (active first) then by date (newest first)
-                    if (a.status === "active" && b.status !== "active") return -1;
-                    if (a.status !== "active" && b.status === "active") return 1;
-                    return new Date(b.occurrenceDate).getTime() - new Date(a.occurrenceDate).getTime();
-                  })
-                  .map(fault => (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {paginatedFaults.map(fault => (
                     <FaultCard key={fault.id} fault={fault} type="op5" />
-                  ))
-                }
-              </div>
+                  ))}
+                </div>
+
+                {/* Pagination Controls */}
+                {totalPages > 1 && (
+                  <div className="flex justify-center items-center gap-4 mt-6">
+                    <Button
+                      variant="outline"
+                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                      disabled={currentPage === 1}
+                    >
+                      Previous
+                    </Button>
+                    <span className="text-sm">
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                      disabled={currentPage >= totalPages}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                )}
+              </>
             )}
           </TabsContent>
           
@@ -417,19 +511,36 @@ export default function DashboardPage() {
                 </Button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {faults.controlOutages
-                  .sort((a, b) => {
-                    // Sort by status (active first) then by date (newest first)
-                    if (a.status === "active" && b.status !== "active") return -1;
-                    if (a.status !== "active" && b.status === "active") return 1;
-                    return new Date(b.occurrenceDate).getTime() - new Date(a.occurrenceDate).getTime();
-                  })
-                  .map(fault => (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {paginatedFaults.map(fault => (
                     <FaultCard key={fault.id} fault={fault} type="control" />
-                  ))
-                }
-              </div>
+                  ))}
+                </div>
+
+                {/* Pagination Controls */}
+                {totalPages > 1 && (
+                  <div className="flex justify-center items-center gap-4 mt-6">
+                    <Button
+                      variant="outline"
+                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                      disabled={currentPage === 1}
+                    >
+                      Previous
+                    </Button>
+                    <span className="text-sm">
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                      disabled={currentPage >= totalPages}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                )}
+              </>
             )}
           </TabsContent>
         </Tabs>
