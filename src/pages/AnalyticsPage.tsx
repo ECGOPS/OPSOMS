@@ -34,7 +34,7 @@ import {
   Cell
 } from 'recharts';
 import { LineChart, Line } from 'recharts';
-import { OP5Fault } from '../types/faults';
+import { OP5Fault, ControlSystemOutage } from '../types/faults';
 import MaterialsAnalysis from '@/components/analytics/MaterialsAnalysis';
 
 // Colors for charts
@@ -55,7 +55,7 @@ export default function AnalyticsPage() {
   const { toast } = useToast();
   const { isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
-  const { getFilteredFaults, regions, districts } = useData();
+  const { regions, districts, getFilteredFaults } = useData();
   const [filteredFaults, setFilteredFaults] = useState([]);
   const [filterRegion, setFilterRegion] = useState<string | undefined>(undefined);
   const [filterDistrict, setFilterDistrict] = useState<string | undefined>(undefined);
@@ -103,10 +103,10 @@ export default function AnalyticsPage() {
     let faultsToDisplay = filteredFaults;
     
     // Apply tab filtering
-    if (activeTab === 'op5') {
+    if (overviewRecentFaultsTab === 'op5') {
       faultsToDisplay = filteredFaults.filter((f): f is OP5Fault => 'faultLocation' in f);
-    } else if (activeTab === 'control') {
-      faultsToDisplay = filteredFaults.filter((f): f is OP5Fault => !('faultLocation' in f));
+    } else if (overviewRecentFaultsTab === 'control') {
+      faultsToDisplay = filteredFaults.filter((f): f is ControlSystemOutage => 'loadMW' in f);
     }
     
     // Sort by date (most recent first)
@@ -119,23 +119,23 @@ export default function AnalyticsPage() {
     const endIndex = startIndex + pageSize;
     
     return faultsToDisplay.slice(startIndex, endIndex);
-  }, [filteredFaults, activeTab, currentPage, pageSize]);
+  }, [filteredFaults, overviewRecentFaultsTab, currentPage, pageSize]);
 
   // Calculate total pages
   const totalPages = useMemo(() => {
     let totalItems = filteredFaults.length;
-    if (activeTab === 'op5') {
+    if (overviewRecentFaultsTab === 'op5') {
       totalItems = filteredFaults.filter((f): f is OP5Fault => 'faultLocation' in f).length;
-    } else if (activeTab === 'control') {
-      totalItems = filteredFaults.filter((f): f is OP5Fault => !('faultLocation' in f)).length;
+    } else if (overviewRecentFaultsTab === 'control') {
+      totalItems = filteredFaults.filter((f): f is ControlSystemOutage => 'loadMW' in f).length;
     }
     return Math.ceil(totalItems / pageSize);
-  }, [filteredFaults, activeTab, pageSize]);
+  }, [filteredFaults, overviewRecentFaultsTab, pageSize]);
 
   // Reset pagination when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [filterRegion, filterDistrict, filterFaultType, dateRange, startDate, endDate, activeTab]);
+  }, [filterRegion, filterDistrict, filterFaultType, dateRange, startDate, endDate, overviewRecentFaultsTab]);
 
   useEffect(() => {
     if (!isAuthenticated) {
