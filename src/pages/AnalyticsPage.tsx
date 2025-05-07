@@ -101,20 +101,29 @@ export default function AnalyticsPage() {
     
     // Initialize filters based on user role
     if (user) {
-      const { regionId, districtId } = getUserRegionAndDistrict(user, regions, districts);
-      
-      if (regionId) {
-        setFilterRegion(regionId);
-        setSelectedRegion(regionId);
+      // Only set region/district filters if user is not a system admin or global engineer
+      if (user.role !== 'system_admin' && user.role !== 'global_engineer') {
+        const { regionId, districtId } = getUserRegionAndDistrict(user, regions, districts);
+        
+        if (regionId) {
+          setFilterRegion(regionId);
+          setSelectedRegion(regionId);
+        } else {
+          // Set to "all" if no specific region
+          setFilterRegion(undefined);
+          setSelectedRegion("all");
+        }
+        
+        if (districtId) {
+          setFilterDistrict(districtId);
+          setSelectedDistrict(districtId);
+        }
       } else {
-        // Set to "all" if no specific region
+        // For system admins and global engineers, set to "all" by default
         setFilterRegion(undefined);
         setSelectedRegion("all");
-      }
-      
-      if (districtId) {
-        setFilterDistrict(districtId);
-        setSelectedDistrict(districtId);
+        setFilterDistrict(undefined);
+        setSelectedDistrict("all");
       }
     } else {
       // Set default to "all" when no user role restrictions

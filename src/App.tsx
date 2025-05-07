@@ -41,6 +41,8 @@ import PermissionManagementPage from './pages/system-admin/PermissionManagementP
 import SecurityMonitoringPage from './pages/system-admin/SecurityMonitoringPage';
 import SecurityTestPage from './pages/system-admin/SecurityTestPage';
 import DistrictPopulationPage from './pages/DistrictPopulationPage';
+import UserProfilePage from "./pages/UserProfilePage";
+import EditVITAssetPage from "./pages/asset-management/EditVITAssetPage";
 
 const queryClient = new QueryClient();
 
@@ -168,6 +170,12 @@ function App() {
                   </ProtectedRoute>
                 } />
 
+                <Route path="/asset-management/edit-vit-asset/:id" element={
+                  <ProtectedRoute requiredFeature="vit_inspection_update">
+                    <EditVITAssetPage />
+                  </ProtectedRoute>
+                } />
+
                 <Route path="/asset-management/vit-inspection-form/:id" element={
                   <ProtectedRoute requiredFeature="vit_inspection">
                     <VITInspectionFormPage />
@@ -221,6 +229,8 @@ function App() {
                     <SecurityTestPage />
                   </ProtectedRoute>
                 } />
+
+                <Route path="/profile" element={<UserProfilePage />} />
 
                 {/* Catch all */}
                 <Route path="*" element={<NotFound />} />

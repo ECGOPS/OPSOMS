@@ -71,8 +71,7 @@ export default function VITInspectionPage() {
   };
   
   const handleEditAsset = (asset: VITAsset) => {
-    setSelectedAsset(asset);
-    setIsAssetFormOpen(true);
+    navigate(`/asset-management/edit-vit-asset/${asset.id}`);
   };
   
   const handleAddInspection = (assetId: string) => {

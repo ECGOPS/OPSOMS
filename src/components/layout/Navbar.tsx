@@ -222,7 +222,7 @@ export function Navbar() {
             {isAuthenticated ? (
               <div className="flex items-center gap-2">
                 <Button variant="ghost" size="sm" asChild>
-                  <Link to="/dashboard" className="flex items-center gap-2">
+                  <Link to="/profile" className="flex items-center gap-2">
                     <User size={16} />
                     <span>{user?.name || "User"}</span>
                   </Link>
@@ -255,10 +255,10 @@ export function Navbar() {
               {/* Move Log Out button to the top for mobile */}
               {isAuthenticated && (
                 <div className="space-y-3 mb-4">
-                  <div className="flex items-center gap-2">
+                  <Link to="/profile" className="flex items-center gap-2 hover:underline">
                     <User size={16} />
                     <span className="font-medium">{user?.name || "User"}</span>
-                  </div>
+                  </Link>
                   <Button variant="outline" className="w-full" onClick={handleLogout}>
                     <LogOut size={16} className="mr-2" />
                     Log Out

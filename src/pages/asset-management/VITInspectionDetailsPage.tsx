@@ -126,7 +126,9 @@ export default function VITInspectionDetailsPage() {
                   </div>
                 ) : (
                   <div className="space-y-6">
-                    {inspections.map((inspection) => (
+                    {inspections
+                      .sort((a, b) => new Date(b.inspectionDate).getTime() - new Date(a.inspectionDate).getTime())
+                      .map((inspection) => (
                       <InspectionRecord
                         key={inspection.id}
                         inspection={inspection}

@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationPrevious, PaginationNext } from "@/components/ui/pagination";
 
 export default function OverheadLineInspectionPage() {
   const { user } = useAuth();
@@ -35,6 +36,8 @@ export default function OverheadLineInspectionPage() {
   const [selectedMonth, setSelectedMonth] = useState<Date | null>(null);
   const [selectedRegion, setSelectedRegion] = useState<string | null>(null);
   const [selectedDistrict, setSelectedDistrict] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 10;
 
   // Filter districts based on selected region
   const filteredDistricts = useMemo(() => {
@@ -87,6 +90,18 @@ export default function OverheadLineInspectionPage() {
     
     return filtered;
   }, [overheadLineInspections, user, selectedDate, selectedMonth, selectedRegion, selectedDistrict]);
+
+  // Calculate pagination
+  const totalPages = Math.ceil(filteredInspections.length / pageSize);
+  const paginatedInspections = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredInspections.slice(start, start + pageSize);
+  }, [filteredInspections, currentPage, pageSize]);
+
+  // Reset to first page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedDate, selectedMonth, selectedRegion, selectedDistrict, overheadLineInspections]);
 
   // Reset all filters
   const handleResetFilters = () => {
@@ -247,12 +262,46 @@ export default function OverheadLineInspectionPage() {
 
             <TabsContent value="inspections" className="space-y-4">
               <OverheadLineInspectionsTable 
-                inspections={filteredInspections}
+                inspections={paginatedInspections}
                 onEdit={handleEditInspection}
                 onDelete={handleDeleteInspection}
                 onView={handleViewInspection}
                 userRole={user?.role}
               />
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <Pagination className="mt-4">
+                  <PaginationContent>
+                    <PaginationItem>
+                      <PaginationPrevious
+                        href="#"
+                        onClick={e => { e.preventDefault(); setCurrentPage(p => Math.max(1, p - 1)); }}
+                        aria-disabled={currentPage === 1}
+                        className={currentPage === 1 ? 'pointer-events-none opacity-50' : ''}
+                      />
+                    </PaginationItem>
+                    {Array.from({ length: totalPages }, (_, i) => (
+                      <PaginationItem key={i}>
+                        <PaginationLink
+                          href="#"
+                          isActive={currentPage === i + 1}
+                          onClick={e => { e.preventDefault(); setCurrentPage(i + 1); }}
+                        >
+                          {i + 1}
+                        </PaginationLink>
+                      </PaginationItem>
+                    ))}
+                    <PaginationItem>
+                      <PaginationNext
+                        href="#"
+                        onClick={e => { e.preventDefault(); setCurrentPage(p => Math.min(totalPages, p + 1)); }}
+                        aria-disabled={currentPage === totalPages}
+                        className={currentPage === totalPages ? 'pointer-events-none opacity-50' : ''}
+                      />
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
+              )}
             </TabsContent>
           </Tabs>
 

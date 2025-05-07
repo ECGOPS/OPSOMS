@@ -20,7 +20,15 @@ export default function ReportFaultPage() {
   const { regions, districts } = useData();
 
   // Get default region and district based on user role
-  const { regionId: defaultRegionId, districtId: defaultDistrictId } = getUserRegionAndDistrict(user, regions, districts);
+  let defaultRegionId = undefined;
+  let defaultDistrictId = undefined;
+  if (user) {
+    if (user.role !== 'system_admin' && user.role !== 'global_engineer') {
+      const userRegionDistrict = getUserRegionAndDistrict(user, regions, districts);
+      defaultRegionId = userRegionDistrict.regionId;
+      defaultDistrictId = userRegionDistrict.districtId;
+    }
+  }
 
   // Check if user has permission to report faults
   useEffect(() => {
@@ -49,7 +57,7 @@ export default function ReportFaultPage() {
                 {user?.role?.replace(/_/g, ' ').toUpperCase()}
               </Badge>
               <Avatar className="h-8 w-8">
-                <AvatarImage src={user?.photoURL || undefined} />
+                {/* No photoURL property available on User type, so only show fallback */}
                 <AvatarFallback>
                   {user?.name?.charAt(0) || user?.email?.charAt(0) || 'U'}
                 </AvatarFallback>
