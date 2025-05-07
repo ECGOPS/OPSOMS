@@ -66,6 +66,10 @@ export default function LoadMonitoringPage() {
   const [selectedRegion, setSelectedRegion] = useState<string | null>(null);
   const [selectedDistrict, setSelectedDistrict] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  
+  // Add pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   // Filter districts based on selected region
   const filteredDistricts = useMemo(() => {
@@ -515,6 +519,23 @@ export default function LoadMonitoringPage() {
     setSearchTerm("");
   };
 
+  // Calculate paginated records
+  const paginatedRecords = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    return filteredRecords.slice(startIndex, endIndex);
+  }, [filteredRecords, currentPage, pageSize]);
+
+  // Calculate total pages
+  const totalPages = useMemo(() => {
+    return Math.ceil(filteredRecords.length / pageSize);
+  }, [filteredRecords.length, pageSize]);
+
+  // Reset pagination when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedDate, selectedMonth, selectedRegion, selectedDistrict, searchTerm]);
+
   return (
     <AccessControlWrapper type="asset">
       <Layout>
@@ -647,7 +668,7 @@ export default function LoadMonitoringPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredRecords.map((record) => {
+                    {paginatedRecords.map((record) => {
                       const region = regions.find(r => r.id === record.regionId);
                       const district = districts.find(d => d.id === record.districtId);
                       const loadStatus = getLoadStatus(typeof record.percentageLoad === 'number' ? record.percentageLoad : 0);
@@ -697,27 +718,18 @@ export default function LoadMonitoringPage() {
                                   <Download className="mr-2 h-4 w-4" />
                                   Export to CSV
                                 </DropdownMenuItem>
-                                {(user?.role === 'global_engineer' || 
-                                  user?.role === 'system_admin' ||
-                                  user?.role === 'technician' ||
-                                  (user?.role === 'regional_engineer' && record.region === user.region) ||
-                                  (user?.role === 'district_engineer' && record.district === user.district)) && (
-                                  <>
-                                    <DropdownMenuItem onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleEdit(record.id);
-                                    }}>
-                                      Edit
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem 
-                                      onClick={() => handleDelete(record.id)}
-                                      className="text-red-600"
-                                    >
-                                      Delete
-                                    </DropdownMenuItem>
-                                  </>
-                                )}
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => handleEdit(record.id)}>
+                                  <Pencil className="mr-2 h-4 w-4" />
+                                  Edit
+                                </DropdownMenuItem>
+                                <DropdownMenuItem 
+                                  onClick={() => handleDelete(record.id)}
+                                  className="text-red-600 focus:text-red-600"
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  Delete
+                                </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </TableCell>
@@ -726,6 +738,45 @@ export default function LoadMonitoringPage() {
                     })}
                   </TableBody>
                 </Table>
+
+                {/* Add pagination controls */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between px-4 py-3 border-t">
+                    <div className="flex-1 text-sm text-muted-foreground">
+                      Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, filteredRecords.length)} of {filteredRecords.length} results
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                        disabled={currentPage === 1}
+                      >
+                        Previous
+                      </Button>
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: totalPages }, (_, i) => (
+                          <Button
+                            key={i + 1}
+                            variant={currentPage === i + 1 ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => setCurrentPage(i + 1)}
+                          >
+                            {i + 1}
+                          </Button>
+                        ))}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                        disabled={currentPage === totalPages}
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
