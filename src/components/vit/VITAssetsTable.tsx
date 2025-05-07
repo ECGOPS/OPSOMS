@@ -218,30 +218,46 @@ export function VITAssetsTable({ assets: propAssets, onAddAsset, onEditAsset, on
                   <TableCell className="text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 w-8 p-0">
+                        <Button 
+                          variant="ghost" 
+                          className="h-8 w-8 p-0"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           <span className="sr-only">Open menu</span>
                           <MoreHorizontal className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
+                      <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
                         <DropdownMenuLabel>Actions</DropdownMenuLabel>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => handleViewDetails(asset.id)}>
+                        <DropdownMenuItem onClick={(e) => {
+                          e.stopPropagation();
+                          handleViewDetails(asset.id);
+                        }}>
                           <FileText className="h-4 w-4 mr-2" />
                           View Details
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => onEditAsset(asset)}>
+                        <DropdownMenuItem onClick={(e) => {
+                          e.stopPropagation();
+                          onEditAsset(asset);
+                        }}>
                           <Edit className="h-4 w-4 mr-2" />
                           Edit Asset
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => onInspect(asset.id)}>
+                        <DropdownMenuItem onClick={(e) => {
+                          e.stopPropagation();
+                          onInspect(asset.id);
+                        }}>
                           <FileText className="h-4 w-4 mr-2" />
                           Add Inspection
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem 
                           className="text-red-600"
-                          onClick={() => handleDeleteClick(asset)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteClick(asset);
+                          }}
                         >
                           <Trash2 className="h-4 w-4 mr-2" />
                           Delete Asset
