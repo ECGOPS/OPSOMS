@@ -110,7 +110,7 @@ function App() {
                   </ProtectedRoute>
                 } />
 
-                <Route path="/asset-management/edit-load-monitoring/:id" element={
+                <Route path="/asset-management/load-monitoring/edit/:id" element={
                   <ProtectedRoute requiredFeature="load_monitoring_update">
                     <EditLoadMonitoringPage />
                   </ProtectedRoute>

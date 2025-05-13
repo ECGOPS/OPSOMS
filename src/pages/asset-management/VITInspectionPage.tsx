@@ -20,6 +20,7 @@ export default function VITInspectionPage() {
   const [isInspectionFormOpen, setIsInspectionFormOpen] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<VITAsset | null>(null);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
+  const [forceUpdate, setForceUpdate] = useState(false);
   
   // Filter assets based on user role
   const filteredAssets = useMemo(() => {
@@ -87,6 +88,10 @@ export default function VITInspectionPage() {
   const handleInspectionFormClose = () => {
     setIsInspectionFormOpen(false);
     setSelectedAssetId(null);
+    // Force a re-render by updating the state
+    setForceUpdate(prev => !prev);
+    // Reset any other form-related state if needed
+    setSelectedAsset(null);
   };
   
   const handleViewInspections = (assetId: string) => {

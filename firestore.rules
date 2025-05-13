@@ -97,8 +97,21 @@ service cloud.firestore {
     }
     
     // Control Outages collection
-    match /controlOutages/{outageId} {
-      allow read, write: if isAuthenticated();
+    match /controlSystemOutages/{outageId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && (
+        isSystemAdmin() || 
+        isGlobalEngineer() || 
+        (isRegionalEngineer() && request.resource.data.regionId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.regionId) ||
+        (isDistrictEngineer() && request.resource.data.districtId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.districtId)
+      );
+      allow update: if isAuthenticated() && (
+        isSystemAdmin() || 
+        isGlobalEngineer() || 
+        (isRegionalEngineer() && resource.data.regionId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.regionId) ||
+        (isDistrictEngineer() && resource.data.districtId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.districtId)
+      );
+      allow delete: if isAuthenticated() && (isSystemAdmin() || isGlobalEngineer());
     }
 
     // VIT Assets collection

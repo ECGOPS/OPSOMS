@@ -30,6 +30,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { getFirestore, getDocs, collection, getCountFromServer, query, orderBy, limit, startAt, startAfter, where } from "firebase/firestore";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Capacitor } from '@capacitor/core';
+import { Share } from '@capacitor/share';
 
 export interface StaffIdEntry {
   id: string;
@@ -461,10 +464,44 @@ Admin User,system_admin,,,ECGADMIN`;
     document.body.removeChild(a);
   };
 
-  const exportToCSV = () => {
+  // Helper to request storage permission on Android
+  async function requestStoragePermission() {
+    if (Capacitor.getPlatform() === 'android') {
+      try {
+        const permStatus = await Filesystem.checkPermissions();
+        if (permStatus.publicStorage !== 'granted') {
+          const requestResult = await Filesystem.requestPermissions();
+          if (requestResult.publicStorage !== 'granted') {
+            throw new Error('Storage permission denied');
+          }
+        }
+      } catch (e) {
+        console.error('Error requesting permissions:', e);
+        throw new Error('Failed to get storage permissions');
+      }
+    }
+  }
+
+  // Diagnostic: Minimal Share API test
+  const testShareAPI = async () => {
+    try {
+      toast.info('Testing Share API...');
+      await Share.share({
+        title: 'Test Share',
+        text: 'This is a test share from ECG OMS app.',
+        dialogTitle: 'Share Test'
+      });
+      toast.success('Share dialog opened!');
+    } catch (err) {
+      console.error('Error with Share API:', err);
+      toast.error('Share API failed: ' + (err?.message || err));
+    }
+  };
+
+  const exportToCSV = async () => {
+    toast.info('Starting export...');
     // Create CSV header
     const headers = ['Staff ID', 'Name', 'Role', 'Region', 'District', 'Custom ID', 'Created At'];
-    
     // Convert staff data to CSV rows
     const rows = staffIds.map(staff => [
       staff.id,
@@ -475,23 +512,47 @@ Admin User,system_admin,,,ECGADMIN`;
       staff.customId || '',
       staff.createdAt || ''
     ]);
-    
     // Combine headers and rows
     const csvContent = [
       headers.join(','),
       ...rows.map(row => row.join(','))
     ].join('\n');
-    
-    // Create and download the file
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `staff_ids_${new Date().toISOString().split('T')[0]}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
-    document.body.removeChild(a);
+
+    if (Capacitor.getPlatform() === 'android') {
+      try {
+        const fileName = `staff_ids_${new Date().toISOString().split('T')[0]}.csv`;
+        const base64 = window.btoa(unescape(encodeURIComponent(csvContent)));
+        // Save to app-private storage
+        const fileResult = await Filesystem.writeFile({
+          path: fileName,
+          data: base64,
+          directory: Directory.Data,
+        });
+        // Prompt user to share/move the file
+        await Share.share({
+          title: 'Export Staff Data',
+          text: 'Staff data export',
+          url: fileResult.uri,
+          dialogTitle: 'Share or Save Staff Data CSV'
+        });
+        // Show user instructions
+        toast.info('To save the file to your device, select "Files" or a file manager in the share dialog.');
+      } catch (err) {
+        toast.error('Failed to save or share file: ' + (err?.message || err));
+      }
+    } else {
+      // Web fallback
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `staff_ids_${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      toast.success('File download started');
+    }
   };
 
   // Add reset filters function

@@ -15,7 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { MoreHorizontal, FileEdit, Trash2, Eye, Download, FileDown } from "lucide-react";
+import { MoreHorizontal, FileEdit, Trash2, Eye, Download, FileDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { OverheadLineInspection } from "@/lib/types";
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
@@ -39,6 +39,8 @@ export function OverheadLineInspectionsTable({
   userRole
 }: OverheadLineInspectionsTableProps) {
   const [sortedInspections, setSortedInspections] = useState([...inspections]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   // Update sorted inspections whenever the inspections prop changes
   useEffect(() => {
@@ -50,7 +52,40 @@ export function OverheadLineInspectionsTable({
       return dateB.getTime() - dateA.getTime();
     });
     setSortedInspections(sorted);
+    // Reset to first page when inspections change
+    setCurrentPage(1);
   }, [inspections]);
+
+  // Calculate pagination values
+  const totalPages = Math.ceil(sortedInspections.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentInspections = sortedInspections.slice(startIndex, endIndex);
+
+  // Pagination handlers
+  const goToPage = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+      // Scroll to top of table when changing pages
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const goToNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(prev => prev + 1);
+      // Scroll to top of table when changing pages
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const goToPreviousPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(prev => prev - 1);
+      // Scroll to top of table when changing pages
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
 
   const exportToPDF = (inspection: OverheadLineInspection) => {
     const doc = new jsPDF();
@@ -360,82 +395,88 @@ export function OverheadLineInspectionsTable({
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
-        <Button onClick={exportAllToCSV} variant="outline" className="mr-2">
+        <Button onClick={exportAllToCSV} variant="outline">
           <FileDown className="mr-2 h-4 w-4" />
           Export All to CSV
         </Button>
       </div>
       <div className="rounded-md border">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Date</TableHead>
-            <TableHead>Region</TableHead>
-            <TableHead>District</TableHead>
-            <TableHead>Feeder Name</TableHead>
-            <TableHead>Voltage Level</TableHead>
-            <TableHead>Reference Pole</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {sortedInspections.map((inspection) => (
-            <TableRow
-              key={inspection.id}
-              onClick={e => {
-                // Prevent row click if clicking inside the Actions cell
-                if ((e.target as HTMLElement).closest('td')?.classList.contains('actions-cell')) return;
-                onView(inspection);
-              }}
-              className="cursor-pointer hover:bg-muted transition-colors"
-            >
-              <TableCell>
-                  {inspection.date 
-                    ? `${inspection.date}${inspection.time ? ` ${inspection.time}` : ''}`
-                    : inspection.createdAt && inspection.createdAt !== "" && !isNaN(new Date(inspection.createdAt).getTime())
-                    ? format(new Date(inspection.createdAt), "dd/MM/yyyy HH:mm")
-                    : new Date().toLocaleDateString()}
-              </TableCell>
-                <TableCell>{inspection.region || "Unknown"}</TableCell>
-                <TableCell>{inspection.district || "Unknown"}</TableCell>
-              <TableCell>{inspection.feederName}</TableCell>
-              <TableCell>{inspection.voltageLevel}</TableCell>
-              <TableCell>{inspection.referencePole}</TableCell>
-              <TableCell>
-                  <Badge
-                    className={
-                      inspection.status === "completed"
-                        ? "bg-green-500"
-                        : inspection.status === "in-progress"
-                        ? "bg-yellow-500"
-                        : "bg-gray-500"
-                    }
-                  >
-                    {inspection.status ? inspection.status.charAt(0).toUpperCase() + inspection.status.slice(1) : "Unknown"}
-                  </Badge>
-              </TableCell>
-              <TableCell className="text-right actions-cell">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                      <span className="sr-only">Open menu</span>
-                      <MoreHorizontal className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                    <DropdownMenuItem onClick={() => onView(inspection)}>
-                      <Eye className="mr-2 h-4 w-4" />
-                      View Details
-                    </DropdownMenuItem>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Date</TableHead>
+              <TableHead>Region</TableHead>
+              <TableHead>District</TableHead>
+              <TableHead>Feeder Name</TableHead>
+              <TableHead>Voltage Level</TableHead>
+              <TableHead>Reference Pole</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {currentInspections.map((inspection) => (
+              <TableRow
+                key={inspection.id}
+                onClick={e => {
+                  if ((e.target as HTMLElement).closest('td')?.classList.contains('actions-cell')) return;
+                  onView(inspection);
+                }}
+                className="cursor-pointer hover:bg-muted transition-colors"
+              >
+                <TableCell>
+                    {inspection.date 
+                      ? `${inspection.date}${inspection.time ? ` ${inspection.time}` : ''}`
+                      : inspection.createdAt && inspection.createdAt !== "" && !isNaN(new Date(inspection.createdAt).getTime())
+                      ? format(new Date(inspection.createdAt), "dd/MM/yyyy HH:mm")
+                      : new Date().toLocaleDateString()}
+                </TableCell>
+                  <TableCell>{inspection.region || "Unknown"}</TableCell>
+                  <TableCell>{inspection.district || "Unknown"}</TableCell>
+                <TableCell>{inspection.feederName}</TableCell>
+                <TableCell>{inspection.voltageLevel}</TableCell>
+                <TableCell>{inspection.referencePole}</TableCell>
+                <TableCell>
+                    <Badge
+                      className={
+                        inspection.status === "completed"
+                          ? "bg-green-500"
+                          : inspection.status === "in-progress"
+                          ? "bg-yellow-500"
+                          : "bg-gray-500"
+                      }
+                    >
+                      {inspection.status ? inspection.status.charAt(0).toUpperCase() + inspection.status.slice(1) : "Unknown"}
+                    </Badge>
+                </TableCell>
+                <TableCell className="text-right actions-cell">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={(e) => e.stopPropagation()}>
+                        <span className="sr-only">Open menu</span>
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                      <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                      <DropdownMenuItem onClick={(e) => {
+                        e.stopPropagation();
+                        onView(inspection);
+                      }}>
+                        <Eye className="mr-2 h-4 w-4" />
+                        View Details
+                      </DropdownMenuItem>
                       {(userRole === 'global_engineer' || userRole === 'district_engineer' || userRole === 'regional_engineer' || userRole === 'technician' || userRole === 'system_admin') && (
-                    <DropdownMenuItem onClick={() => onEdit(inspection)}>
+                        <DropdownMenuItem onClick={(e) => {
+                          e.stopPropagation();
+                          onEdit(inspection);
+                        }}>
                           <FileEdit className="mr-2 h-4 w-4" />
                           Edit
                         </DropdownMenuItem>
                       )}
-                      <DropdownMenuItem onClick={() => {
+                      <DropdownMenuItem onClick={(e) => {
+                        e.stopPropagation();
                         if (!inspection?.id) {
                           toast.error("Invalid inspection ID");
                           return;
@@ -444,30 +485,67 @@ export function OverheadLineInspectionsTable({
                       }}>
                         <Trash2 className="mr-2 h-4 w-4" />
                         Delete
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => exportToPDF(inspection)}>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={(e) => {
+                        e.stopPropagation();
+                        exportToPDF(inspection);
+                      }}>
                         <Download className="mr-2 h-4 w-4" />
-                      Export to PDF
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => exportToCSV(inspection)}>
+                        Export to PDF
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={(e) => {
+                        e.stopPropagation();
+                        exportToCSV(inspection);
+                      }}>
                         <FileDown className="mr-2 h-4 w-4" />
-                      Export to CSV
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </TableCell>
-            </TableRow>
-          ))}
-          {inspections.length === 0 && (
-            <TableRow>
-              <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                No inspections found
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
+                        Export to CSV
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </TableCell>
+              </TableRow>
+            ))}
+            {inspections.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                  No inspections found
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
       </div>
+      {totalPages > 1 && (
+        <div className="flex justify-center items-center gap-2 mt-4">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={goToPreviousPage}
+            disabled={currentPage === 1}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+            <Button
+              key={page}
+              variant={currentPage === page ? "default" : "outline"}
+              size="sm"
+              onClick={() => goToPage(page)}
+              className="w-8 h-8 p-0"
+            >
+              {page}
+            </Button>
+          ))}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={goToNextPage}
+            disabled={currentPage === totalPages}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
     </div>
   );
 } 

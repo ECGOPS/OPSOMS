@@ -22,7 +22,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuth } from "@/contexts/AuthContext";
-import { AlertTriangle, CheckCircle2, ClipboardList, Loader2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ClipboardList, Loader2, WifiOff } from "lucide-react";
 import { VITInspectionChecklist, VITAsset, YesNoOption, GoodBadOption } from "@/lib/types";
 import { toast } from "react-hot-toast";
 import { serverTimestamp } from "firebase/firestore";
@@ -40,9 +40,27 @@ export function VITInspectionForm({
   onSubmit,
   onCancel,
 }: VITInspectionFormProps) {
+  console.log('[VITInspectionForm] Component rendered', { inspectionData, assetId });
+  
   const { vitAssets, addVITInspection, updateVITInspection, regions, districts } = useData();
   const { user } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  // Monitor online/offline status
+  useEffect(() => {
+    console.log('[VITInspectionForm] Online status changed:', navigator.onLine);
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   // Form fields
   const [selectedAssetId, setSelectedAssetId] = useState<string>(assetId || inspectionData?.vitAssetId || "");
@@ -180,93 +198,118 @@ export function VITInspectionForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+    console.log("Current state:", {
+      selectedAsset,
+      inspectionDate,
+      inspectedBy,
+      remarks,
+      checklist: {
+        rodentTermiteEncroachment,
+        cleanDustFree,
+        protectionButtonEnabled,
+        recloserButtonEnabled,
+        groundEarthButtonEnabled,
+        acPowerOn,
+        batteryPowerLow,
+        handleLockOn,
+        remoteButtonEnabled,
+        gasLevelLow,
+        earthingArrangementAdequate,
+        noFusesBlown,
+        noDamageToBushings,
+        noDamageToHVConnections,
+        insulatorsClean,
+        paintworkAdequate,
+        ptFuseLinkIntact,
+        noCorrosion,
+        silicaGelCondition,
+        correctLabelling
+      }
+    });
+
     if (!selectedAsset) {
-      toast.error("Please select a VIT asset");
+      toast.error("Please select an asset");
       return;
     }
 
-    // Validate required fields
     if (!inspectionDate || !inspectedBy) {
       toast.error("Please fill in all required fields");
       return;
     }
 
-    setIsSubmitting(true);
     try {
-      if (inspectionData?.id) {
+      const timestamp = new Date().toISOString();
+      const newInspectionData = {
+        vitAssetId: selectedAsset.id,
+        inspectionDate,
+        inspectedBy,
+        remarks,
+        rodentTermiteEncroachment: rodentTermiteEncroachment || "No",
+        cleanDustFree: cleanDustFree || "No",
+        protectionButtonEnabled: protectionButtonEnabled || "No",
+        recloserButtonEnabled: recloserButtonEnabled || "No",
+        groundEarthButtonEnabled: groundEarthButtonEnabled || "No",
+        acPowerOn: acPowerOn || "No",
+        batteryPowerLow: batteryPowerLow || "No",
+        handleLockOn: handleLockOn || "No",
+        remoteButtonEnabled: remoteButtonEnabled || "No",
+        gasLevelLow: gasLevelLow || "No",
+        earthingArrangementAdequate: earthingArrangementAdequate || "No",
+        noFusesBlown: noFusesBlown || "No",
+        noDamageToBushings: noDamageToBushings || "No",
+        noDamageToHVConnections: noDamageToHVConnections || "No",
+        insulatorsClean: insulatorsClean || "No",
+        paintworkAdequate: paintworkAdequate || "No",
+        ptFuseLinkIntact: ptFuseLinkIntact || "No",
+        noCorrosion: noCorrosion || "No",
+        silicaGelCondition: silicaGelCondition || "Good",
+        correctLabelling: correctLabelling || "No",
+        createdBy: user?.email || "unknown",
+        createdAt: timestamp,
+        updatedAt: timestamp
+      };
+
+      if (inspectionData) {
         // Update existing inspection
-        const updatedInspection: Omit<VITInspectionChecklist, "id"> = {
-          vitAssetId: selectedAsset.id,
-          region: selectedAsset.region,
-          district: selectedAsset.district,
-          inspectionDate,
-          inspectedBy,
-          rodentTermiteEncroachment: rodentTermiteEncroachment || "No",
-          cleanDustFree: cleanDustFree || "No",
-          protectionButtonEnabled: protectionButtonEnabled || "No",
-          recloserButtonEnabled: recloserButtonEnabled || "No",
-          groundEarthButtonEnabled: groundEarthButtonEnabled || "No",
-          acPowerOn: acPowerOn || "No",
-          batteryPowerLow: batteryPowerLow || "No",
-          handleLockOn: handleLockOn || "No",
-          remoteButtonEnabled: remoteButtonEnabled || "No",
-          gasLevelLow: gasLevelLow || "No",
-          earthingArrangementAdequate: earthingArrangementAdequate || "No",
-          noFusesBlown: noFusesBlown || "No",
-          noDamageToBushings: noDamageToBushings || "No",
-          noDamageToHVConnections: noDamageToHVConnections || "No",
-          insulatorsClean: insulatorsClean || "No",
-          paintworkAdequate: paintworkAdequate || "No",
-          ptFuseLinkIntact: ptFuseLinkIntact || "No",
-          noCorrosion: noCorrosion || "No",
-          silicaGelCondition: silicaGelCondition || "Good",
-          correctLabelling: correctLabelling || "No",
-          remarks: remarks || "",
-          createdBy: user?.email || "unknown",
-          createdAt: new Date().toISOString()
-        };
-        await updateVITInspection(inspectionData.id, updatedInspection);
+        await updateVITInspection(inspectionData.id, newInspectionData);
+        toast.success("Inspection updated successfully");
       } else {
-        // Add new inspection with all required fields
-        const newInspection: Omit<VITInspectionChecklist, "id"> = {
-          vitAssetId: selectedAsset.id,
-          region: selectedAsset.region,
-          district: selectedAsset.district,
-          inspectionDate,
-          inspectedBy,
-          rodentTermiteEncroachment: rodentTermiteEncroachment || "No",
-          cleanDustFree: cleanDustFree || "No",
-          protectionButtonEnabled: protectionButtonEnabled || "No",
-          recloserButtonEnabled: recloserButtonEnabled || "No",
-          groundEarthButtonEnabled: groundEarthButtonEnabled || "No",
-          acPowerOn: acPowerOn || "No",
-          batteryPowerLow: batteryPowerLow || "No",
-          handleLockOn: handleLockOn || "No",
-          remoteButtonEnabled: remoteButtonEnabled || "No",
-          gasLevelLow: gasLevelLow || "No",
-          earthingArrangementAdequate: earthingArrangementAdequate || "No",
-          noFusesBlown: noFusesBlown || "No",
-          noDamageToBushings: noDamageToBushings || "No",
-          noDamageToHVConnections: noDamageToHVConnections || "No",
-          insulatorsClean: insulatorsClean || "No",
-          paintworkAdequate: paintworkAdequate || "No",
-          ptFuseLinkIntact: ptFuseLinkIntact || "No",
-          noCorrosion: noCorrosion || "No",
-          silicaGelCondition: silicaGelCondition || "Good",
-          correctLabelling: correctLabelling || "No",
-          remarks: remarks || "",
-          createdBy: user?.email || "unknown",
-          createdAt: new Date().toISOString()
-        };
-        await addVITInspection(newInspection);
+        // Add new inspection
+        await addVITInspection(newInspectionData);
+        toast.success("Inspection saved successfully");
       }
-      onSubmit(inspectionData);
+
+      // Reset form state
+      setSelectedAsset(null);
+      setInspectionDate("");
+      setInspectedBy("");
+      setRemarks("");
+      setRodentTermiteEncroachment(undefined);
+      setCleanDustFree(undefined);
+      setProtectionButtonEnabled(undefined);
+      setRecloserButtonEnabled(undefined);
+      setGroundEarthButtonEnabled(undefined);
+      setAcPowerOn(undefined);
+      setBatteryPowerLow(undefined);
+      setHandleLockOn(undefined);
+      setRemoteButtonEnabled(undefined);
+      setGasLevelLow(undefined);
+      setEarthingArrangementAdequate(undefined);
+      setNoFusesBlown(undefined);
+      setNoDamageToBushings(undefined);
+      setNoDamageToHVConnections(undefined);
+      setInsulatorsClean(undefined);
+      setPaintworkAdequate(undefined);
+      setPtFuseLinkIntact(undefined);
+      setNoCorrosion(undefined);
+      setSilicaGelCondition(undefined);
+      setCorrectLabelling(undefined);
+
+      // Call onSubmit to close the form
+      onSubmit();
     } catch (error) {
       console.error("Error saving inspection:", error);
-      toast.error("Failed to save inspection");
-    } finally {
-      setIsSubmitting(false);
+      toast.error("Failed to save inspection. Please try again.");
     }
   };
 
@@ -278,6 +321,12 @@ export function VITInspectionForm({
         <CardTitle className="flex items-center gap-2">
           <ClipboardList className="h-5 w-5" />
           {inspectionData ? "Edit VIT Inspection" : "New VIT Inspection"}
+          {!isOnline && (
+            <div className="flex items-center gap-1 text-yellow-600 text-sm font-normal">
+              <WifiOff className="h-4 w-4" />
+              Offline Mode
+            </div>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -814,26 +863,23 @@ export function VITInspectionForm({
               />
             </div>
           </div>
+          <CardFooter className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={onCancel}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  {isOnline ? "Saving..." : "Saving Offline..."}
+                </>
+              ) : (
+                "Save Inspection"
+              )}
+            </Button>
+          </CardFooter>
         </form>
       </CardContent>
-      <CardFooter className="flex flex-col sm:flex-row justify-end gap-2">
-        <Button variant="outline" onClick={onCancel} className="w-full sm:w-auto">
-          Cancel
-        </Button>
-        <Button onClick={handleSubmit} disabled={isSubmitting} className="w-full sm:w-auto">
-          {isSubmitting ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              {inspectionData ? "Updating..." : "Submitting..."}
-            </>
-          ) : (
-            <>
-              <CheckCircle2 className="mr-2 h-4 w-4" />
-              {inspectionData ? "Update Inspection" : "Submit Inspection"}
-            </>
-          )}
-        </Button>
-      </CardFooter>
     </Card>
   );
 }

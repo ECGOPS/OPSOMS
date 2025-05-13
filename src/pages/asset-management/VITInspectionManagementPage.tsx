@@ -323,8 +323,10 @@ export default function VITInspectionManagementPage() {
   const handleCloseInspectionForm = () => {
     setIsInspectionFormOpen(false);
     setIsEditInspectionOpen(false);
-    setSelectedAssetId("");
+    setSelectedAssetId(null);
     setSelectedInspection(null);
+    // Refresh the data after form closure
+    loadData(true);
   };
 
   const handleViewDetails = (inspection: VITInspectionChecklist) => {

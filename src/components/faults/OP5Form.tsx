@@ -60,7 +60,6 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
   const [regionId, setRegionId] = useState<string>(defaultRegionId);
   const [districtId, setDistrictId] = useState<string>(defaultDistrictId);
   const [outageType, setOutageType] = useState<string>("");
-  const [outageSubType, setOutageSubType] = useState<string>("");
   const [outageDescription, setOutageDescription] = useState<string>("");
   const [faultLocation, setFaultLocation] = useState<string>("");
   const [occurrenceDate, setOccurrenceDate] = useState<string>("");
@@ -308,28 +307,35 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
       const formattedRepairDate = repairDate ? new Date(repairDate).toISOString() : null;
       const formattedRestorationDate = restorationDate ? new Date(restorationDate).toISOString() : null;
 
-      const formDataToSubmit: Omit<OP5Fault, "id" | "status"> = {
+      const formDataToSubmit: Omit<OP5Fault, "id"> = {
         regionId: regionId || "",
         districtId: districtId || "",
+        region: regions.find(r => r.id === regionId)?.name || "",
+        district: districts.find(d => d.id === districtId)?.name || "",
         occurrenceDate: formattedOccurrenceDate,
         repairDate: formattedRepairDate,
         restorationDate: formattedRestorationDate,
-        outageType: outageType as FaultType,
-        outageSubType: outageSubType || "",
+        faultType: outageType as FaultType,
         specificFaultType: specificFaultType || "",
-        outageDescription: outageDescription || "",
         faultLocation: faultLocation || "",
-        customersAffected: {
+        affectedPopulation: {
           rural: ruralAffected || 0,
           urban: urbanAffected || 0,
           metro: metroAffected || 0
         },
-        outageDuration: outageDuration || 0,
         mttr: mttr || 0,
-        customerLostHours: customerLostHours || 0,
-        reliabilityIndices: reliabilityIndices,
+        reliabilityIndices: {
+          saidi: reliabilityIndices.rural.saidi,
+          saifi: reliabilityIndices.rural.saifi,
+          caidi: reliabilityIndices.rural.caidi
+        },
+        status: restorationDate ? "resolved" as const : "active" as const,
         createdBy: user?.id || 'unknown',
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        materialsUsed: [],
+        description: outageDescription || "",
+        date: formattedOccurrenceDate,
       };
 
       await addOP5Fault(formDataToSubmit);
@@ -344,7 +350,7 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
         data: { url: window.location.href }
       });
       
-      showNotification(notificationTitle, notificationBody);
+      showNotification(notificationTitle, { body: notificationBody });
       
       toast.success("OP5 fault created successfully");
       navigate("/dashboard");
@@ -872,25 +878,14 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
             
             <TabsContent value="calculations" className="pt-4 sm:pt-6">
               <div className="space-y-4 sm:space-y-8">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="outageDuration" className="font-medium text-sm">Outage Duration</Label>
-                    <div className="bg-muted/50 rounded-md p-2 sm:p-3 text-sm border border-muted">
-                      {outageDuration !== null 
-                        ? formatDuration(outageDuration)
-                        : "Not calculated yet"}
-                    </div>
+                <div className="space-y-2">
+                  <Label htmlFor="mttr" className="font-medium text-sm">MTTR (Mean Time To Repair)</Label>
+                  <div className="bg-muted/50 rounded-md p-2 sm:p-3 text-sm border border-muted">
+                    {mttr !== null 
+                      ? formatDuration(mttr)
+                      : "Not calculated yet"}
                   </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="mttr" className="font-medium text-sm">MTTR (Mean Time To Repair)</Label>
-                    <div className="bg-muted/50 rounded-md p-2 sm:p-3 text-sm border border-muted">
-                      {mttr !== null 
-                        ? formatDuration(mttr)
-                        : "Not calculated yet"}
-                    </div>
-                    </div>
-                  </div>
+                </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="customerLostHours" className="font-medium text-sm">Customer Lost Hours</Label>
@@ -908,7 +903,7 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
                       <div className="font-medium text-sm">Rural Population</div>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
                         <div className="bg-muted/50 rounded-md p-2 sm:p-3 text-sm border border-muted">
-                      <div className="font-medium">SAIDI</div>
+                          <div className="font-medium">SAIDI</div>
                           <div>{(reliabilityIndices.rural.saidi ?? 0).toFixed(2)}</div>
                         </div>
                         <div className="bg-muted/50 rounded-md p-2 sm:p-3 text-sm border border-muted">
@@ -930,7 +925,7 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
                           <div>{(reliabilityIndices.urban.saidi ?? 0).toFixed(2)}</div>
                         </div>
                         <div className="bg-muted/50 rounded-md p-2 sm:p-3 text-sm border border-muted">
-                      <div className="font-medium">SAIFI</div>
+                          <div className="font-medium">SAIFI</div>
                           <div>{(reliabilityIndices.urban.saifi ?? 0).toFixed(2)}</div>
                         </div>
                         <div className="bg-muted/50 rounded-md p-2 sm:p-3 text-sm border border-muted">
@@ -952,7 +947,7 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
                           <div>{(reliabilityIndices.metro.saifi ?? 0).toFixed(2)}</div>
                         </div>
                         <div className="bg-muted/50 rounded-md p-2 sm:p-3 text-sm border border-muted">
-                      <div className="font-medium">CAIDI</div>
+                          <div className="font-medium">CAIDI</div>
                           <div>{(reliabilityIndices.metro.caidi ?? 0).toFixed(2)}</div>
                         </div>
                       </div>

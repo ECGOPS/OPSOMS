@@ -17,7 +17,7 @@ import { format, isWithinInterval, isSameDay, isSameMonth, isSameYear } from "da
 
 export default function DashboardPage() {
   const { isAuthenticated, user } = useAuth();
-  const { getFilteredFaults, regions, districts } = useData();
+  const { getFilteredFaults, regions, districts, op5Faults, controlSystemOutages } = useData();
   const navigate = useNavigate();
   const permissionService = PermissionService.getInstance();
   
@@ -120,6 +120,17 @@ export default function DashboardPage() {
     getFilteredFaults
   ]);
   
+  // Add effect to reload faults when context data changes
+  useEffect(() => {
+    console.log('[Dashboard] Context data changed:', {
+      op5FaultsCount: op5Faults.length,
+      controlOutagesCount: controlSystemOutages.length,
+      op5Faults: op5Faults,
+      controlSystemOutages: controlSystemOutages
+    });
+    loadFaults();
+  }, [op5Faults, controlSystemOutages, getFilteredFaults]);
+  
   const loadFaults = () => {
     console.log('[Dashboard] loadFaults called');
     console.log('[Dashboard] Current filter states:', { 
@@ -134,10 +145,14 @@ export default function DashboardPage() {
       selectedMonthYear,
       selectedYear
     });
+    
+    // Get filtered faults from context
     const filteredFaults = getFilteredFaults(filterRegion, filterDistrict);
-    console.log('[Dashboard] Filtered faults:', { 
+    console.log('[Dashboard] Filtered faults from context:', { 
       op5Count: filteredFaults.op5Faults.length,
-      controlCount: filteredFaults.controlOutages.length
+      controlCount: filteredFaults.controlOutages.length,
+      op5Faults: filteredFaults.op5Faults,
+      controlOutages: filteredFaults.controlOutages
     });
     
     // Apply status filter
@@ -148,10 +163,6 @@ export default function DashboardPage() {
       statusFilteredOP5 = filteredFaults.op5Faults.filter(f => f.status === filterStatus);
       statusFilteredControl = filteredFaults.controlOutages.filter(f => f.status === filterStatus);
     }
-    console.log('[Dashboard] After status filter:', { 
-      op5Count: statusFilteredOP5.length,
-      controlCount: statusFilteredControl.length
-    });
     
     // Apply fault type filter
     let typeFilteredOP5 = statusFilteredOP5;
@@ -161,10 +172,6 @@ export default function DashboardPage() {
       typeFilteredOP5 = statusFilteredOP5.filter(f => f.faultType === filterFaultType);
       typeFilteredControl = statusFilteredControl.filter(f => f.faultType === filterFaultType);
     }
-    console.log('[Dashboard] After fault type filter:', { 
-      op5Count: typeFilteredOP5.length,
-      controlCount: typeFilteredControl.length
-    });
     
     // Apply date filters
     let dateFilteredOP5 = typeFilteredOP5;
@@ -211,15 +218,18 @@ export default function DashboardPage() {
         return isSameYear(faultDate, new Date(selectedYear, 0));
       });
     }
-    console.log('[Dashboard] After date filter:', { 
-      op5Count: dateFilteredOP5.length,
-      controlCount: dateFilteredControl.length
-    });
+
+    // Remove any duplicates between OP5 and control faults
+    const controlIds = new Set(dateFilteredControl.map(f => f.id));
+    dateFilteredOP5 = dateFilteredOP5.filter(f => !controlIds.has(f.id));
     
-    setFaults({
+    // Update state with filtered faults
+    const updatedFaults = {
       op5Faults: dateFilteredOP5,
       controlOutages: dateFilteredControl
-    });
+    };
+    console.log('[Dashboard] Setting updated faults:', updatedFaults);
+    setFaults(updatedFaults);
   };
   
   const handleRefresh = () => {
@@ -231,40 +241,51 @@ export default function DashboardPage() {
     }, 1000);
   };
   
-  // Calculate paginated faults
+  // Calculate paginated faults based on active tab
   const paginatedFaults = useMemo(() => {
-    // Get all faults based on current tab
-    let allFaults = [];
+    let filteredFaults: (OP5Fault | ControlSystemOutage)[] = [];
+    
     if (activeTab === "all") {
-      allFaults = [...faults.op5Faults, ...faults.controlOutages];
+      // For "all" tab, combine both types of faults but ensure uniqueness
+      const seenIds = new Set<string>();
+      filteredFaults = [...faults.op5Faults, ...faults.controlOutages].filter(fault => {
+        if (seenIds.has(fault.id)) {
+          return false;
+        }
+        seenIds.add(fault.id);
+        return true;
+      });
     } else if (activeTab === "op5") {
-      allFaults = [...faults.op5Faults];
+      // For "op5" tab, only show OP5 faults
+      filteredFaults = faults.op5Faults;
     } else if (activeTab === "control") {
-      allFaults = [...faults.controlOutages];
+      // For "control" tab, only show control system outages
+      filteredFaults = faults.controlOutages;
     }
 
-    // Sort by status (active first) then by date (newest first)
-    const sortedFaults = allFaults.sort((a, b) => {
-      if (a.status === "active" && b.status !== "active") return -1;
-      if (a.status !== "active" && b.status === "active") return 1;
-      return new Date(b.occurrenceDate).getTime() - new Date(a.occurrenceDate).getTime();
+    // Apply sorting
+    filteredFaults.sort((a, b) => {
+      const dateA = new Date(a.occurrenceDate).getTime();
+      const dateB = new Date(b.occurrenceDate).getTime();
+      return dateB - dateA;
     });
 
+    // Calculate pagination
     const startIndex = (currentPage - 1) * pageSize;
-    return sortedFaults.slice(startIndex, startIndex + pageSize);
-  }, [faults, currentPage, pageSize, activeTab]);
+    const endIndex = startIndex + pageSize;
+    
+    return filteredFaults.slice(startIndex, endIndex);
+  }, [activeTab, faults.op5Faults, faults.controlOutages, currentPage, pageSize]);
 
+  // Calculate total pages based on active tab
   const totalPages = useMemo(() => {
-    let totalItems = 0;
-    if (activeTab === "all") {
-      totalItems = faults.op5Faults.length + faults.controlOutages.length;
-    } else if (activeTab === "op5") {
-      totalItems = faults.op5Faults.length;
-    } else if (activeTab === "control") {
-      totalItems = faults.controlOutages.length;
-    }
+    const totalItems = activeTab === "all" 
+      ? faults.op5Faults.length + faults.controlOutages.length
+      : activeTab === "op5" 
+        ? faults.op5Faults.length 
+        : faults.controlOutages.length;
     return Math.ceil(totalItems / pageSize);
-  }, [faults, pageSize, activeTab]);
+  }, [activeTab, faults.op5Faults.length, faults.controlOutages.length, pageSize]);
 
   // Reset pagination when tab changes or filters change
   useEffect(() => {
@@ -403,13 +424,16 @@ export default function DashboardPage() {
             ) : (
               <>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {paginatedFaults.map(fault => (
-                    <FaultCard 
-                      key={fault.id} 
-                      fault={fault} 
-                      type={faults.op5Faults.some(f => f.id === fault.id) ? "op5" : "control"} 
-                    />
-                  ))}
+                  {paginatedFaults.map(fault => {
+                    const isOP5Fault = faults.op5Faults.some(f => f.id === fault.id);
+                    return (
+                      <FaultCard 
+                        key={`${activeTab}-${fault.id}`} 
+                        fault={fault} 
+                        type={isOP5Fault ? "op5" : "control"} 
+                      />
+                    );
+                  })}
                 </div>
 
                 {/* Pagination Controls */}
@@ -461,7 +485,11 @@ export default function DashboardPage() {
               <>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {paginatedFaults.map(fault => (
-                    <FaultCard key={fault.id} fault={fault} type="op5" />
+                    <FaultCard 
+                      key={`${activeTab}-${fault.id}`} 
+                      fault={fault} 
+                      type="op5" 
+                    />
                   ))}
                 </div>
 
@@ -514,7 +542,11 @@ export default function DashboardPage() {
               <>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {paginatedFaults.map(fault => (
-                    <FaultCard key={fault.id} fault={fault} type="control" />
+                    <FaultCard 
+                      key={`${activeTab}-${fault.id}`} 
+                      fault={fault} 
+                      type="control" 
+                    />
                   ))}
                 </div>
 

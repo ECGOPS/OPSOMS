@@ -9,11 +9,8 @@ interface LayoutProps {
 
 export function Layout({ children }: LayoutProps) {
   const { isAuthenticated } = useAuth();
-  
-  // Only initialize the idle timer if user is authenticated
-  if (isAuthenticated) {
-    useIdleTimer();
-  }
+  // Always call the hook, let the hook itself handle the authentication check
+  useIdleTimer();
 
   return (
     <div className="min-h-screen flex flex-col">

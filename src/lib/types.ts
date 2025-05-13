@@ -134,14 +134,27 @@ export interface BaseAsset {
   createdBy: string;
 }
 
-export interface OP5Fault extends BaseAsset {
+export interface OP5Fault {
+  id: string;
+  date: string;
+  region: string;
+  district: string;
   regionId: string;
   districtId: string;
   description: string;
+  materialsUsed: {
+    id: string;
+    type: string;
+    details: {
+      rating?: string;
+      type?: string;
+      description?: string;
+    };
+  }[];
   occurrenceDate: string;
-  restorationDate: string | null;
-  status: "active" | "resolved";
-  faultType: FaultType;
+  restorationDate?: string;
+  repairDate?: string;
+  faultType: string;
   specificFaultType: string;
   faultLocation: string;
   affectedPopulation: {
@@ -149,6 +162,16 @@ export interface OP5Fault extends BaseAsset {
     urban: number;
     metro: number;
   };
+  mttr: number;
+  reliabilityIndices: {
+    saidi: number;
+    saifi: number;
+    caidi: number;
+  };
+  status: "active" | "resolved";
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
 }
 
 export interface ControlSystemOutage extends BaseAsset {
@@ -222,6 +245,7 @@ export type VITInspectionChecklist = {
   remarks: string;
   createdBy: string;
   createdAt: string;
+  updatedAt: string;
 };
 
 // Updated to match with asset-types
@@ -248,6 +272,7 @@ export interface SubstationInspection {
   type: 'indoor' | 'outdoor';
   items: InspectionItem[];
   createdAt?: string;
+  updatedAt?: string;
   createdBy?: string;
   inspectionDate: string;
   inspectedBy: string;
@@ -336,7 +361,7 @@ export interface DataContextType {
   addVITAsset: (asset: Omit<VITAsset, "id" | "createdAt" | "updatedAt">) => void;
   updateVITAsset: (id: string, updates: Partial<VITAsset>) => void;
   deleteVITAsset: (id: string) => void;
-  addVITInspection: (inspection: Omit<VITInspectionChecklist, "id">) => void;
+  addVITInspection: (inspection: Omit<VITInspectionChecklist, "id">) => Promise<string>;
   updateVITInspection: (id: string, inspection: Partial<VITInspectionChecklist>) => void;
   deleteVITInspection: (id: string) => void;
   updateDistrict: (id: string, updates: Partial<District>) => void;

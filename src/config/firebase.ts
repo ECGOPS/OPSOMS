@@ -75,16 +75,43 @@ if (typeof window !== 'undefined') {
 const resetFirestoreConnection = async () => {
   try {
     console.log('[Firebase] Resetting Firestore connection');
-    await disableNetwork(db);
-    console.log('[Firebase] Network disabled');
+    
+    // Check if we're already offline
+    if (!navigator.onLine) {
+      console.log('[Firebase] Already offline, skipping network reset');
+      return;
+    }
+
+    // Wait for any pending operations to complete
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    try {
+      await disableNetwork(db);
+      console.log('[Firebase] Network disabled');
+    } catch (disableError) {
+      console.warn('[Firebase] Error disabling network:', disableError);
+      // Continue anyway as the network might already be disabled
+    }
     
     // Wait a moment before re-enabling
     await new Promise(resolve => setTimeout(resolve, 1000));
     
-    await enableNetwork(db);
-    console.log('[Firebase] Network re-enabled');
+    try {
+      await enableNetwork(db);
+      console.log('[Firebase] Network re-enabled');
+    } catch (enableError) {
+      console.error('[Firebase] Error enabling network:', enableError);
+      // If we can't re-enable the network, we should probably reload the page
+      if (typeof window !== 'undefined') {
+        window.location.reload();
+      }
+    }
   } catch (error) {
     console.error('[Firebase] Error resetting Firestore connection:', error);
+    // If we get a critical error, reload the page
+    if (typeof window !== 'undefined' && error.message?.includes('INTERNAL ASSERTION FAILED')) {
+      window.location.reload();
+    }
   }
 };
 

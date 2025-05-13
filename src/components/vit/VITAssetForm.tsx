@@ -280,9 +280,18 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
     setIsSubmitting(true);
     
     try {
+      // Get the region and district names
+      const selectedRegion = filteredRegions.find(r => r.id === regionId);
+      const selectedDistrict = filteredDistricts.find(d => d.id === districtId);
+
+      if (!selectedRegion || !selectedDistrict) {
+        toast.error("Invalid region or district selection");
+        return;
+      }
+
       const assetData = {
-        region: filteredRegions.find(r => r.id === regionId)?.name,
-        district: filteredDistricts.find(d => d.id === districtId)?.name,
+        region: selectedRegion.name,
+        district: selectedDistrict.name,
         voltageLevel,
         typeOfUnit,
         serialNumber,
@@ -290,24 +299,36 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
         gpsCoordinates,
         status,
         protection,
-        photoUrl,
+        photoUrl: capturedImage || photoUrl,
         createdBy: user?.email || "unknown",
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
+        updatedAt: new Date().toISOString()
       };
       
+      console.log("Submitting asset data:", assetData);
+      
       if (asset) {
-        // Update existing asset in Firestore
-        const assetRef = doc(db, "vitAssets", asset.id);
-        await updateDoc(assetRef, {
-          ...assetData,
-          updatedAt: serverTimestamp()
-        });
+        // Update existing asset
+        console.log("Updating asset:", asset.id);
+        await updateVITAsset(asset.id, assetData);
         toast.success("Asset updated successfully");
       } else {
-        // Add new asset to Firestore
-        await addDoc(collection(db, "vitAssets"), assetData);
+        // Add new asset
+        console.log("Adding new asset");
+        await addVITAsset(assetData);
         toast.success("Asset added successfully");
+      }
+      
+      // Only reset form if it's a new asset
+      if (!asset) {
+        setVoltageLevel("11KV");
+        setTypeOfUnit("");
+        setSerialNumber("");
+        setLocation("");
+        setGpsCoordinates("");
+        setStatus("Operational");
+        setProtection("");
+        setPhotoUrl("");
+        setCapturedImage(null);
       }
       
       onSubmit();

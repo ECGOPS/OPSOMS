@@ -52,6 +52,8 @@ export interface LoadMonitoringData {
     id: string;
     name: string;
   };
+
+  updatedAt?: string;
 }
 
 export type ConditionStatus = 'good' | 'bad';

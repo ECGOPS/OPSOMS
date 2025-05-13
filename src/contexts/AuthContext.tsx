@@ -231,14 +231,48 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!user) return;
 
     let activityTimeout: NodeJS.Timeout;
+    let retryCount = 0;
+    const MAX_RETRIES = 3;
+    const RETRY_DELAY = 1000;
 
     const updateActivity = async () => {
       try {
-        await updateDoc(doc(db, 'users', user.id), {
-          lastActive: serverTimestamp()
-        });
+        // Check connection state
+        if (!navigator.onLine) {
+          console.log('Device is offline, skipping activity update');
+          return;
+        }
+
+        const userRef = doc(db, 'users', user.id);
+        
+        // Add retry logic
+        while (retryCount < MAX_RETRIES) {
+          try {
+            await updateDoc(userRef, {
+              lastActive: serverTimestamp()
+            });
+            retryCount = 0; // Reset retry count on success
+            break;
+          } catch (error: any) {
+            retryCount++;
+            console.log(`Retry ${retryCount}/${MAX_RETRIES} after error:`, error);
+            
+            if (retryCount === MAX_RETRIES) {
+              throw error;
+            }
+            
+            // If we get an internal assertion error, try to reset the connection
+            if (error.message?.includes('INTERNAL ASSERTION FAILED')) {
+              console.log('Detected internal assertion error, attempting to reset connection');
+              await resetFirestoreConnection();
+            }
+            
+            await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+          }
+        }
       } catch (error) {
         console.error('Error updating activity:', error);
+        retryCount = 0; // Reset retry count after max retries
       }
     };
 
@@ -253,7 +287,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     window.addEventListener('click', handleActivity);
     window.addEventListener('scroll', handleActivity);
 
-    // Update initially
+    // Initial activity update
     updateActivity();
 
     return () => {

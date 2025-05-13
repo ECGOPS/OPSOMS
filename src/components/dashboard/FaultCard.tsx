@@ -124,29 +124,7 @@ export function FaultCard({ fault, type }: FaultCardProps) {
   };
 
   const canEdit = () => {
-    // Check if user has permission to manage faults
-    const feature = isOP5 ? 'fault_reporting_update' : 'fault_reporting_update';
-    if (!user || !permissionService.canAccessFeature(user.role, feature)) {
-      return false;
-    }
-    
-    // Technicians can edit faults in their district
-    if (user.role === "technician") {
-      return user.district === district?.name;
-    }
-    
-    // District engineers for their district or higher roles can edit
-    if (user.role === "district_engineer") {
-      return user.district === district?.name;
-    }
-    
-    // Regional engineers can edit in their region
-    if (user.role === "regional_engineer") {
-      return user.region === region?.name;
-    }
-    
-    // Global engineers and system admins can edit anywhere
-    return user.role === "global_engineer" || user.role === "system_admin";
+    return canEditFault(fault);
   };
 
   const canDelete = () => {
@@ -204,10 +182,8 @@ export function FaultCard({ fault, type }: FaultCardProps) {
   };
   
   const handleEdit = () => {
-    // Check if user has permission to manage faults
-    const feature = isOP5 ? 'fault_reporting' : 'fault_reporting';
-    if (user && !permissionService.canAccessFeature(user.role, feature)) {
-      toast.error("You don't have permission to edit faults");
+    if (!canEdit()) {
+      toast.error("You don't have permission to edit this fault");
       return;
     }
     

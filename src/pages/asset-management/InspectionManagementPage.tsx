@@ -16,7 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SubstationInspection } from "@/lib/types";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/components/ui/sonner";
-import { Eye, Pencil, Trash2, FileText, Download, MoreHorizontal } from "lucide-react";
+import { Eye, Pencil, Trash2, FileText, Download, MoreHorizontal, ChevronLeft, ChevronRight } from "lucide-react";
 import { useData } from "@/contexts/DataContext";
 import { formatDate } from "@/utils/calculations";
 import {
@@ -50,6 +50,10 @@ export default function InspectionManagementPage() {
   const [selectedRegion, setSelectedRegion] = useState<string | null>(null);
   const [selectedDistrict, setSelectedDistrict] = useState<string | null>(null);
   const permissionService = PermissionService.getInstance();
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   // Filter districts based on selected region
   const filteredDistricts = useMemo(() => {
@@ -127,6 +131,18 @@ export default function InspectionManagementPage() {
     
     return filtered;
   }, [savedInspections, user, selectedDate, selectedMonth, selectedRegion, selectedDistrict, searchTerm]);
+
+  // Calculate pagination
+  const totalPages = Math.ceil(filteredInspections.length / itemsPerPage);
+  const paginatedInspections = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredInspections.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredInspections, currentPage]);
+
+  // Reset pagination when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedDate, selectedMonth, selectedRegion, selectedDistrict, searchTerm]);
 
   // Reset all filters
   const handleResetFilters = () => {
@@ -690,8 +706,8 @@ export default function InspectionManagementPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredInspections.length > 0 ? (
-                filteredInspections.map((inspection) => {
+              {paginatedInspections.length > 0 ? (
+                paginatedInspections.map((inspection) => {
                   // Calculate counts directly from inspection.items, handling undefined
                   const goodItems = inspection.items ? inspection.items.filter(item => item?.status === "good").length : 0;
                   const badItems = inspection.items ? inspection.items.filter(item => item?.status === "bad").length : 0;
@@ -767,13 +783,59 @@ export default function InspectionManagementPage() {
                 })
               ) : (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center">
+                  <TableCell colSpan={7} className="text-center py-4">
                     No inspections found
                   </TableCell>
                 </TableRow>
               )}
             </TableBody>
           </Table>
+        </div>
+
+        {/* Pagination Controls */}
+        <div className="flex items-center justify-between mt-4">
+          <div className="text-sm text-muted-foreground">
+            Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredInspections.length)} of {filteredInspections.length} inspections
+          </div>
+          <div className="flex items-center space-x-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+              disabled={currentPage === 1}
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Previous
+            </Button>
+            <div className="flex items-center space-x-1">
+              <span className="text-sm">Page</span>
+              <Select
+                value={currentPage.toString()}
+                onValueChange={(value) => setCurrentPage(parseInt(value))}
+              >
+                <SelectTrigger className="w-[70px] h-8">
+                  <SelectValue placeholder={currentPage.toString()} />
+                </SelectTrigger>
+                <SelectContent>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                    <SelectItem key={page} value={page.toString()}>
+                      {page}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <span className="text-sm">of {totalPages}</span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+              disabled={currentPage === totalPages}
+            >
+              Next
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </div>
     </Layout>

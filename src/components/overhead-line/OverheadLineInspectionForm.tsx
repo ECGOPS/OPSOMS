@@ -21,7 +21,6 @@ import { getRegions, getDistricts } from "@/lib/api";
 import { useToast } from "@/components/ui/use-toast";
 import { showNotification, showServiceWorkerNotification } from '@/utils/notifications';
 import { serverTimestamp } from "firebase/firestore";
-import { updateOverheadLineInspection, addOverheadLineInspection } from "@/lib/api";
 import { useNavigate } from "react-router-dom";
 
 interface OverheadLineInspectionFormProps {
@@ -37,6 +36,7 @@ export function OverheadLineInspectionForm({ inspection, onSubmit, onCancel }: O
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
   const navigate = useNavigate();
+  const { addOverheadLineInspection, updateOverheadLineInspection } = useData();
 
   const defaultInsulatorCondition = {
     brokenOrCracked: false,

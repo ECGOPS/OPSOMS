@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, InfoIcon, Users, MapPin, Calculator, FileText } from "lucide-react";
-import { FaultType, UnplannedFaultType, EmergencyFaultType } from "@/lib/types";
+import { FaultType, UnplannedFaultType, EmergencyFaultType, ControlSystemOutage } from "@/lib/types";
 import { 
   calculateDurationHours,
   calculateUnservedEnergy
@@ -38,7 +38,7 @@ interface ControlSystemOutageFormProps {
 }
 
 export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictId = "" }: ControlSystemOutageFormProps) {
-  const { regions, districts, addControlOutage } = useData();
+  const { regions, districts, addControlSystemOutage } = useData();
   const { user } = useAuth();
   const navigate = useNavigate();
   const permissionService = PermissionService.getInstance();
@@ -220,28 +220,22 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
       const formattedOccurrenceDate = new Date(occurrenceDate).toISOString();
       const formattedRestorationDate = restorationDate ? new Date(restorationDate).toISOString() : null;
 
-      const formDataToSubmit: Omit<ControlSystemOutage, "id" | "status"> = {
+      const formDataToSubmit: Omit<ControlSystemOutage, "id"> = {
         regionId: regionId || "",
         districtId: districtId || "",
         occurrenceDate: formattedOccurrenceDate,
-        faultType: faultType,
-        specificFaultType: specificFaultType || "",
-        customersAffected: {
-          rural: ruralAffected || 0,
-          urban: urbanAffected || 0,
-          metro: metroAffected || 0
-        },
         restorationDate: formattedRestorationDate,
-        reason: reason || "",
-        controlPanelIndications: indications || "",
-        areaAffected: areaAffected || "",
+        faultType: faultType as FaultType,
+        createdBy: user?.id || 'unknown',
+        createdAt: new Date().toISOString(),
+        status: restorationDate ? "resolved" as const : "active" as const,
         loadMW: loadMW || 0,
         unservedEnergyMWh: unservedEnergyMWh || 0,
-        createdBy: user?.id || 'unknown',
-        createdAt: new Date().toISOString()
+        outageDescription: reason || "",
+        system: areaAffected || "",
       };
 
-      await addControlOutage(formDataToSubmit);
+      await addControlSystemOutage(formDataToSubmit);
       
       // Show notification for successful outage creation
       const notificationTitle = 'Control System Outage Created';
@@ -253,7 +247,7 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
         data: { url: window.location.href }
       });
       
-      showNotification(notificationTitle, notificationBody);
+      showNotification(notificationTitle, { body: notificationBody });
       
       toast.success("Control system outage created successfully");
       navigate("/dashboard");

@@ -166,7 +166,7 @@ export default function LoadMonitoringPage() {
   };
 
   const handleEdit = (id: string) => {
-    navigate(`/asset-management/edit-load-monitoring/${id}`);
+    navigate(`/asset-management/load-monitoring/edit/${id}`);
   };
 
   const handleDelete = (id: string) => {
@@ -676,8 +676,7 @@ export default function LoadMonitoringPage() {
                       return (
                         <TableRow 
                           key={record.id}
-                          className="cursor-pointer hover:bg-muted/50"
-                          onClick={() => handleView(record.id)}
+                          className="hover:bg-muted/50"
                         >
                           <TableCell className="whitespace-nowrap">{format(new Date(record.date), 'MMM d, yyyy')}</TableCell>
                           <TableCell className="whitespace-nowrap">{formatTimeWithAMPM(record.time)}</TableCell>
@@ -757,7 +756,7 @@ export default function LoadMonitoringPage() {
                       <div className="flex items-center gap-1">
                         {Array.from({ length: totalPages }, (_, i) => (
                           <Button
-                            key={i + 1}
+                            key={`page-${i + 1}`}
                             variant={currentPage === i + 1 ? "default" : "outline"}
                             size="sm"
                             onClick={() => setCurrentPage(i + 1)}

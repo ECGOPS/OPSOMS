@@ -11,6 +11,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { formatDate } from "@/utils/calculations"; // Import formatDate
 import { ArrowLeft } from "lucide-react"; // For back button
 import { format } from 'date-fns';
+import { Badge } from "@/components/ui/badge";
 
 // Helper function to format time
 const formatTime = (timeStr: string) => {
@@ -183,6 +184,18 @@ export default function LoadMonitoringDetailsPage() {
                  <DetailItem label="Location" value={record.location} />
                  <DetailItem label="Rating (KVA)" value={record.rating} />
                  <DetailItem label="Peak Load Status" value={record.peakLoadStatus} />
+                 <div className="flex flex-col space-y-1.5">
+                   <Label className="text-sm font-medium text-muted-foreground">Load Status</Label>
+                   <Badge className={
+                     record.percentageLoad >= 70 ? "bg-red-500" :
+                     record.percentageLoad >= 45 ? "bg-yellow-500" :
+                     "bg-green-500"
+                   }>
+                     {record.percentageLoad >= 70 ? "OVERLOAD" :
+                      record.percentageLoad >= 45 ? "AVERAGE" :
+                      "OKAY"}
+                   </Badge>
+                 </div>
                  <DetailItem label="Created By" value={record.createdBy?.name || 'Unknown'} />
               </CardContent>
             </Card>

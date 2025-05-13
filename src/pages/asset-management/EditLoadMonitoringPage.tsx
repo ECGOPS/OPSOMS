@@ -354,14 +354,19 @@ export default function EditLoadMonitoringPage() {
         return;
     }
 
-    if (!formData.date || !formData.time || !formData.region || !formData.district || !formData.substationName || !formData.substationNumber || formData.rating === undefined || formData.rating <= 0 || !formData.feederLegs) {
+    if (!formData.date || !formData.time || !formData.regionId || !formData.districtId || !formData.substationName || !formData.substationNumber || formData.rating === undefined || formData.rating <= 0 || !formData.feederLegs) {
       toast.error("Please fill all required fields, including a valid rating (KVA > 0).");
       return;
     }
 
-    // Get region and district IDs
-    const regionId = regions?.find(r => r.name === formData.region)?.id || "";
-    const districtId = districts?.find(d => d.name === formData.district && d.regionId === regionId)?.id || "";
+    // Get region and district names from IDs
+    const region = regions?.find(r => r.id === formData.regionId);
+    const district = districts?.find(d => d.id === formData.districtId);
+
+    if (!region || !district) {
+      toast.error("Invalid region or district selected.");
+      return;
+    }
 
     const processedFeederLegs = formData.feederLegs.map(leg => ({
         ...leg,
@@ -375,10 +380,10 @@ export default function EditLoadMonitoringPage() {
       id: id,
       date: formData.date,
       time: formData.time,
-      regionId: regionId,
-      districtId: districtId,
-      region: formData.region,
-      district: formData.district,
+      regionId: formData.regionId,
+      districtId: formData.districtId,
+      region: region.name,
+      district: district.name,
       substationName: formData.substationName,
       substationNumber: formData.substationNumber,
       location: formData.location || "",
@@ -406,7 +411,6 @@ export default function EditLoadMonitoringPage() {
         name: user?.name || 'Unknown'
       }
     };
-
 
     if (updateLoadMonitoringRecord) {
       updateLoadMonitoringRecord(id, completeData);
