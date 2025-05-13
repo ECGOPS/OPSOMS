@@ -634,102 +634,115 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         q = query(collection(db, "loadMonitoring"), where("regionId", "==", regionId));
       }
     }
-    // system_admin and global_engineer get all records (no filter)
 
     const unsubscribe = onSnapshot(q, async (snapshot) => {
-      // Get offline data regardless of online status
-      const offlineData = await getAllItems("load-monitoring");
-      const pendingDeletes = (await getPendingSyncItems())
-        .filter(item => item.type === "load-monitoring" && item.action === "delete")
-        .map(item => item.data.id);
+      try {
+        // Get offline data regardless of online status
+        const offlineData = await getAllItems("load-monitoring");
+        const pendingDeletes = (await getPendingSyncItems())
+          .filter(item => item.type === "load-monitoring" && item.action === "delete")
+          .map(item => item.data.id);
 
-      if (navigator.onLine) {
-        // Online mode - merge with Firestore data
-      const records = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as LoadMonitoringData[];
+        if (navigator.onLine) {
+          // Online mode - merge with Firestore data
+          const records = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          })) as LoadMonitoringData[];
 
-        // Create a map of online records
-        const onlineMap = new Map(records.map(r => [r.id, r]));
-        
-        // Only include offline records that:
-        // 1. Are not in the online data
-        // 2. Are not pending deletion
-        // 3. Have a newer timestamp than their online counterpart (if they exist)
-        const mergedRecords = [
-          ...records,
-          ...offlineData.filter(item => {
-            const onlineRecord = onlineMap.get(item.id);
-            if (!onlineRecord) {
-              return !pendingDeletes.includes(item.id);
+          // Store each record in local storage for offline access
+          for (const record of records) {
+            try {
+              await addItem("load-monitoring", record);
+            } catch (e) {
+              console.error("Error storing record in local storage:", e);
             }
-            // If record exists online, only include offline version if it's newer
-            return item.updatedAt > onlineRecord.updatedAt && !pendingDeletes.includes(item.id);
-          })
-        ];
-
-        // Ensure no duplicates by using a Map and keeping the most recent version
-        const uniqueRecords = Array.from(
-          new Map(
-            mergedRecords.map(record => [
-              record.id,
-              {
-                ...record,
-                updatedAt: record.updatedAt || new Date().toISOString()
-              }
-            ])
-          ).values()
-        ).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-
-        setLoadMonitoringRecords(uniqueRecords);
-
-        // Update cache with all current data
-        await clearStore("load-monitoring-cache");
-        for (const record of uniqueRecords) {
-          try {
-            await addItem("load-monitoring-cache", record);
-          } catch (e) {
-            console.error("Error caching load monitoring record:", e);
           }
-        }
-      } else {
-        // Offline mode - use cached and unsynced data
-        const cache = await getAllItems("load-monitoring-cache");
-        
-        // Create a map of cached items
-        const cacheMap = new Map(cache.map(item => [item.id, item]));
-        
-        // Only include unsynced records that:
-        // 1. Are not in the cache
-        // 2. Are not pending deletion
-        // 3. Have a newer timestamp than their cached counterpart (if they exist)
-        const mergedRecords = [
-          ...cache,
-          ...offlineData.filter(item => {
-            const cachedRecord = cacheMap.get(item.id);
-            if (!cachedRecord) {
-              return !pendingDeletes.includes(item.id);
-            }
-            // If record exists in cache, only include unsynced version if it's newer
-            return item.updatedAt > cachedRecord.updatedAt && !pendingDeletes.includes(item.id);
-          })
-        ];
 
-        // Ensure no duplicates by using a Map and keeping the most recent version
-        const uniqueRecords = Array.from(
-          new Map(
-            mergedRecords.map(record => [
-              record.id,
-              {
-                ...record,
-                updatedAt: record.updatedAt || new Date().toISOString()
+          // Create a map of online records
+          const onlineMap = new Map(records.map(r => [r.id, r]));
+          
+          // Only include offline records that:
+          // 1. Are not in the online data
+          // 2. Are not pending deletion
+          // 3. Have a newer timestamp than their online counterpart (if they exist)
+          const mergedRecords = [
+            ...records,
+            ...offlineData.filter(item => {
+              const onlineRecord = onlineMap.get(item.id);
+              if (!onlineRecord) {
+                return !pendingDeletes.includes(item.id);
               }
-            ])
-          ).values()
-        ).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+              // If record exists online, only include offline version if it's newer
+              return item.updatedAt > onlineRecord.updatedAt && !pendingDeletes.includes(item.id);
+            })
+          ];
 
-        setLoadMonitoringRecords(uniqueRecords);
+          // Ensure no duplicates by using a Map and keeping the most recent version
+          const uniqueRecords = Array.from(
+            new Map(
+              mergedRecords.map(record => [
+                record.id,
+                {
+                  ...record,
+                  updatedAt: record.updatedAt || new Date().toISOString()
+                }
+              ])
+            ).values()
+          ).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+
+          setLoadMonitoringRecords(uniqueRecords);
+
+          // Update cache with all current data
+          await clearStore("load-monitoring-cache");
+          for (const record of uniqueRecords) {
+            try {
+              await addItem("load-monitoring-cache", record);
+            } catch (e) {
+              console.error("Error caching load monitoring record:", e);
+            }
+          }
+        } else {
+          // Offline mode - use cached and unsynced data
+          const cache = await getAllItems("load-monitoring-cache");
+          
+          // Create a map of cached items
+          const cacheMap = new Map(cache.map(item => [item.id, item]));
+          
+          // Only include unsynced records that:
+          // 1. Are not in the cache
+          // 2. Are not pending deletion
+          // 3. Have a newer timestamp than their cached counterpart (if they exist)
+          const mergedRecords = [
+            ...cache,
+            ...offlineData.filter(item => {
+              const cachedRecord = cacheMap.get(item.id);
+              if (!cachedRecord) {
+                return !pendingDeletes.includes(item.id);
+              }
+              // If record exists in cache, only include unsynced version if it's newer
+              return item.updatedAt > cachedRecord.updatedAt && !pendingDeletes.includes(item.id);
+            })
+          ];
+
+          // Ensure no duplicates by using a Map and keeping the most recent version
+          const uniqueRecords = Array.from(
+            new Map(
+              mergedRecords.map(record => [
+                record.id,
+                {
+                  ...record,
+                  updatedAt: record.updatedAt || new Date().toISOString()
+                }
+              ])
+            ).values()
+          ).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+
+          setLoadMonitoringRecords(uniqueRecords);
+        }
+      } catch (error) {
+        console.error("Error updating load monitoring records:", error);
+        toast.error("Error updating records list");
       }
     });
 
@@ -1190,20 +1203,48 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const updateLoadMonitoringRecord = async (id: string, data: Partial<LoadMonitoringData>) => {
     try {
       if (navigator.onLine) {
-      const recordRef = doc(db, "loadMonitoring", id);
-      await updateDoc(recordRef, {
-        ...data,
-        updatedAt: serverTimestamp()
-      });
-        toast.success("Record updated successfully");
+        const recordRef = doc(db, "loadMonitoring", id);
+        const recordDoc = await getDoc(recordRef);
+        
+        if (recordDoc.exists()) {
+          // Document exists, update it
+          await updateDoc(recordRef, {
+            ...data,
+            updatedAt: serverTimestamp()
+          });
+          toast.success("Record updated successfully");
+        } else {
+          // Document doesn't exist, create it
+          await setDoc(recordRef, {
+            ...data,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+          });
+          toast.success("Record created successfully");
+        }
       } else {
+        // Offline mode - check local storage first
+        const existingRecord = await getItem("load-monitoring", id);
+        if (!existingRecord) {
+          toast.error("Record not found in offline storage");
+          return;
+        }
+
+        // Update local storage
         const offlineRecord = {
+          ...existingRecord,
           ...data,
           id,
           updatedAt: new Date().toISOString()
         };
         await updateItem("load-monitoring", offlineRecord);
         await addToPendingSync("load-monitoring", "update", offlineRecord);
+        
+        // Update local state
+        setLoadMonitoringRecords(prev => 
+          prev?.map(record => record.id === id ? offlineRecord : record)
+        );
+        
         toast.success("Record updated offline");
       }
     } catch (error) {
