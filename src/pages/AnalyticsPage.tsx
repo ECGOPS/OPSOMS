@@ -36,6 +36,7 @@ import {
 import { LineChart, Line } from 'recharts';
 import { OP5Fault, ControlSystemOutage } from '../types/faults';
 import MaterialsAnalysis from '@/components/analytics/MaterialsAnalysis';
+import { calculateOutageDuration } from "@/lib/calculations";
 
 // Colors for charts
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
@@ -521,7 +522,7 @@ export default function AnalyticsPage() {
   const exportDetailed = () => {
     const headers = [
       'ID', 'Type', 'Region', 'District', 'Occurrence Date', 'Restoration Date', 
-      'Status', 'Fault Type', 'Specific Fault Type', 'Duration (min)', 'Created By', 'Created At',
+      'Status', 'Fault Type', 'Specific Fault Type', 'Duration (hours)', 'Created By', 'Created At',
       // Common fields for both types
       'Rural Customers Affected', 'Urban Customers Affected', 'Metro Customers Affected',
       // OP5 specific fields
@@ -532,7 +533,9 @@ export default function AnalyticsPage() {
     
     const dataRows = filteredFaults.map((fault: any) => {
       const type = 'faultLocation' in fault ? 'OP5 Fault' : 'Control Outage';
-      const duration = 'outrageDuration' in fault ? fault.outrageDuration || 0 : 0;
+      // Calculate duration properly
+      const duration = fault.occurrenceDate && fault.restorationDate ? 
+        calculateOutageDuration(fault.occurrenceDate, fault.restorationDate) : 0;
       const region = regions.find(r => r.id === fault.regionId)?.name || fault.regionId;
       const district = districts.find(d => d.id === fault.districtId)?.name || fault.districtId;
       
@@ -547,7 +550,7 @@ export default function AnalyticsPage() {
         fault.status,
         fault.faultType,
         fault.specificFaultType || 'N/A',
-        duration,
+        duration.toFixed(2), // Format duration to 2 decimal places
         fault.createdBy,
         formatSafeDate(fault.createdAt),
         // Population affected
@@ -1032,7 +1035,7 @@ export default function AnalyticsPage() {
     }
 
     const headers = [
-      'ID', 'Type', 'Region', 'District', 'Occurrence Date', 'Status', 'Outage Duration', 'Customers Affected'
+      'ID', 'Type', 'Region', 'District', 'Occurrence Date', 'Status', 'Outage Duration', 'Customers Affected', 'Fault Description'
     ];
 
     const dataRows = paginatedFaults.map((fault: any) => {
@@ -1041,10 +1044,10 @@ export default function AnalyticsPage() {
       const district = getDistrictName(fault.districtId);
       const date = formatSafeDate(fault.occurrenceDate);
       const status = fault.status;
-      const outageDuration = typeof fault.outrageDuration === 'number' && !isNaN(fault.outrageDuration)
-        ? `${fault.outrageDuration} min`
+      const outageDuration = fault.occurrenceDate && fault.restorationDate
+        ? `${((new Date(fault.restorationDate).getTime() - new Date(fault.occurrenceDate).getTime()) / (1000 * 60 * 60)).toFixed(2)} hr`
         : 'N/A';
-      
+      const faultDescription = fault.outageDescription || fault.description || 'N/A';
       return [
         fault.id,
         type,
@@ -1057,7 +1060,8 @@ export default function AnalyticsPage() {
           ? (fault.affectedPopulation.rural + fault.affectedPopulation.urban + fault.affectedPopulation.metro)
           : fault.customersAffected
             ? (fault.customersAffected.rural + fault.customersAffected.urban + fault.customersAffected.metro)
-            : 'N/A'
+            : 'N/A',
+        faultDescription
       ].map(value => {
         const strValue = String(value);
         if (strValue.includes(',') || strValue.includes('"')) {
@@ -1647,6 +1651,7 @@ export default function AnalyticsPage() {
                           <TableHead>Status</TableHead>
                           <TableHead>Outage Duration</TableHead>
                           <TableHead>Customers Affected</TableHead>
+                          <TableHead>Fault Description</TableHead>
                           <TableHead>Details</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -1676,6 +1681,9 @@ export default function AnalyticsPage() {
                                     ? (fault.customersAffected.rural + fault.customersAffected.urban + fault.customersAffected.metro)
                                     : 'N/A'
                               }</TableCell>
+                              <TableCell className="text-xs sm:text-sm py-2 px-2 sm:px-4">{
+                                fault.outageDescription || fault.description || 'N/A'
+                              }</TableCell>
                               <TableCell className="py-2 px-2 sm:px-4">
                                 <Button variant="ghost" size="sm" className="h-7 px-1 sm:px-2" onClick={() => showFaultDetails(fault)}>
                                   <Eye size={14} />
@@ -1686,7 +1694,7 @@ export default function AnalyticsPage() {
                           ))
                         ) : (
                           <TableRow>
-                            <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                            <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">
                               No recent faults found for the selected type.
                             </TableCell>
                           </TableRow>

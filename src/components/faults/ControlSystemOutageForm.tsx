@@ -226,13 +226,16 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
         occurrenceDate: formattedOccurrenceDate,
         restorationDate: formattedRestorationDate,
         faultType: faultType as FaultType,
-        createdBy: user?.id || 'unknown',
-        createdAt: new Date().toISOString(),
         status: restorationDate ? "resolved" as const : "active" as const,
         loadMW: loadMW || 0,
         unservedEnergyMWh: unservedEnergyMWh || 0,
-        outageDescription: reason || "",
+        description: reason || "",
         system: areaAffected || "",
+        customersAffected: {
+          rural: ruralAffected ?? 0,
+          urban: urbanAffected ?? 0,
+          metro: metroAffected ?? 0
+        },
       };
 
       await addControlSystemOutage(formDataToSubmit);

@@ -289,6 +289,63 @@ export default function EditControlOutagePage() {
                        <Textarea id="controlPanelIndications" value={formData.controlPanelIndications || ""} onChange={handleInputChange} placeholder="Describe indications..." rows={3} className="text-sm"/>
                      </div>
                  </div>
+                 {/* Customers Affected Section */}
+                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 pt-4">
+                   <div className="space-y-2">
+                     <Label htmlFor="ruralAffected" className="font-medium flex items-center text-sm">Rural Customers Affected</Label>
+                     <Input
+                       id="ruralAffected"
+                       type="number"
+                       min="0"
+                       value={formData.customersAffected?.rural ?? ""}
+                       onChange={e => setFormData(prev => ({
+                         ...prev,
+                         customersAffected: {
+                           ...prev.customersAffected,
+                           rural: parseInt(e.target.value) || 0,
+                         },
+                       }))}
+                       className="bg-background/50 border-muted h-9 sm:h-10"
+                       placeholder="Enter number of affected customers"
+                     />
+                   </div>
+                   <div className="space-y-2">
+                     <Label htmlFor="urbanAffected" className="font-medium flex items-center text-sm">Urban Customers Affected</Label>
+                     <Input
+                       id="urbanAffected"
+                       type="number"
+                       min="0"
+                       value={formData.customersAffected?.urban ?? ""}
+                       onChange={e => setFormData(prev => ({
+                         ...prev,
+                         customersAffected: {
+                           ...prev.customersAffected,
+                           urban: parseInt(e.target.value) || 0,
+                         },
+                       }))}
+                       className="bg-background/50 border-muted h-9 sm:h-10"
+                       placeholder="Enter number of affected customers"
+                     />
+                   </div>
+                   <div className="space-y-2">
+                     <Label htmlFor="metroAffected" className="font-medium flex items-center text-sm">Metro Customers Affected</Label>
+                     <Input
+                       id="metroAffected"
+                       type="number"
+                       min="0"
+                       value={formData.customersAffected?.metro ?? ""}
+                       onChange={e => setFormData(prev => ({
+                         ...prev,
+                         customersAffected: {
+                           ...prev.customersAffected,
+                           metro: parseInt(e.target.value) || 0,
+                         },
+                       }))}
+                       className="bg-background/50 border-muted h-9 sm:h-10"
+                       placeholder="Enter number of affected customers"
+                     />
+                   </div>
+                 </div>
               </div>
 
               {/* --- Section 3: Timing & Calculations --- */} 

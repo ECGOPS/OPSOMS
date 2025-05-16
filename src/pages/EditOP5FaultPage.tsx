@@ -248,14 +248,14 @@ export default function EditOP5FaultPage() {
     }
 
     // Calculate MTTR only if both dates are valid and in correct order
-    if (occDate && repDate && repDate > occDate) {
-        mttrValue = calculateMTTR(occStr!, repStr!);
+    if (repDate && resDate && resDate > repDate) {
+        mttrValue = calculateMTTR(repStr!, resStr!);
         console.log("[MTTR Debug] Calculated MTTR:", mttrValue);
     } else {
         console.log("[MTTR Debug] MTTR not calculated because:", {
-            hasOccurrenceDate: !!occDate,
             hasRepairDate: !!repDate,
-            isRepairAfterOccurrence: occDate && repDate ? repDate > occDate : false
+            hasRestorationDate: !!resDate,
+            isRestorationAfterRepair: repDate && resDate ? resDate > repDate : false
         });
     }
     

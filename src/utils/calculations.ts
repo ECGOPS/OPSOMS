@@ -7,9 +7,9 @@ export const calculateOutageDuration = (occurrenceDate: string, restorationDate:
 };
 
 // MTTR Calculation (Mean Time To Repair) in hours
-export const calculateMTTR = (occurrenceDate: string, repairDate: string): number => {
-  const start = new Date(occurrenceDate).getTime();
-  const end = new Date(repairDate).getTime();
+export const calculateMTTR = (repairDate: string, restorationDate: string): number => {
+  const start = new Date(repairDate).getTime();
+  const end = new Date(restorationDate).getTime();
   const hours = (end - start) / (1000 * 60 * 60); // Convert milliseconds to hours
   return Number(hours.toFixed(2)); // Round to 2 decimal places
 };

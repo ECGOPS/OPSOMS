@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatDate, formatDuration } from "@/utils/calculations";
-import { AlertTriangle, BarChart, Clock, MapPin, Users, CheckCircle2, XCircle, Edit, Trash2 } from "lucide-react";
+import { AlertTriangle, BarChart, Clock, MapPin, Users, CheckCircle2, XCircle, Edit, Trash2, FileText } from "lucide-react";
 import { useData } from "@/contexts/DataContext";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
@@ -52,7 +52,7 @@ export function FaultCard({ fault, type }: FaultCardProps) {
              controlOutage.customersAffected.urban + 
              controlOutage.customersAffected.metro;
     }
-    return 0;
+    return 'N/A';
   };
   
   const getBadgeColor = (type: string) => {
@@ -217,9 +217,9 @@ export function FaultCard({ fault, type }: FaultCardProps) {
             <Badge className={getBadgeColor(fault.faultType)}>
               {fault.faultType}
             </Badge>
-            {fault.specificFaultType && (
+            {(fault as any).specificFaultType && (
               <Badge variant="outline" className="text-xs">
-                {fault.specificFaultType}
+                {(fault as any).specificFaultType}
               </Badge>
             )}
           </div>
@@ -273,15 +273,19 @@ export function FaultCard({ fault, type }: FaultCardProps) {
                   </div>
                 )}
                 
-                <div>
-                  <div className="font-medium text-muted-foreground">Location:</div>
-                  <div>{fault.faultLocation}</div>
-                </div>
+                {(fault as any).faultLocation && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <MapPin size={14} />
+                    <span>Location: {(fault as any).faultLocation}</span>
+                  </div>
+                )}
                 
-                <div>
-                  <div className="font-medium text-muted-foreground">Description:</div>
-                  <div>{fault.outageDescription}</div>
-                </div>
+                {(fault as any).outageDescription && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <FileText size={14} />
+                    <span>Description: {(fault as any).outageDescription}</span>
+                  </div>
+                )}
               </AccordionContent>
             </AccordionItem>
           </Accordion>
