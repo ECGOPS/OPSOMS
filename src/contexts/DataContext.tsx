@@ -42,19 +42,171 @@ import {
 } from "firebase/firestore";
 import { getUserRegionAndDistrict } from "@/utils/user-utils";
 import { resetFirestoreConnection } from "@/config/firebase";
-import { addItem, addToPendingSync, getPendingSyncItems, clearPendingSyncItem, deleteItem, getAllItems, updateItem, getItem, initDB } from "@/utils/db";
+import { BaseRecord, StoreName, safeAddItem, safeUpdateItem, safeDeleteItem, safeGetAllItems, safeGetItem, safeClearStore, addToPendingSync, getPendingSyncItems, clearPendingSyncItem, addItem, updateItem, deleteItem, initDB } from '../utils/db';
 import { openDB } from "idb";
 
 const DB_NAME = 'ecg-oms-db';
 const DB_VERSION = 3;
 
+// Define store name constants
+const STORE_NAMES = {
+  OP5_FAULTS: 'op5Faults' as StoreName,
+  OP5_FAULTS_CACHE: 'op5Faults-cache' as StoreName,
+  CONTROL_OUTAGES: 'controlOutages' as StoreName,
+  CONTROL_OUTAGES_CACHE: 'controlOutages-cache' as StoreName,
+  VIT_ASSETS: 'vitAssets' as StoreName,
+  VIT_ASSETS_CACHE: 'vitAssets-cache' as StoreName,
+  VIT_INSPECTIONS: 'vitInspections' as StoreName,
+  VIT_INSPECTIONS_CACHE: 'vitInspections-cache' as StoreName,
+  LOAD_MONITORING: 'loadMonitoring' as StoreName,
+  LOAD_MONITORING_CACHE: 'loadMonitoring-cache' as StoreName,
+  SUBSTATION_INSPECTIONS: 'substationInspections' as StoreName,
+  OVERHEAD_LINE_INSPECTIONS: 'overheadLineInspections' as StoreName,
+  OVERHEAD_LINE_INSPECTIONS_CACHE: 'overheadLineInspections-cache' as StoreName,
+  PENDING_SYNC: 'pending-sync' as StoreName,
+  DISTRICTS: 'districts' as StoreName,
+  DISTRICTS_CACHE: 'districts-cache' as StoreName,
+  REGIONS: 'regions' as StoreName,
+  REGIONS_CACHE: 'regions-cache' as StoreName,
+  DEVICES: 'devices' as StoreName,
+  DEVICES_CACHE: 'devices-cache' as StoreName,
+  PERMISSIONS: 'permissions' as StoreName,
+  PERMISSIONS_CACHE: 'permissions-cache' as StoreName,
+  STAFF_IDS: 'staffIds' as StoreName,
+  STAFF_IDS_CACHE: 'staffIds-cache' as StoreName,
+  SYSTEM: 'system' as StoreName,
+  SYSTEM_CACHE: 'system-cache' as StoreName,
+  USERS: 'users' as StoreName,
+  USERS_CACHE: 'users-cache' as StoreName
+} as const;
+
 // Add clearStore function
-async function clearStore(storeName: string) {
+async function clearStore(storeName: StoreName) {
   const db = await openDB(DB_NAME, DB_VERSION);
   const tx = db.transaction(storeName, 'readwrite');
   const store = tx.objectStore(storeName);
   await store.clear();
   await tx.done;
+}
+
+// Add these utility functions at the top of the file
+const withRetry = async (operation: () => Promise<any>, maxRetries = 3) => {
+  let lastError;
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      if (error.name === 'AbortError') {
+        // Wait before retrying
+        await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+        // Reinitialize DB connection
+        await initDB();
+      } else {
+        throw error;
+      }
+    }
+  }
+  throw lastError;
+};
+
+const safeDBOperation = async (operation: () => Promise<any>) => {
+  try {
+    return await withRetry(operation);
+  } catch (error) {
+    console.error('Database operation failed:', error);
+    // If we're offline, don't show error to user
+    if (navigator.onLine) {
+      toast.error('Database operation failed. Please try again.');
+    }
+    throw error;
+  }
+};
+
+// Add these utility functions after the existing utility functions
+async function mergeFirestoreAndOffline<T extends BaseRecord & { id: string; clientId?: string }>(
+  storeName: StoreName,
+  collectionName: string
+): Promise<(T & { isOnline: boolean; synced: boolean })[]> {
+  try {
+    // Get Firestore data
+    const snapshot = await getDocs(collection(db, collectionName));
+    const firestoreData = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    })) as T[];
+
+    // Get offline data
+    const offlineData = await safeGetAllItems<T>(storeName);
+    
+    // Get pending sync items
+    const pendingItems = await getPendingSyncItems();
+    const syncedIds = new Set(
+      pendingItems
+        .filter(item => item.type === storeName)
+        .map(item => item.data.id)
+    );
+
+    const recordMap = new Map<string, T & { isOnline: boolean; synced: boolean }>();
+
+    // Add Firestore records
+    firestoreData.forEach(item => {
+      const key = item.clientId || item.id;
+      recordMap.set(key, {
+        ...item,
+        isOnline: true,
+        synced: true
+      });
+    });
+
+    // Add offline records
+    offlineData.forEach(item => {
+      const key = item.clientId || item.id;
+      const existing = recordMap.get(key);
+      const isPending = syncedIds.has(item.id);
+      const itemDate = new Date(item.updatedAt);
+      const existingDate = existing ? new Date(existing.updatedAt) : null;
+
+      if (!existing || (!isPending && existingDate && itemDate > existingDate)) {
+        recordMap.set(key, {
+          ...item,
+          isOnline: false,
+          synced: false
+        });
+      }
+    });
+
+    return Array.from(recordMap.values())
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  } catch (error) {
+    console.error(`Error merging data for ${storeName}:`, error);
+    throw error;
+  }
+}
+
+async function clearCacheAndUpdateState<T extends BaseRecord & { id: string; clientId?: string }>(
+  storeName: StoreName,
+  collectionName: string,
+  setState: React.Dispatch<React.SetStateAction<(T & { isOnline: boolean; synced: boolean })[]>>
+) {
+  try {
+    // Clear the cache
+    await clearStore(storeName);
+    
+    // Get merged data
+    const mergedData = await mergeFirestoreAndOffline<T>(storeName, collectionName);
+    
+    // Update state
+    setState(mergedData);
+    
+    // Update cache with merged data
+    for (const item of mergedData) {
+      await safeAddItem(storeName, item);
+    }
+  } catch (error) {
+    console.error(`Error clearing cache and updating state for ${storeName}:`, error);
+    throw error;
+  }
 }
 
 export interface DataContextType {
@@ -294,17 +446,17 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         console.log("Received VIT assets snapshot:", snapshot.docs.length, "documents");
         
         // Get offline data regardless of online status
-        const offlineData = await getAllItems("vit-assets");
+        const offlineData = await safeGetAllItems<VITAsset & BaseRecord>(STORE_NAMES.VIT_ASSETS);
         const pendingDeletes = (await getPendingSyncItems())
-          .filter(item => item.type === "vit-assets" && item.action === "delete")
+          .filter(item => item.type === STORE_NAMES.VIT_ASSETS && item.action === "delete")
           .map(item => item.data.id);
 
         if (navigator.onLine) {
           // Online mode - merge with Firestore data
-          const assets = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          })) as VITAsset[];
+      const assets = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as VITAsset[];
 
           console.log("Processing online data:", assets.length, "assets");
 
@@ -322,12 +474,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
               if (!onlineRecord) {
                 return !pendingDeletes.includes(item.id);
               }
-              // If record exists online, only include offline version if it's newer
               return item.updatedAt > onlineRecord.updatedAt && !pendingDeletes.includes(item.id);
             })
           ];
 
-          // Ensure no duplicates by using a Map and keeping the most recent version
+          // Ensure no duplicates
           const uniqueAssets = Array.from(
             new Map(
               mergedAssets.map(asset => [
@@ -344,17 +495,17 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           setVITAssets(uniqueAssets);
 
           // Update cache with all current data
-          await clearStore("vit-assets-cache");
+          await clearStore(STORE_NAMES.VIT_ASSETS);
           for (const asset of uniqueAssets) {
             try {
-              await addItem("vit-assets-cache", asset);
+              await safeAddItem(STORE_NAMES.VIT_ASSETS, asset);
             } catch (e) {
               console.error("Error caching VIT asset:", e);
             }
           }
         } else {
           // Offline mode - use cached and unsynced data
-          const cache = await getAllItems("vit-assets-cache");
+          const cache = await safeGetAllItems<VITAsset & BaseRecord>(STORE_NAMES.VIT_ASSETS_CACHE);
           
           // Create a map of cached items
           const cacheMap = new Map(cache.map(item => [item.id, item]));
@@ -370,12 +521,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
               if (!cachedRecord) {
                 return !pendingDeletes.includes(item.id);
               }
-              // If record exists in cache, only include unsynced version if it's newer
               return item.updatedAt > cachedRecord.updatedAt && !pendingDeletes.includes(item.id);
             })
           ];
 
-          // Ensure no duplicates by using a Map and keeping the most recent version
+          // Ensure no duplicates
           const uniqueAssets = Array.from(
             new Map(
               mergedAssets.map(asset => [
@@ -393,11 +543,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         }
       } catch (error) {
         console.error("Error updating VIT assets:", error);
-        toast.error("Error updating assets list");
+        if (navigator.onLine) {
+          toast.error("Error updating assets list");
+        }
       }
     }, (error) => {
       console.error("Error in VIT assets subscription:", error);
-      toast.error("Error connecting to database");
+      if (navigator.onLine) {
+        toast.error("Error connecting to database");
+      }
     });
 
     return () => {
@@ -415,13 +569,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     // Only apply filters if not system_admin or global_engineer
     if (user.role !== "system_admin" && user.role !== "global_engineer") {
       if (user.role === "district_engineer" || user.role === "technician") {
-        // Find the user's district ID
         const userDistrict = districts.find(d => d.name === user.district);
         if (userDistrict) {
           q = query(collection(db, "op5Faults"), where("districtId", "==", userDistrict.id));
         }
       } else if (user.role === "regional_engineer") {
-        // Find the user's region ID
         const userRegion = regions.find(r => r.name === user.region);
         if (userRegion) {
           q = query(collection(db, "op5Faults"), where("regionId", "==", userRegion.id));
@@ -430,29 +582,86 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
 
     console.log('[DataContext] Setting up OP5 faults subscription');
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      console.log('[DataContext] OP5 faults snapshot received:', {
-        docChanges: snapshot.docChanges().map(change => ({
-          type: change.type,
-          docId: change.doc.id,
-          data: change.doc.data()
-        }))
-      });
-      
-      const faults = snapshot.docs.map(doc => ({
+    const unsubscribe = onSnapshot(q, 
+      async (snapshot) => {
+        try {
+          // Get Firestore data (online)
+          const firestoreData = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       })) as OP5Fault[];
-      
-      console.log('[DataContext] Setting new op5Faults state:', {
-        count: faults.length,
-        faults: faults
-      });
-      
-      setOP5Faults(faults);
-    }, (error) => {
-      console.error('[DataContext] Error in OP5 faults subscription:', error);
-    });
+
+          // Get offline data (unsynced changes)
+          const offlineData = await safeGetAllItems<OP5Fault & BaseRecord>(STORE_NAMES.OP5_FAULTS);
+          
+          // Get pending sync items to identify synced records
+          const pendingItems = await getPendingSyncItems();
+          const syncedIds = new Set(
+            pendingItems
+              .filter(item => item.type === STORE_NAMES.OP5_FAULTS)
+              .map(item => item.data.id)
+          );
+
+          const recordMap = new Map<string, OP5Fault & { isOnline: boolean; synced: boolean }>();
+
+          // Add all Firestore records first (assume they're online and synced)
+          firestoreData.forEach(fault => {
+            const key = fault.clientId || fault.id;
+            recordMap.set(key, {
+              ...fault,
+              isOnline: true,
+              synced: true
+            });
+          });
+
+          // Then add/update offline records
+          offlineData.forEach(item => {
+            const key = item.clientId || item.id;
+            const existing = recordMap.get(key);
+
+            const isPending = syncedIds.has(item.id);
+
+            const itemDate = new Date(item.updatedAt);
+            const existingDate = existing ? new Date(existing.updatedAt) : null;
+
+            if (
+              !existing || // not in Firestore
+              (!isPending && existingDate && itemDate > existingDate) // newer and not yet synced
+            ) {
+              recordMap.set(key, {
+                ...item,
+                isOnline: false,
+                synced: false
+              });
+            }
+          });
+
+          // Convert map to array and sort by updatedAt
+          const allFaults = Array.from(recordMap.values())
+            .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+
+          // Update state
+          setOP5Faults(allFaults);
+
+          // Update cache with current data
+          await clearStore(STORE_NAMES.OP5_FAULTS);
+          for (const fault of allFaults) {
+            await safeAddItem(STORE_NAMES.OP5_FAULTS, fault);
+          }
+        } catch (error) {
+          console.error('[DataContext] Error updating OP5 faults:', error);
+          if (navigator.onLine) {
+            toast.error("Error updating faults list");
+          }
+        }
+      },
+      (error) => {
+        console.error('[DataContext] Error in OP5 faults snapshot:', error);
+        if (navigator.onLine) {
+          toast.error("Error connecting to database");
+        }
+      }
+    );
 
     return () => {
       console.log('[DataContext] Cleaning up OP5 faults subscription');
@@ -469,13 +678,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     // Only apply filters if not system_admin or global_engineer
     if (user.role !== "system_admin" && user.role !== "global_engineer") {
       if (user.role === "district_engineer" || user.role === "technician") {
-        // Find the user's district ID
         const userDistrict = districts.find(d => d.name === user.district);
         if (userDistrict) {
           q = query(collection(db, "controlOutages"), where("districtId", "==", userDistrict.id));
         }
       } else if (user.role === "regional_engineer") {
-        // Find the user's region ID
         const userRegion = regions.find(r => r.name === user.region);
         if (userRegion) {
           q = query(collection(db, "controlOutages"), where("regionId", "==", userRegion.id));
@@ -483,15 +690,84 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const outages = snapshot.docs.map(doc => ({
+    console.log('[DataContext] Setting up control outages subscription');
+    const unsubscribe = onSnapshot(q, async (snapshot) => {
+      try {
+        // Get Firestore data (online)
+        const firestoreData = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       })) as ControlSystemOutage[];
-      setControlSystemOutages(outages);
+
+        // Get offline data (unsynced changes)
+        const offlineData = await safeGetAllItems<ControlSystemOutage & BaseRecord>(STORE_NAMES.CONTROL_OUTAGES);
+        
+        // Get pending sync items to identify synced records
+        const pendingItems = await getPendingSyncItems();
+        const syncedIds = new Set(
+          pendingItems
+            .filter(item => item.type === STORE_NAMES.CONTROL_OUTAGES)
+            .map(item => item.data.id)
+        );
+
+        const recordMap = new Map<string, ControlSystemOutage & { isOnline: boolean; synced: boolean }>();
+
+        // Add all Firestore records first (assume they're online and synced)
+        firestoreData.forEach(outage => {
+          const key = outage.clientId || outage.id;
+          recordMap.set(key, {
+            ...outage,
+            isOnline: true,
+            synced: true
+          });
+        });
+
+        // Then add/update offline records
+        offlineData.forEach(item => {
+          const key = item.clientId || item.id;
+          const existing = recordMap.get(key);
+
+          const isPending = syncedIds.has(item.id);
+
+          const itemDate = new Date(item.updatedAt);
+          const existingDate = existing ? new Date(existing.updatedAt) : null;
+
+          if (
+            !existing || // not in Firestore
+            (!isPending && existingDate && itemDate > existingDate) // newer and not yet synced
+          ) {
+            recordMap.set(key, {
+              ...item,
+              isOnline: false,
+              synced: false
+            });
+          }
+        });
+
+        // Convert map to array and sort by updatedAt
+        const allOutages = Array.from(recordMap.values())
+          .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+
+        // Update state
+        setControlSystemOutages(allOutages);
+
+        // Update cache with current data
+        await clearStore(STORE_NAMES.CONTROL_OUTAGES);
+        for (const outage of allOutages) {
+          await safeAddItem(STORE_NAMES.CONTROL_OUTAGES, outage);
+        }
+      } catch (error) {
+        console.error('[DataContext] Error updating control outages:', error);
+        if (navigator.onLine) {
+          toast.error("Error updating outages list");
+        }
+      }
     });
 
-    return () => unsubscribe();
+    return () => {
+      console.log('[DataContext] Cleaning up control outages subscription');
+      unsubscribe();
+    };
   }, [user, regions, districts]);
 
   // Subscribe to VIT inspections
@@ -514,7 +790,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         const data = doc.data();
         // Preserve timestamps from Firestore
         return {
-        id: doc.id,
+          id: doc.id,
           ...data,
           createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt,
           updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : data.updatedAt
@@ -524,7 +800,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       // Cache to IndexedDB
       for (const inspection of inspections) {
         try {
-          await addItem("vit-inspections-cache", inspection);
+          await safeAddItem(STORE_NAMES.VIT_INSPECTIONS_CACHE, inspection);
         } catch (e) {
           // Ignore duplicate errors
         }
@@ -538,10 +814,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     async function loadMergedOfflineInspections() {
       if (!navigator.onLine) {
-        const cache = await getAllItems("vit-inspections-cache");
-        const unsynced = await getAllItems("vit-inspections");
+        const cache = await safeGetAllItems<VITInspectionChecklist>(STORE_NAMES.VIT_INSPECTIONS_CACHE);
+        const unsynced = await safeGetAllItems<VITInspectionChecklist>(STORE_NAMES.VIT_INSPECTIONS);
         const pendingDeletes = (await getPendingSyncItems())
-          .filter(item => item.type === "vit-inspections" && item.action === "delete")
+          .filter(item => item.type === STORE_NAMES.VIT_INSPECTIONS && item.action === "delete")
           .map(item => item.data.id);
 
         // Create a map of cached items
@@ -617,10 +893,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return () => unsubscribe();
   }, [user]);
 
-  // Subscribe to load monitoring records
+  // Initialize load monitoring records
   useEffect(() => {
+    const initializeLoadMonitoring = async () => {
     if (!user) return;
 
+      console.log("Initializing load monitoring records...");
+      try {
     let q = query(collection(db, "loadMonitoring"));
     const { regionId, districtId } = getUserRegionAndDistrict(user, regions, districts);
 
@@ -635,217 +914,109 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
+        const snapshot = await getDocs(q);
+        const records = snapshot.docs.map(doc => {
+          const data = doc.data();
+          const now = new Date().toISOString();
+          return {
+          id: doc.id,
+            ...data,
+            createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt || now,
+            updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : data.updatedAt || now
+          } as LoadMonitoringData;
+        });
+
+        console.log("Initial load monitoring records:", records.length);
+        
+        // Store in local storage
+        for (const record of records) {
+          await safeAddItem(STORE_NAMES.LOAD_MONITORING, record);
+        }
+
+        setLoadMonitoringRecords(records);
+      } catch (error) {
+        console.error("Error initializing load monitoring records:", error);
+      }
+    };
+
+    initializeLoadMonitoring();
+  }, [user, regions, districts]);
+
+  // Subscribe to load monitoring records
+  useEffect(() => {
+    if (!user) {
+      console.log("No user, skipping load monitoring subscription");
+      return;
+    }
+
+    console.log("=== Starting Load Monitoring Subscription ===");
+    console.log("User:", user.role);
+    
+    let q = query(collection(db, "loadMonitoring"), orderBy("date", "desc"));
+    const { regionId, districtId } = getUserRegionAndDistrict(user, regions, districts);
+    console.log("User region and district:", { regionId, districtId });
+
+    // Filter based on role
+    if (user.role === "district_engineer" || user.role === "technician") {
+      if (districtId) {
+        q = query(collection(db, "loadMonitoring"), where("districtId", "==", districtId), orderBy("date", "desc"));
+        console.log("Filtering by district:", districtId);
+      }
+    } else if (user.role === "regional_engineer") {
+      if (regionId) {
+        q = query(collection(db, "loadMonitoring"), where("regionId", "==", regionId), orderBy("date", "desc"));
+        console.log("Filtering by region:", regionId);
+        }
+      } else {
+      console.log("No filters applied for role:", user.role);
+    }
+
+    console.log("Setting up load monitoring subscription...");
+
     const unsubscribe = onSnapshot(q, async (snapshot) => {
       try {
-        // Get offline data regardless of online status
-        const offlineData = await getAllItems("load-monitoring");
+        console.log("=== Load Monitoring Snapshot Received ===");
+        console.log("Snapshot size:", snapshot.docs.length, "documents");
+        
+        // Get pending deletes
         const pendingDeletes = (await getPendingSyncItems())
-          .filter(item => item.type === "load-monitoring" && item.action === "delete")
+          .filter(item => item.type === STORE_NAMES.LOAD_MONITORING && item.action === "delete")
           .map(item => item.data.id);
 
         if (navigator.onLine) {
-          // Online mode - merge with Firestore data
-          const records = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          })) as LoadMonitoringData[];
+          // Online mode - use Firestore data directly
+          const records = snapshot.docs.map(doc => {
+            const data = doc.data();
+            const now = new Date().toISOString();
+            return {
+              id: doc.id,
+              ...data,
+              createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt || now,
+              updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : data.updatedAt || now
+            } as LoadMonitoringData;
+          });
 
-          // Store each record in local storage for offline access
+          // Cache to IndexedDB
           for (const record of records) {
             try {
-              await addItem("load-monitoring", record);
+              await safeAddItem(STORE_NAMES.LOAD_MONITORING_CACHE, record);
             } catch (e) {
-              console.error("Error storing record in local storage:", e);
+              // Ignore duplicate errors
             }
           }
 
-          // Create a map of online records
-          const onlineMap = new Map(records.map(r => [r.id, r]));
-          
-          // Only include offline records that:
-          // 1. Are not in the online data
-          // 2. Are not pending deletion
-          // 3. Have a newer timestamp than their online counterpart (if they exist)
-          const mergedRecords = [
-            ...records,
-            ...offlineData.filter(item => {
-              const onlineRecord = onlineMap.get(item.id);
-              if (!onlineRecord) {
-                return !pendingDeletes.includes(item.id);
-              }
-              // If record exists online, only include offline version if it's newer
-              return item.updatedAt > onlineRecord.updatedAt && !pendingDeletes.includes(item.id);
-            })
-          ];
-
-          // Ensure no duplicates by using a Map and keeping the most recent version
-          const uniqueRecords = Array.from(
-            new Map(
-              mergedRecords.map(record => [
-                record.id,
-                {
-                  ...record,
-                  updatedAt: record.updatedAt || new Date().toISOString()
-                }
-              ])
-            ).values()
-          ).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-
-          setLoadMonitoringRecords(uniqueRecords);
-
-          // Update cache with all current data
-          await clearStore("load-monitoring-cache");
-          for (const record of uniqueRecords) {
-            try {
-              await addItem("load-monitoring-cache", record);
-            } catch (e) {
-              console.error("Error caching load monitoring record:", e);
-            }
-          }
-        } else {
-          // Offline mode - use cached and unsynced data
-          const cache = await getAllItems("load-monitoring-cache");
-          
-          // Create a map of cached items
-          const cacheMap = new Map(cache.map(item => [item.id, item]));
-          
-          // Only include unsynced records that:
-          // 1. Are not in the cache
-          // 2. Are not pending deletion
-          // 3. Have a newer timestamp than their cached counterpart (if they exist)
-          const mergedRecords = [
-            ...cache,
-            ...offlineData.filter(item => {
-              const cachedRecord = cacheMap.get(item.id);
-              if (!cachedRecord) {
-                return !pendingDeletes.includes(item.id);
-              }
-              // If record exists in cache, only include unsynced version if it's newer
-              return item.updatedAt > cachedRecord.updatedAt && !pendingDeletes.includes(item.id);
-            })
-          ];
-
-          // Ensure no duplicates by using a Map and keeping the most recent version
-          const uniqueRecords = Array.from(
-            new Map(
-              mergedRecords.map(record => [
-                record.id,
-                {
-                  ...record,
-                  updatedAt: record.updatedAt || new Date().toISOString()
-                }
-              ])
-            ).values()
-          ).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-
-          setLoadMonitoringRecords(uniqueRecords);
+          setLoadMonitoringRecords(records);
         }
       } catch (error) {
-        console.error("Error updating load monitoring records:", error);
-        toast.error("Error updating records list");
+        console.error("Error in load monitoring subscription:", error);
       }
     });
 
-    return () => unsubscribe();
-  }, [user, regions, districts]);
-
-  // Add sync handler for when device comes back online
-  useEffect(() => {
-    const handleOnline = async () => {
-      try {
-        console.log('Device is back online, syncing pending changes...');
-        const pendingItems = await getPendingSyncItems();
-        
-        for (const item of pendingItems) {
-          try {
-            switch (item.type) {
-              case 'op5-faults':
-                if (item.action === 'create') {
-                  await addDoc(collection(db, "op5Faults"), item.data);
-                } else if (item.action === 'update') {
-                  await updateDoc(doc(db, "op5Faults", item.data.id), item.data);
-                } else if (item.action === 'delete') {
-                  await deleteDoc(doc(db, "op5Faults", item.data.id));
-                }
-                break;
-              
-              case 'control-outages':
-                if (item.action === 'create') {
-                  await addDoc(collection(db, "controlOutages"), item.data);
-                } else if (item.action === 'update') {
-                  await updateDoc(doc(db, "controlOutages", item.data.id), item.data);
-                } else if (item.action === 'delete') {
-                  await deleteDoc(doc(db, "controlOutages", item.data.id));
-                }
-                break;
-              
-              case 'load-monitoring':
-                if (item.action === 'create') {
-                  await addDoc(collection(db, "loadMonitoring"), item.data);
-                } else if (item.action === 'update') {
-                  await updateDoc(doc(db, "loadMonitoring", item.data.id), item.data);
-                } else if (item.action === 'delete') {
-                  await deleteDoc(doc(db, "loadMonitoring", item.data.id));
-                }
-                break;
-              
-              case 'vit-assets':
-                if (item.action === 'create') {
-                  await addDoc(collection(db, "vitAssets"), item.data);
-                } else if (item.action === 'update') {
-                  await updateDoc(doc(db, "vitAssets", item.data.id), item.data);
-                } else if (item.action === 'delete') {
-                  await deleteDoc(doc(db, "vitAssets", item.data.id));
-                }
-                break;
-              
-              case 'vit-inspections':
-                if (item.action === 'create') {
-                  await addDoc(collection(db, "vitInspections"), item.data);
-                } else if (item.action === 'update') {
-                  await updateDoc(doc(db, "vitInspections", item.data.id), item.data);
-                } else if (item.action === 'delete') {
-                  await deleteDoc(doc(db, "vitInspections", item.data.id));
-                }
-                break;
-              
-              case 'substation-inspections':
-                if (item.action === 'create') {
-                  await addDoc(collection(db, "substationInspections"), item.data);
-                } else if (item.action === 'update') {
-                  await updateDoc(doc(db, "substationInspections", item.data.id), item.data);
-                } else if (item.action === 'delete') {
-                  await deleteDoc(doc(db, "substationInspections", item.data.id));
-                }
-                break;
-              
-              case 'districts':
-                if (item.action === 'update') {
-                  await updateDoc(doc(db, "districts", item.data.id), item.data);
-                }
-                break;
-            }
-            
-            // Clear the pending sync item after successful sync
-            await clearPendingSyncItem(item);
-          } catch (error) {
-            console.error(`Error syncing ${item.type} ${item.action}:`, error);
-            // Don't throw here, continue with other items
-          }
-        }
-
-        toast.success("Sync completed successfully");
-      } catch (error) {
-        console.error("Error during sync:", error);
-        toast.error("Error syncing data");
-      }
-    };
-
-    window.addEventListener('online', handleOnline);
     return () => {
-      window.removeEventListener('online', handleOnline);
+      console.log("=== Cleaning up Load Monitoring Subscription ===");
+      unsubscribe();
     };
-  }, []);
+  }, [user, regions, districts]);
 
   // Remove duplicate function declarations and keep only the new ones with offline support
   const addOP5Fault = async (fault: Omit<OP5Fault, "id">) => {
@@ -855,7 +1026,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           ...fault, 
         createdAt: timestamp,
         updatedAt: timestamp,
-        status: fault.restorationDate ? "resolved" as const : "active" as const // Set status based on restoration date
+        status: fault.restorationDate ? "resolved" as const : "active" as const
       };
 
       if (navigator.onLine) {
@@ -873,8 +1044,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           ...faultWithTimestamps,
           id
         };
-        await addItem("op5-faults", offlineFault);
-        await addToPendingSync("op5-faults", "create", offlineFault);
+        await safeAddItem(STORE_NAMES.OP5_FAULTS, offlineFault);
+        await addToPendingSync(STORE_NAMES.OP5_FAULTS, "create", offlineFault);
         toast.success("Fault saved offline");
         setOP5Faults(prev => [...prev, offlineFault]);
         return id;
@@ -921,21 +1092,55 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
       // If online, update Firestore
       if (navigator.onLine) {
-        const faultRef = doc(db, 'op5Faults', faultId);
-        
-        // Update Firestore with cleaned data
-      await updateDoc(faultRef, {
-          ...cleanedData,
-        updatedAt: serverTimestamp()
-      });
-        console.log('[DataContext] Successfully updated fault in Firestore');
+        try {
+          // First try to get the document
+          const faultRef = doc(db, 'op5Faults', faultId);
+          const faultSnap = await getDoc(faultRef);
+          
+          if (faultSnap.exists()) {
+            // Document exists, update it
+            await updateDoc(faultRef, {
+              ...cleanedData,
+              updatedAt: serverTimestamp()
+            });
+            console.log('[DataContext] Successfully updated existing fault in Firestore');
+          } else {
+            // Document doesn't exist, create new one
+            console.log('[DataContext] Document not found, creating new one');
+            const newDocRef = await addDoc(collection(db, 'op5Faults'), {
+              ...updatedFault,
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp()
+            });
+            
+            // Update local state with new ID
+            const newFault = {
+              ...updatedFault,
+              id: newDocRef.id,
+              isOnline: true,
+              synced: true
+            };
+            
+            setOP5Faults(prev => prev.map(fault => 
+              fault.id === faultId ? newFault : fault
+            ));
+            
+            // Update local storage
+            await safeDeleteItem(STORE_NAMES.OP5_FAULTS, faultId);
+            await safeAddItem(STORE_NAMES.OP5_FAULTS, newFault);
+            
+            console.log('[DataContext] Successfully created new fault in Firestore:', newDocRef.id);
+          }
+        } catch (error) {
+          console.error('[DataContext] Error updating Firestore:', error);
+          // If Firestore update fails, add to pending sync
+          await addToPendingSync(STORE_NAMES.OP5_FAULTS, "update", updatedFault);
+          toast.success('Fault updated (will sync when online)');
+        }
       } else {
         // Handle offline update
-        const offlineFaults = JSON.parse(localStorage.getItem('offlineFaults') || '[]');
-        const updatedOfflineFaults = offlineFaults.map((fault: any) =>
-          fault.id === faultId ? updatedFault : fault
-        );
-        localStorage.setItem('offlineFaults', JSON.stringify(updatedOfflineFaults));
+        await safeUpdateItem(STORE_NAMES.OP5_FAULTS, updatedFault);
+        await addToPendingSync(STORE_NAMES.OP5_FAULTS, "update", updatedFault);
         console.log('[DataContext] Successfully updated offline fault');
       }
     } catch (error) {
@@ -951,8 +1156,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       toast.success("Fault deleted successfully");
       } else {
         // Offline mode - mark for deletion
-        await deleteItem("op5-faults", id);
-        await addToPendingSync("op5-faults", "delete", { id });
+        await safeDeleteItem("op5Faults", id);
+        await addToPendingSync("op5Faults", "delete", { id });
         toast.success("Fault marked for deletion");
       }
     } catch (error) {
@@ -981,8 +1186,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           createdAt: timestamp,
           updatedAt: timestamp
         };
-        await addItem("control-outages", offlineOutage);
-        await addToPendingSync("control-outages", "create", offlineOutage);
+        await safeAddItem(STORE_NAMES.CONTROL_OUTAGES, offlineOutage);
+        await addToPendingSync(STORE_NAMES.CONTROL_OUTAGES, "create", offlineOutage);
         toast.success("Outage saved offline");
         setControlSystemOutages(prev => [...prev, offlineOutage]);
         return id;
@@ -1008,10 +1213,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         const offlineOutage = {
           ...data,
           id,
-          updatedAt: new Date().toISOString()
+          updatedAt: new Date().toISOString(),
+          createdAt: new Date().toISOString() // Add required createdAt field
         };
-        await updateItem("control-outages", offlineOutage);
-        await addToPendingSync("control-outages", "update", offlineOutage);
+        await safeUpdateItem(STORE_NAMES.CONTROL_OUTAGES, offlineOutage);
+        await addToPendingSync(STORE_NAMES.CONTROL_OUTAGES, "update", offlineOutage);
         toast.success("Outage updated offline");
       }
     } catch (error) {
@@ -1027,8 +1233,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       toast.success("Outage deleted successfully");
       } else {
         // Offline mode - mark for deletion
-        await deleteItem("control-outages", id);
-        await addToPendingSync("control-outages", "delete", { id });
+        await safeDeleteItem(STORE_NAMES.CONTROL_OUTAGES, id);
+        await addToPendingSync(STORE_NAMES.CONTROL_OUTAGES, "delete", { id });
         toast.success("Outage marked for deletion");
       }
     } catch (error) {
@@ -1108,75 +1314,126 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const resolveFault = useCallback(async (id: string, isOP5: boolean) => {
     try {
       const formattedDate = new Date().toISOString();
+      const updateData = {
+        status: "resolved" as const,
+        restorationDate: formattedDate,
+        updatedAt: formattedDate
+      };
       
-      if (isOP5) {
-        await updateOP5Fault(id, { 
-          status: "resolved" as const, 
-          restorationDate: formattedDate
-        });
-        toast.success("OP5 Fault resolved successfully");
-      } else {
-        await updateControlSystemOutage(id, { 
-          status: "resolved" as const, 
-          restorationDate: formattedDate
-        });
-        toast.success("Control System Outage resolved successfully");
+      // Get the current fault/outage data
+      const currentData = isOP5 
+        ? op5Faults.find(f => f.id === id)
+        : controlSystemOutages.find(o => o.id === id);
+
+      if (!currentData) {
+        throw new Error("Fault not found");
       }
+
+      // Update local state first for immediate feedback
+      if (isOP5) {
+        setOP5Faults(prevFaults => 
+          prevFaults.map(fault => 
+            fault.id === id 
+              ? { ...fault, ...updateData }
+              : fault
+          )
+        );
+      } else {
+        setControlSystemOutages(prevOutages => 
+          prevOutages.map(outage => 
+            outage.id === id 
+              ? { ...outage, ...updateData }
+              : outage
+          )
+        );
+      }
+
+      // Store the update in local storage
+      const storeName = isOP5 ? STORE_NAMES.OP5_FAULTS : STORE_NAMES.CONTROL_OUTAGES;
+      const updatedRecord = {
+        ...currentData,
+        ...updateData,
+        id: currentData.id,
+        createdAt: currentData.createdAt,
+        updatedAt: formattedDate
+      };
+
+      // Always update local storage first
+      await safeUpdateItem(storeName, updatedRecord);
+      await safeUpdateItem(getCacheStoreName(storeName), updatedRecord);
+
+      if (navigator.onLine) {
+      // Online mode - update Firestore
+        const collectionName = isOP5 ? "op5Faults" : "controlOutages";
+        const docRef = doc(db, collectionName, id);
+        
+        try {
+          await updateDoc(docRef, {
+            ...updateData,
+        updatedAt: serverTimestamp()
+      });
+          toast.success(`${isOP5 ? "OP5 Fault" : "Control System Outage"} resolved successfully`);
     } catch (error) {
+          console.error("Error updating Firestore:", error);
+          // If Firestore update fails, add to pending sync
+          await addToPendingSync(storeName, "update", updatedRecord);
+          toast.success(`${isOP5 ? "OP5 Fault" : "Control System Outage"} resolved (will sync when online)`);
+        }
+      } else {
+        // Offline mode - add to pending sync
+        await addToPendingSync(storeName, "update", updatedRecord);
+        toast.success(`${isOP5 ? "OP5 Fault" : "Control System Outage"} resolved offline`);
+      }
+        } catch (error) {
       console.error("Error resolving fault:", error);
       toast.error("Failed to resolve fault");
-    }
-  }, []);
-
-  // Function to delete a fault
-  const deleteFault = useCallback(async (id: string, isOP5: boolean) => {
-    try {
+      
+      // Revert local state on error
       if (isOP5) {
-        await deleteOP5Fault(id);
-        toast.success("OP5 Fault deleted successfully");
+        setOP5Faults(prevFaults => 
+          prevFaults.map(fault => 
+            fault.id === id 
+              ? { ...fault, status: "active", restorationDate: undefined }
+              : fault
+          )
+        );
       } else {
-        await deleteControlSystemOutage(id);
-        toast.success("Control System Outage deleted successfully");
+        setControlSystemOutages(prevOutages => 
+          prevOutages.map(outage => 
+            outage.id === id 
+              ? { ...outage, status: "active", restorationDate: undefined }
+              : outage
+          )
+        );
       }
-    } catch (error) {
-      console.error("Error deleting fault:", error);
-      toast.error("Failed to delete fault");
     }
-  }, []);
+  }, [op5Faults, controlSystemOutages]);
 
   // Add missing functions
   const saveLoadMonitoringRecord = async (record: Omit<LoadMonitoringData, "id">) => {
     try {
-      const timestamp = new Date().toISOString();
-      const recordWithTimestamps = {
+      const now = new Date().toISOString();
+      const newRecord: LoadMonitoringData = {
         ...record,
-        createdAt: timestamp,
-        updatedAt: timestamp
+        id: uuidv4(),
+        createdAt: now,
+        updatedAt: now
       };
 
       if (navigator.onLine) {
-      const docRef = await addDoc(collection(db, "loadMonitoring"), {
-          ...recordWithTimestamps,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
-        toast.success("Record saved successfully");
-      return docRef.id;
+        // Online mode - save to Firestore
+        const docRef = await addDoc(collection(db, "loadMonitoring"), newRecord);
+        newRecord.id = docRef.id;
       } else {
-        const id = uuidv4();
-        const offlineRecord = {
-          ...recordWithTimestamps,
-          id
-        };
-        await addItem("load-monitoring", offlineRecord);
-        await addToPendingSync("load-monitoring", "create", offlineRecord);
-        toast.success("Record saved offline");
-        setLoadMonitoringRecords(prev => [...(prev || []), offlineRecord]);
-        return id;
+        // Offline mode - save to IndexedDB
+        await safeAddItem(STORE_NAMES.LOAD_MONITORING, newRecord);
+        await addToPendingSync(STORE_NAMES.LOAD_MONITORING, "create", newRecord);
       }
+
+      setLoadMonitoringRecords(prev => [...prev, newRecord]);
+      return newRecord.id;
     } catch (error) {
-      console.error("Error saving record:", error);
-      toast.error("Failed to save record");
+      console.error("Error saving load monitoring record:", error);
       throw error;
     }
   };
@@ -1184,125 +1441,106 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const getLoadMonitoringRecord = async (id: string): Promise<LoadMonitoringData | undefined> => {
     try {
       if (navigator.onLine) {
+        // Online mode - get from Firestore
         const docRef = doc(db, "loadMonitoring", id);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
-          return { id: docSnap.id, ...docSnap.data() } as LoadMonitoringData;
+          const data = docSnap.data();
+          const now = new Date().toISOString();
+          return {
+            id: docSnap.id,
+            ...data,
+            createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt || now,
+            updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : data.updatedAt || now
+          } as LoadMonitoringData;
         }
-        return undefined;
       } else {
-        return await getItem("load-monitoring", id);
+        // Offline mode - get from IndexedDB
+        return await safeGetItem<LoadMonitoringData>(STORE_NAMES.LOAD_MONITORING, id);
       }
     } catch (error) {
-      console.error("Error getting record:", error);
-      toast.error("Failed to get record");
-      return undefined;
+      console.error("Error getting load monitoring record:", error);
+      throw error;
     }
   };
 
   const updateLoadMonitoringRecord = async (id: string, data: Partial<LoadMonitoringData>) => {
     try {
-      if (navigator.onLine) {
-        const recordRef = doc(db, "loadMonitoring", id);
-        const recordDoc = await getDoc(recordRef);
-        
-        if (recordDoc.exists()) {
-          // Document exists, update it
-          await updateDoc(recordRef, {
-            ...data,
-            updatedAt: serverTimestamp()
-          });
-          toast.success("Record updated successfully");
-        } else {
-          // Document doesn't exist, create it
-          await setDoc(recordRef, {
-            ...data,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp()
-          });
-          toast.success("Record created successfully");
-        }
-      } else {
-        // Offline mode - check local storage first
-        const existingRecord = await getItem("load-monitoring", id);
-        if (!existingRecord) {
-          toast.error("Record not found in offline storage");
-          return;
-        }
-
-        // Update local storage
-        const offlineRecord = {
-          ...existingRecord,
+      const now = new Date().toISOString();
+      const updatedData = {
           ...data,
-          id,
-          updatedAt: new Date().toISOString()
-        };
-        await updateItem("load-monitoring", offlineRecord);
-        await addToPendingSync("load-monitoring", "update", offlineRecord);
-        
-        // Update local state
-        setLoadMonitoringRecords(prev => 
-          prev?.map(record => record.id === id ? offlineRecord : record)
-        );
-        
-        toast.success("Record updated offline");
+        updatedAt: now
+      };
+
+      if (navigator.onLine) {
+        // Online mode - update Firestore
+        const docRef = doc(db, "loadMonitoring", id);
+        await updateDoc(docRef, updatedData);
+      } else {
+        // Offline mode - update IndexedDB
+        const existingRecord = await safeGetItem<LoadMonitoringData>(STORE_NAMES.LOAD_MONITORING, id);
+        if (existingRecord) {
+          const updatedRecord = {
+            ...existingRecord,
+            ...updatedData
+          };
+          await safeUpdateItem(STORE_NAMES.LOAD_MONITORING, updatedRecord);
+          await addToPendingSync(STORE_NAMES.LOAD_MONITORING, "update", updatedRecord);
+        }
       }
+
+      setLoadMonitoringRecords(prev => 
+        prev.map(record => record.id === id ? { ...record, ...updatedData } : record)
+      );
     } catch (error) {
-      console.error("Error updating record:", error);
-      toast.error("Failed to update record");
+      console.error("Error updating load monitoring record:", error);
+      throw error;
     }
   };
 
   const deleteLoadMonitoringRecord = async (id: string) => {
     try {
       if (navigator.onLine) {
-      await deleteDoc(doc(db, "loadMonitoring", id));
-        toast.success("Record deleted successfully");
+        // Online mode - delete from Firestore
+        await deleteDoc(doc(db, "loadMonitoring", id));
       } else {
-        await deleteItem("load-monitoring", id);
-        await addToPendingSync("load-monitoring", "delete", { id });
-        toast.success("Record marked for deletion");
+        // Offline mode - delete from IndexedDB
+        await safeDeleteItem(STORE_NAMES.LOAD_MONITORING, id);
+        await addToPendingSync(STORE_NAMES.LOAD_MONITORING, "delete", { id });
       }
-    } catch (error) {
-      console.error("Error deleting record:", error);
-      toast.error("Failed to delete record");
+
+      setLoadMonitoringRecords(prev => prev.filter(record => record.id !== id));
+        } catch (error) {
+      console.error("Error deleting load monitoring record:", error);
+      throw error;
     }
   };
 
   // Add VIT asset
   const addVITAsset = async (asset: Omit<VITAsset, "id">) => {
     try {
-      const timestamp = new Date().toISOString();
-      const assetWithTimestamps = {
-        ...asset,
-        createdAt: timestamp,
-        updatedAt: timestamp
+      const now = new Date().toISOString();
+      const newAsset: VITAsset = {
+      ...asset,
+        id: uuidv4(),
+        createdAt: now,
+        updatedAt: now
       };
 
       if (navigator.onLine) {
-        const docRef = await addDoc(collection(db, "vitAssets"), {
-          ...assetWithTimestamps,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
-        });
-        toast.success("Asset saved successfully");
-        return docRef.id;
+        // Online mode - save to Firestore
+        const docRef = await addDoc(collection(db, "vitAssets"), newAsset);
+        newAsset.id = docRef.id;
       } else {
-        // Offline mode - store locally
-        const id = uuidv4();
-        const offlineAsset = {
-          ...assetWithTimestamps,
-          id
-        };
-        await addItem("vit-assets", offlineAsset);
-        await addToPendingSync("vit-assets", "create", offlineAsset);
-        toast.success("Asset saved offline");
-        setVITAssets(prev => [...prev, offlineAsset]);
-        return id;
+        // Offline mode - save to IndexedDB
+        await safeAddItem(STORE_NAMES.VIT_ASSETS, newAsset);
+        await addToPendingSync(STORE_NAMES.VIT_ASSETS, "create", newAsset);
       }
-    } catch (error) {
+
+      setVITAssets(prev => [...prev, newAsset]);
+      return newAsset.id;
+      } catch (error) {
       console.error("Error adding VIT asset:", error);
-      toast.error("Failed to save asset");
       throw error;
     }
   };
@@ -1310,65 +1548,34 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   // Update VIT asset
   const updateVITAsset = async (id: string, updates: Partial<VITAsset>) => {
     try {
-      const timestamp = new Date().toISOString();
-      const updatesWithTimestamp = {
+      const now = new Date().toISOString();
+      const updatedData = {
         ...updates,
-        updatedAt: timestamp
+        updatedAt: now
       };
 
-      // Update local state first for immediate feedback
-      setVITAssets(prev => {
-        const updatedAssets = prev.map(asset => {
-          if (asset.id === id) {
-            return {
-              ...asset,
-              ...updatesWithTimestamp,
-              id // Ensure ID is preserved
-            };
-          }
-          return asset;
-        });
-        console.log("Updated assets in state:", updatedAssets);
-        return updatedAssets;
-      });
-
       if (navigator.onLine) {
-        try {
-          // Try to update in Firestore
-          const docRef = doc(db, "vitAssets", id);
-          await updateDoc(docRef, {
-            ...updatesWithTimestamp,
-            updatedAt: serverTimestamp()
-          });
-          console.log("Successfully updated in Firestore");
-        } catch (firestoreError) {
-          console.error("Firestore update failed:", firestoreError);
-          
-          // If Firestore update fails, store offline
-          const offlineAsset = {
-            ...updatesWithTimestamp,
-            id
-          };
-          await updateItem("vit-assets", offlineAsset);
-          await addToPendingSync("vit-assets", "update", offlineAsset);
-          console.log("Stored update offline");
-        }
+        // Online mode - update Firestore
+        const docRef = doc(db, "vitAssets", id);
+        await updateDoc(docRef, updatedData);
       } else {
-        // Offline mode - update local storage
-        const offlineAsset = {
-          ...updatesWithTimestamp,
-          id
-        };
-        await updateItem("vit-assets", offlineAsset);
-        await addToPendingSync("vit-assets", "update", offlineAsset);
-        console.log("Stored update offline");
+        // Offline mode - update IndexedDB
+        const existingAsset = await safeGetItem<VITAsset>(STORE_NAMES.VIT_ASSETS, id);
+        if (existingAsset) {
+          const updatedAsset = {
+            ...existingAsset,
+            ...updatedData
+          };
+          await safeUpdateItem(STORE_NAMES.VIT_ASSETS, updatedAsset);
+          await addToPendingSync(STORE_NAMES.VIT_ASSETS, "update", updatedAsset);
+        }
       }
+
+      setVITAssets(prev => 
+        prev.map(asset => asset.id === id ? { ...asset, ...updatedData } : asset)
+      );
     } catch (error) {
       console.error("Error updating VIT asset:", error);
-      // Revert local state on error
-      setVITAssets(prev => prev.map(asset => 
-        asset.id === id ? { ...asset } : asset
-      ));
       throw error;
     }
   };
@@ -1377,36 +1584,17 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const deleteVITAsset = async (id: string) => {
     try {
       if (navigator.onLine) {
-        // Check if this is an offline-created asset
-        const offlineAsset = await getItem("vit-assets", id);
-        if (offlineAsset) {
-          // This is an offline-created asset that hasn't been synced yet
-          // Delete from offline storage
-          await deleteItem("vit-assets", id);
-          await addToPendingSync("vit-assets", "delete", { id });
-          toast.success("Asset deleted successfully");
-          
-          // Update local state
-          setVITAssets(prev => prev.filter(asset => asset.id !== id));
-          return;
-        }
-
-        // Normal online deletion
-        const docRef = doc(db, "vitAssets", id);
-        await deleteDoc(docRef);
-        toast.success("Asset deleted successfully");
+        // Online mode - delete from Firestore
+      await deleteDoc(doc(db, "vitAssets", id));
       } else {
-        // Offline mode - mark for deletion
-        await deleteItem("vit-assets", id);
-        await addToPendingSync("vit-assets", "delete", { id });
-        toast.success("Asset marked for deletion");
-        
-        // Update local state
-        setVITAssets(prev => prev.filter(asset => asset.id !== id));
+        // Offline mode - delete from IndexedDB
+        await safeDeleteItem(STORE_NAMES.VIT_ASSETS, id);
+        await addToPendingSync(STORE_NAMES.VIT_ASSETS, "delete", { id });
       }
+
+      setVITAssets(prev => prev.filter(asset => asset.id !== id));
     } catch (error) {
       console.error("Error deleting VIT asset:", error);
-      toast.error("Failed to delete asset");
       throw error;
     }
   };
@@ -1434,8 +1622,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           ...inspectionWithTimestamps,
           id
         };
-        await addItem("vit-inspections", offlineInspection);
-        await addToPendingSync("vit-inspections", "create", offlineInspection);
+        await safeAddItem(STORE_NAMES.VIT_INSPECTIONS, offlineInspection);
+        await addToPendingSync(STORE_NAMES.VIT_INSPECTIONS, "create", offlineInspection);
         toast.success("Inspection saved offline");
         setVITInspections(prev => [...prev, offlineInspection]);
         return id;
@@ -1452,7 +1640,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       if (navigator.onLine) {
         const inspectionRef = doc(db, "vitInspections", id);
         await updateDoc(inspectionRef, {
-          ...updates,
+        ...updates,
           updatedAt: serverTimestamp()
         });
         toast.success("Inspection updated successfully");
@@ -1462,8 +1650,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           id,
           updatedAt: new Date().toISOString()
         };
-        await updateItem("vit-inspections", offlineInspection);
-        await addToPendingSync("vit-inspections", "update", offlineInspection);
+        await updateItem("vitInspections", offlineInspection);
+        await addToPendingSync("vitInspections", "update", offlineInspection);
         toast.success("Inspection updated offline");
       }
     } catch (error) {
@@ -1471,15 +1659,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       toast.error("Failed to update inspection");
     }
   };
-
+  
   const deleteVITInspection = async (id: string) => {
     try {
       if (navigator.onLine) {
         await deleteDoc(doc(db, "vitInspections", id));
         toast.success("Inspection deleted successfully");
       } else {
-        await deleteItem("vit-inspections", id);
-        await addToPendingSync("vit-inspections", "delete", { id });
+        await deleteItem("vitInspections", id);
+        await addToPendingSync("vitInspections", "delete", { id });
         toast.success("Inspection marked for deletion");
       }
     } catch (error) {
@@ -1490,78 +1678,60 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const saveInspection = async (data: Omit<SubstationInspection, "id">) => {
     try {
-      const timestamp = new Date().toISOString();
-      const inspectionWithTimestamps = {
+      const now = new Date().toISOString();
+      const newInspection: SubstationInspection & BaseRecord = {
         ...data,
-        createdAt: timestamp,
-        updatedAt: timestamp
+        id: uuidv4(),
+        createdAt: now,
+        updatedAt: now
       };
 
       if (navigator.onLine) {
-        const docRef = await addDoc(collection(db, "substationInspections"), {
-          ...inspectionWithTimestamps,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
-        });
-        toast.success("Inspection saved successfully");
-        return docRef.id;
-    } else {
-        const id = uuidv4();
-        const offlineInspection = {
-          ...inspectionWithTimestamps,
-          id
-        };
-        await addItem("substation-inspections", offlineInspection);
-        await addToPendingSync("substation-inspections", "create", offlineInspection);
-        toast.success("Inspection saved offline");
-        setSavedInspections(prev => [...prev, offlineInspection]);
-        return id;
+        // Online mode - save to Firestore
+        const docRef = await addDoc(collection(db, "substationInspections"), newInspection);
+        newInspection.id = docRef.id;
+      } else {
+        // Offline mode - save to IndexedDB
+        await safeAddItem(STORE_NAMES.SUBSTATION_INSPECTIONS, newInspection);
+        await addToPendingSync(STORE_NAMES.SUBSTATION_INSPECTIONS, "create", newInspection);
       }
+
+      setSavedInspections(prev => [...prev, newInspection]);
+      return newInspection.id;
     } catch (error) {
       console.error("Error saving inspection:", error);
-      toast.error("Failed to save inspection");
       throw error;
     }
   };
 
   const updateSubstationInspection = async (id: string, updates: Partial<SubstationInspection>) => {
     try {
+      const now = new Date().toISOString();
+      const baseRecord: BaseRecord = {
+        id,
+        updatedAt: now,
+        createdAt: now
+      };
+
       if (navigator.onLine) {
-        const inspectionRef = doc(db, "substationInspections", id);
-        await updateDoc(inspectionRef, {
+      // Online mode - update Firestore
+        const docRef = doc(db, "substationInspections", id);
+        await updateDoc(docRef, {
           ...updates,
-          updatedAt: serverTimestamp()
-        });
-        toast.success("Inspection updated successfully");
+        updatedAt: serverTimestamp()
+      });
     } else {
-        const offlineInspection = {
+        // Offline mode - update IndexedDB
+        const updatedData = {
           ...updates,
-          id,
-          updatedAt: new Date().toISOString()
+          ...baseRecord
         };
-        await updateItem("substation-inspections", offlineInspection);
-        await addToPendingSync("substation-inspections", "update", offlineInspection);
-        toast.success("Inspection updated offline");
+        await safeUpdateItem(STORE_NAMES.SUBSTATION_INSPECTIONS, updatedData);
+        await addToPendingSync(STORE_NAMES.SUBSTATION_INSPECTIONS, "update", updatedData);
       }
     } catch (error) {
       console.error("Error updating inspection:", error);
       toast.error("Failed to update inspection");
-    }
-  };
-
-  const deleteInspection = async (id: string) => {
-    try {
-      if (navigator.onLine) {
-        await deleteDoc(doc(db, "substationInspections", id));
-        toast.success("Inspection deleted successfully");
-      } else {
-        await deleteItem("substation-inspections", id);
-        await addToPendingSync("substation-inspections", "delete", { id });
-        toast.success("Inspection marked for deletion");
-      }
-    } catch (error) {
-      console.error("Error deleting inspection:", error);
-      toast.error("Failed to delete inspection");
     }
   };
 
@@ -1584,7 +1754,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         await addToPendingSync("districts", "update", offlineDistrict);
         toast.success("District updated offline");
       }
-    } catch (error) {
+        } catch (error) {
       console.error("Error updating district:", error);
       toast.error("Failed to update district");
     }
@@ -1626,98 +1796,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return op5Faults.find(fault => fault.id === id);
   }, [op5Faults]);
 
-  // Add overhead line inspection
-  const addOverheadLineInspection = async (inspection: Omit<OverheadLineInspection, "id">) => {
-    try {
-      const timestamp = new Date().toISOString();
-      const inspectionWithTimestamps = {
-        ...inspection,
-        createdAt: timestamp,
-        updatedAt: timestamp
-      };
-
-      if (navigator.onLine) {
-        const docRef = await addDoc(collection(db, "overheadLineInspections"), {
-          ...inspectionWithTimestamps,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
-        });
-        toast.success("Inspection saved successfully");
-        return docRef.id;
-      } else {
-        // Offline mode - store locally
-        const id = uuidv4();
-        const offlineInspection = {
-          ...inspectionWithTimestamps,
-          id
-        };
-        await addItem("overhead-line-inspections", offlineInspection);
-        await addToPendingSync("overhead-line-inspections", "create", offlineInspection);
-        toast.success("Inspection saved offline");
-        setOverheadLineInspections(prev => [...prev, offlineInspection]);
-        return id;
-      }
-    } catch (error) {
-      console.error("Error adding overhead line inspection:", error);
-      toast.error("Failed to save inspection");
-      throw error;
-    }
-  };
-
-  // Update overhead line inspection
-  const updateOverheadLineInspection = async (id: string, updates: Partial<OverheadLineInspection>) => {
-    try {
-      if (navigator.onLine) {
-        const docRef = doc(db, "overheadLineInspections", id);
-        await updateDoc(docRef, {
-          ...updates,
-          updatedAt: serverTimestamp()
-        });
-        toast.success("Inspection updated successfully");
-      } else {
-        // Offline mode - update local storage
-        const offlineInspection = {
-          ...updates,
-          id,
-          updatedAt: new Date().toISOString()
-        };
-        await updateItem("overhead-line-inspections", offlineInspection);
-        await addToPendingSync("overhead-line-inspections", "update", offlineInspection);
-        toast.success("Inspection updated offline");
-      }
-    } catch (error) {
-      console.error("Error updating overhead line inspection:", error);
-      toast.error("Failed to update inspection");
-      throw error;
-    }
-  };
-
-  // Delete overhead line inspection
-  const deleteOverheadLineInspection = async (id: string) => {
-    try {
-      if (navigator.onLine) {
-        const docRef = doc(db, "overheadLineInspections", id);
-        await deleteDoc(docRef);
-        toast.success("Inspection deleted successfully");
-      } else {
-        // Offline mode - mark for deletion
-        await deleteItem("overhead-line-inspections", id);
-        await addToPendingSync("overhead-line-inspections", "delete", { id });
-        toast.success("Inspection marked for deletion");
-      }
-    } catch (error) {
-      console.error("Error deleting overhead line inspection:", error);
-      toast.error("Failed to delete inspection");
-      throw error;
-    }
-  };
-
-  // Subscribe to overhead line inspections
+  // Overhead line inspections subscription
   useEffect(() => {
     if (!user) return;
 
     let q = query(collection(db, "overheadLineInspections"), orderBy("createdAt", "desc"));
-    
     // Apply role-based filtering
     if (user.role === "regional_engineer" && user.region) {
       q = query(
@@ -1736,101 +1819,50 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
     const unsubscribe = onSnapshot(q, async (snapshot) => {
       try {
-        // Get offline data regardless of online status
-        const offlineData = await getAllItems("overhead-line-inspections");
+        console.log("Received snapshot with", snapshot.docs.length, "documents");
+        // Get offline data and pending deletes
+        const offlineData = await safeGetAllItems<OverheadLineInspection & BaseRecord>(STORE_NAMES.OVERHEAD_LINE_INSPECTIONS);
         const pendingDeletes = (await getPendingSyncItems())
-          .filter(item => item.type === "overhead-line-inspections" && item.action === "delete")
+          .filter(item => item.type === STORE_NAMES.OVERHEAD_LINE_INSPECTIONS && item.action === "delete")
           .map(item => item.data.id);
 
-        if (navigator.onLine) {
-          // Online mode - merge with Firestore data
-          const inspections = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          })) as OverheadLineInspection[];
+        // Process Firestore data
+        const inspections = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as OverheadLineInspection[];
 
-          // Create a map of online records
-          const onlineMap = new Map(inspections.map(r => [r.id, r]));
-          
-          // Only include offline records that:
-          // 1. Are not in the online data
-          // 2. Are not pending deletion
-          // 3. Have a newer timestamp than their online counterpart (if they exist)
-          const mergedInspections = [
-            ...inspections,
-            ...offlineData.filter(item => {
-              const onlineRecord = onlineMap.get(item.id);
-              if (!onlineRecord) {
-                return !pendingDeletes.includes(item.id);
-              }
-              // If record exists online, only include offline version if it's newer
-              return item.updatedAt > onlineRecord.updatedAt && !pendingDeletes.includes(item.id);
-            })
-          ];
-
-          // Ensure no duplicates by using a Map and keeping the most recent version
-          const uniqueInspections = Array.from(
-            new Map(
-              mergedInspections.map(inspection => [
-                inspection.id,
-                {
-                  ...inspection,
-                  updatedAt: inspection.updatedAt || new Date().toISOString()
-                }
-              ])
-            ).values()
-          ).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-
-          setOverheadLineInspections(uniqueInspections);
-
-          // Update cache with all current data
-          await clearStore("overhead-line-inspections-cache");
-          for (const inspection of uniqueInspections) {
-            try {
-              await addItem("overhead-line-inspections-cache", inspection);
-            } catch (e) {
-              console.error("Error caching overhead line inspection:", e);
-            }
+        // Create a map of all records by ID and originalOfflineId
+        const recordMap = new Map<string, OverheadLineInspection>();
+        // Add Firestore records to map
+        inspections.forEach(inspection => {
+          recordMap.set(inspection.id, inspection);
+          if ((inspection as any).originalOfflineId) {
+            recordMap.set((inspection as any).originalOfflineId, inspection);
           }
-        } else {
-          // Offline mode - use cached and unsynced data
-          const cache = await getAllItems("overhead-line-inspections-cache");
-          
-          // Create a map of cached items
-          const cacheMap = new Map(cache.map(item => [item.id, item]));
-          
-          // Only include unsynced records that:
-          // 1. Are not in the cache
-          // 2. Are not pending deletion
-          // 3. Have a newer timestamp than their cached counterpart (if they exist)
-          const mergedInspections = [
-            ...cache,
-            ...offlineData.filter(item => {
-              const cachedRecord = cacheMap.get(item.id);
-              if (!cachedRecord) {
-                return !pendingDeletes.includes(item.id);
-              }
-              // If record exists in cache, only include unsynced version if it's newer
-              return item.updatedAt > cachedRecord.updatedAt && !pendingDeletes.includes(item.id);
-            })
-          ];
-
-          // Ensure no duplicates by using a Map and keeping the most recent version
-          const uniqueInspections = Array.from(
-            new Map(
-              mergedInspections.map(inspection => [
-                inspection.id,
-                {
-                  ...inspection,
-                  updatedAt: inspection.updatedAt || new Date().toISOString()
-                }
-              ])
-            ).values()
-          ).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-
-          setOverheadLineInspections(uniqueInspections);
-        }
-      } catch (error) {
+        });
+        // Add offline records that aren't in Firestore and aren't pending deletion
+        offlineData.forEach(item => {
+          if (!recordMap.has(item.id) && !pendingDeletes.includes(item.id)) {
+            recordMap.set(item.id, item);
+          }
+        });
+        // Convert map to array and sort by updatedAt
+        const allInspections = Array.from(recordMap.values()).sort(
+          (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        );
+        // Update UI
+        setOverheadLineInspections(allInspections);
+        // Update cache with all current data
+        await clearStore(STORE_NAMES.OVERHEAD_LINE_INSPECTIONS_CACHE);
+        for (const inspection of allInspections) {
+          await safeAddItem(STORE_NAMES.OVERHEAD_LINE_INSPECTIONS_CACHE, {
+            ...inspection,
+            createdAt: inspection.createdAt || new Date().toISOString(),
+            updatedAt: inspection.updatedAt || new Date().toISOString(),
+          });
+      }
+    } catch (error) {
         console.error("Error updating overhead line inspections:", error);
         toast.error("Error updating inspections list");
       }
@@ -1838,37 +1870,387 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       console.error("Error in overhead line inspections snapshot:", error);
       toast.error("Error connecting to database");
     });
-
     return () => unsubscribe();
   }, [user]);
 
-  // Add sync handler for overhead line inspections
+  // Delete overhead line inspection
+  const deleteOverheadLineInspection = async (id: string) => {
+    try {
+      const cachedRecord = await safeGetItem<OverheadLineInspection & BaseRecord>(STORE_NAMES.OVERHEAD_LINE_INSPECTIONS_CACHE, id);
+      if (navigator.onLine) {
+        // Try to find the record by both ID and originalOfflineId
+        const recordRef = doc(db, "overheadLineInspections", id);
+        const recordSnap = await getDoc(recordRef);
+        if (recordSnap.exists()) {
+          await deleteDoc(recordRef);
+        } else if (cachedRecord && (cachedRecord as any).originalOfflineId) {
+          const q = query(
+            collection(db, "overheadLineInspections"),
+            where("originalOfflineId", "==", (cachedRecord as any).originalOfflineId)
+          );
+          const querySnap = await getDocs(q);
+          if (!querySnap.empty) {
+            const docToDelete = querySnap.docs[0];
+            await deleteDoc(doc(db, "overheadLineInspections", docToDelete.id));
+            await safeDeleteItem(STORE_NAMES.OVERHEAD_LINE_INSPECTIONS_CACHE, docToDelete.id);
+          }
+        }
+        // Remove from both stores
+        await safeDeleteItem(STORE_NAMES.OVERHEAD_LINE_INSPECTIONS, id);
+        await safeDeleteItem(STORE_NAMES.OVERHEAD_LINE_INSPECTIONS_CACHE, id);
+        setOverheadLineInspections(prev => prev.filter(inspection => inspection.id !== id));
+        toast.success("Inspection deleted successfully");
+      } else {
+        // Offline mode - mark for deletion in Firebase
+        const record = await safeGetItem<OverheadLineInspection & BaseRecord>(STORE_NAMES.OVERHEAD_LINE_INSPECTIONS, id) || cachedRecord;
+          if (record) {
+          await addToPendingSync(STORE_NAMES.OVERHEAD_LINE_INSPECTIONS, "delete", record);
+          await safeDeleteItem(STORE_NAMES.OVERHEAD_LINE_INSPECTIONS, id);
+          await safeDeleteItem(STORE_NAMES.OVERHEAD_LINE_INSPECTIONS_CACHE, id);
+          setOverheadLineInspections(prev => prev.filter(inspection => inspection.id !== id));
+          toast.success("Inspection marked for deletion");
+        } else {
+          toast.error("Record not found");
+        }
+      }
+    } catch (error) {
+      console.error("Error deleting overhead line inspection:", error);
+      toast.error("Failed to delete inspection");
+      throw error;
+    }
+  };
+
+  // Add overhead line inspection
+  const addOverheadLineInspection = async (inspection: Omit<OverheadLineInspection, "id">) => {
+    try {
+      const timestamp = new Date().toISOString();
+      const newInspection: OverheadLineInspection & BaseRecord = {
+        ...inspection,
+        id: uuidv4(),
+        createdAt: timestamp,
+        updatedAt: timestamp
+      };
+      if (navigator.onLine) {
+        const docRef = await addDoc(collection(db, "overheadLineInspections"), {
+          ...newInspection,
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp()
+              });
+        toast.success("Inspection saved successfully");
+        return docRef.id;
+      } else {
+        await safeAddItem(STORE_NAMES.OVERHEAD_LINE_INSPECTIONS, newInspection);
+        await addToPendingSync(STORE_NAMES.OVERHEAD_LINE_INSPECTIONS, "create", newInspection);
+        toast.success("Inspection saved offline");
+        setOverheadLineInspections(prev => [...prev, newInspection]);
+        return newInspection.id;
+      }
+    } catch (error) {
+      console.error("Error adding overhead line inspection:", error);
+      toast.error("Failed to save inspection");
+      throw error;
+    }
+  };
+
+  // Update overhead line inspection
+  const updateOverheadLineInspection = async (id: string, updates: Partial<OverheadLineInspection>) => {
+    try {
+      const cachedRecord = await safeGetItem<OverheadLineInspection & BaseRecord>(STORE_NAMES.OVERHEAD_LINE_INSPECTIONS_CACHE, id);
+      const now = new Date().toISOString();
+      if (navigator.onLine) {
+        let firebaseId = id;
+        const recordRef = doc(db, "overheadLineInspections", id);
+        const recordSnap = await getDoc(recordRef);
+        if (!recordSnap.exists() && cachedRecord && (cachedRecord as any).originalOfflineId) {
+          const q = query(
+            collection(db, "overheadLineInspections"),
+            where("originalOfflineId", "==", (cachedRecord as any).originalOfflineId)
+          );
+          const querySnap = await getDocs(q);
+          if (!querySnap.empty) {
+            firebaseId = querySnap.docs[0].id;
+          } else {
+            throw new Error("Record not found in Firebase");
+          }
+        }
+        const correctRef = doc(db, "overheadLineInspections", firebaseId);
+        await updateDoc(correctRef, {
+        ...updates,
+        updatedAt: serverTimestamp()
+      });
+        const updatedRecord = {
+          ...cachedRecord,
+          ...updates,
+          id: firebaseId,
+          updatedAt: now,
+          createdAt: cachedRecord?.createdAt || now
+        };
+        await safeUpdateItem(STORE_NAMES.OVERHEAD_LINE_INSPECTIONS_CACHE, updatedRecord);
+        setOverheadLineInspections(prev =>
+          prev.map(inspection =>
+            inspection.id === id || inspection.id === firebaseId ? updatedRecord : inspection
+          )
+        );
+        toast.success("Inspection updated successfully");
+      } else {
+        const offlineInspection = {
+          ...updates,
+          id,
+          updatedAt: now,
+          createdAt: cachedRecord?.createdAt || now
+        };
+        await safeUpdateItem(STORE_NAMES.OVERHEAD_LINE_INSPECTIONS, offlineInspection);
+        await addToPendingSync(STORE_NAMES.OVERHEAD_LINE_INSPECTIONS, "update", offlineInspection);
+        setOverheadLineInspections(prev =>
+          prev.map(inspection =>
+            inspection.id === id ? { ...inspection, ...offlineInspection } : inspection
+          )
+        );
+        toast.success("Inspection updated offline");
+        }
+    } catch (error) {
+      console.error("Error updating overhead line inspection:", error);
+      toast.error("Failed to update inspection");
+      throw error;
+    }
+  };
+
+  const deleteInspection = async (id: string) => {
+    try {
+    if (navigator.onLine) {
+        // Online mode - delete from Firestore
+        await deleteDoc(doc(db, "substationInspections", id));
+      } else {
+        // Offline mode - delete from IndexedDB
+        await safeDeleteItem(STORE_NAMES.SUBSTATION_INSPECTIONS, id);
+        await addToPendingSync(STORE_NAMES.SUBSTATION_INSPECTIONS, "delete", { id });
+      }
+      setSavedInspections(prev => prev.filter(inspection => inspection.id !== id));
+    } catch (error) {
+      console.error("Error deleting inspection:", error);
+      throw error;
+    }
+  };
+
+  // Function to delete a fault
+  const deleteFault = useCallback(async (id: string, isOP5: boolean) => {
+    try {
+      const storeName = isOP5 ? STORE_NAMES.OP5_FAULTS : STORE_NAMES.CONTROL_OUTAGES;
+      const collectionName = isOP5 ? "op5Faults" : "controlOutages";
+
+      if (navigator.onLine) {
+        // Online mode - delete from Firestore
+        await deleteDoc(doc(db, collectionName, id));
+        
+        // Clear cache and update state
+    if (isOP5) {
+          await clearCacheAndUpdateState<OP5Fault>(
+            storeName,
+            collectionName,
+            setOP5Faults as React.Dispatch<React.SetStateAction<(OP5Fault & { isOnline: boolean; synced: boolean })[]>>
+          );
+        } else {
+          await clearCacheAndUpdateState<ControlSystemOutage>(
+            storeName,
+            collectionName,
+            setControlSystemOutages as React.Dispatch<React.SetStateAction<(ControlSystemOutage & { isOnline: boolean; synced: boolean })[]>>
+          );
+        }
+        
+        toast.success(`${isOP5 ? "OP5 Fault" : "Control System Outage"} deleted successfully`);
+    } else {
+        // Offline mode - mark for deletion
+        await safeDeleteItem(storeName, id);
+        await addToPendingSync(storeName, "delete", { id });
+        
+        // Clear cache and update state
+    if (isOP5) {
+          await clearCacheAndUpdateState<OP5Fault>(
+            storeName,
+            collectionName,
+            setOP5Faults as React.Dispatch<React.SetStateAction<(OP5Fault & { isOnline: boolean; synced: boolean })[]>>
+          );
+    } else {
+          await clearCacheAndUpdateState<ControlSystemOutage>(
+            storeName,
+            collectionName,
+            setControlSystemOutages as React.Dispatch<React.SetStateAction<(ControlSystemOutage & { isOnline: boolean; synced: boolean })[]>>
+          );
+        }
+        
+        toast.success(`${isOP5 ? "OP5 Fault" : "Control System Outage"} marked for deletion`);
+      }
+    } catch (error) {
+      console.error("Error deleting fault:", error);
+      toast.error("Failed to delete fault");
+    }
+  }, []);
+
+  // Add sync handler for when device comes back online
   useEffect(() => {
     const handleOnline = async () => {
       try {
+        console.log('=== SYNC STARTED ===');
+        console.log('Device is back online, syncing pending changes...');
         const pendingItems = await getPendingSyncItems();
-        const overheadLineItems = pendingItems.filter(item => item.type === 'overhead-line-inspections');
+        console.log('Pending items to sync:', JSON.stringify(pendingItems, null, 2));
         
-        for (const item of overheadLineItems) {
+        if (pendingItems.length === 0) {
+          console.log('No pending items to sync');
+          return;
+        }
+
+        // Group items by type to handle them in batches
+        const itemsByType = pendingItems.reduce((acc, item) => {
+          if (!acc[item.type]) {
+            acc[item.type] = [];
+          }
+          acc[item.type].push(item);
+          return acc;
+        }, {} as Record<string, typeof pendingItems>);
+
+        console.log('Items grouped by type:', Object.keys(itemsByType));
+
+        // Process each type of item
+        for (const [storeType, items] of Object.entries(itemsByType)) {
           try {
-            if (item.action === 'create') {
-              await addDoc(collection(db, "overheadLineInspections"), item.data);
-            } else if (item.action === 'update') {
-              await updateDoc(doc(db, "overheadLineInspections", item.data.id), item.data);
-            } else if (item.action === 'delete') {
-              await deleteDoc(doc(db, "overheadLineInspections", item.data.id));
-            }
+            console.log(`\n=== Processing ${storeType} ===`);
+            console.log(`Number of items to process: ${items.length}`);
+
+            let collectionName = '';
+            let setState: React.Dispatch<React.SetStateAction<any[]>>;
             
-            // Clear the pending sync item after successful sync
-            await clearPendingSyncItem(item);
-          } catch (error) {
-            console.error(`Error syncing overhead line inspection ${item.action}:`, error);
-            // Don't throw here, continue with other items
+            switch (storeType) {
+              case STORE_NAMES.OP5_FAULTS:
+                collectionName = 'op5Faults';
+                setState = setOP5Faults;
+                break;
+              case STORE_NAMES.CONTROL_OUTAGES:
+                collectionName = 'controlOutages';
+                setState = setControlSystemOutages;
+                break;
+              default:
+                console.log(`Skipping unknown store type: ${storeType}`);
+                continue;
+            }
+
+            console.log(`Using collection: ${collectionName}`);
+
+            // Get all existing items from Firestore for this type
+            const snapshot = await getDocs(collection(db, collectionName));
+            const existingIds = new Set(snapshot.docs.map(doc => doc.id));
+            const existingClientIds = new Set(
+              snapshot.docs
+                .map(doc => doc.data().clientId)
+                .filter(id => id !== undefined)
+            );
+
+            console.log(`Found ${existingIds.size} existing documents in Firestore`);
+
+            // Track successfully synced items and deleted items
+            const syncedItems = new Set<string>();
+            const deletedItems = new Set<string>();
+
+            // Process each item
+            for (const item of items) {
+              try {
+                console.log(`\nProcessing item:`, {
+                  id: item.data.id,
+                  action: item.action,
+                  type: item.type
+                });
+
+                if (item.action === 'create' || item.action === 'update') {
+                  console.log('Creating new document in Firestore...');
+                  
+                  // Always create as new document in Firestore
+                  const docRef = await addDoc(collection(db, collectionName), {
+                    ...item.data,
+                    createdAt: serverTimestamp(),
+                    updatedAt: serverTimestamp()
+                  });
+                  
+                  console.log('Successfully created document:', {
+                    oldId: item.data.id,
+                    newId: docRef.id
+                  });
+                  
+                  // Replace the offline record with the new Firestore record
+                  await safeDeleteItem(storeType, item.data.id);
+                  await safeAddItem(storeType, {
+                    ...item.data,
+                    id: docRef.id,
+                    isOnline: true,
+                    synced: true
+                  });
+                  syncedItems.add(item.data.id);
+                } else if (item.action === 'delete') {
+                  console.log('Processing delete operation...');
+                  await safeDeleteItem(storeType, item.data.id);
+                  deletedItems.add(item.data.id);
+                  console.log('Successfully processed delete');
+                }
+
+                // Clear the pending sync item
+                await clearPendingSyncItem(item);
+                console.log('Cleared pending sync item');
+              } catch (error) {
+                console.error(`Error processing item ${item.data.id}:`, error);
+                continue;
+              }
+            }
+
+            console.log(`\nSync summary for ${storeType}:`, {
+              syncedItems: Array.from(syncedItems),
+              deletedItems: Array.from(deletedItems)
+            });
+
+            // After processing all items of this type:
+            console.log('\nUpdating cache and state...');
+            
+            // 1. Clear the cache
+            await clearStore(storeType);
+            await clearStore(getCacheStoreName(storeType));
+            
+            // 2. Get fresh data from Firestore
+            const freshSnapshot = await getDocs(collection(db, collectionName));
+            const freshData = freshSnapshot.docs.map(doc => {
+              const data = doc.data();
+              return {
+                id: doc.id,
+                ...data,
+                createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt || new Date().toISOString(),
+                updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : data.updatedAt || new Date().toISOString(),
+                isOnline: true,
+                synced: true
+              };
+            });
+
+            console.log(`Retrieved ${freshData.length} fresh documents from Firestore`);
+
+            // 3. Update state with fresh data
+            setState(freshData.filter(item => !deletedItems.has(item.id)));
+            
+            // 4. Update cache
+            for (const item of freshData) {
+              if (!deletedItems.has(item.id)) {
+                await safeAddItem(storeType, item);
+                await safeAddItem(getCacheStoreName(storeType), item);
+              }
+            }
+
+            console.log(`Successfully completed sync for ${storeType}`);
+      } catch (error) {
+            console.error(`Error syncing ${storeType}:`, error);
+            toast.error(`Failed to sync ${storeType}`);
           }
         }
+
+        console.log('=== SYNC COMPLETED ===');
+        toast.success("Sync completed successfully");
       } catch (error) {
-        console.error("Error during overhead line inspections sync:", error);
-        toast.error("Error syncing inspections data");
+        console.error("Error during sync:", error);
+        toast.error("Error syncing data");
       }
     };
 
@@ -1948,4 +2330,24 @@ export function useData() {
     throw new Error("useData must be used within a DataProvider");
   }
   return context;
+}
+
+// Helper function to get cache store name
+function getCacheStoreName(storeName: StoreName): StoreName {
+  switch (storeName) {
+    case STORE_NAMES.OP5_FAULTS:
+      return STORE_NAMES.OP5_FAULTS_CACHE;
+    case STORE_NAMES.CONTROL_OUTAGES:
+      return STORE_NAMES.CONTROL_OUTAGES_CACHE;
+    case STORE_NAMES.LOAD_MONITORING:
+      return STORE_NAMES.LOAD_MONITORING_CACHE;
+    case STORE_NAMES.VIT_ASSETS:
+      return STORE_NAMES.VIT_ASSETS_CACHE;
+    case STORE_NAMES.VIT_INSPECTIONS:
+      return STORE_NAMES.VIT_INSPECTIONS_CACHE;
+    case STORE_NAMES.OVERHEAD_LINE_INSPECTIONS:
+      return STORE_NAMES.OVERHEAD_LINE_INSPECTIONS_CACHE;
+    default:
+      throw new Error(`No cache store for store name: ${storeName}`);
+  }
 }

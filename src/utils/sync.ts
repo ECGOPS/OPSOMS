@@ -1,4 +1,6 @@
 import { getPendingSyncItems, clearPendingSyncItem } from './db';
+import { doc, updateDoc, deleteDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { db } from '../config/firebase';
 
 let isOnline = navigator.onLine;
 let syncInProgress = false;
@@ -22,12 +24,49 @@ export async function syncPendingChanges() {
     
     for (const item of pendingItems) {
       try {
-        // Here you would implement your actual API calls
-        // For example:
-        // await api[item.type][item.action](item.data);
+        const { type, action, data } = item;
+        
+        // Map store names to Firestore collection names
+        const collectionMap: Record<string, string> = {
+          'op5-faults': 'op5Faults',
+          'control-outages': 'controlOutages',
+          'load-monitoring': 'loadMonitoring',
+          'vit-assets': 'vitAssets',
+          'vit-inspections': 'vitInspections',
+          'substation-inspections': 'substationInspections',
+          'overhead-line-inspections': 'overheadLineInspections'
+        };
+
+        const collectionName = collectionMap[type];
+        if (!collectionName) {
+          console.error(`Unknown collection type: ${type}`);
+          continue;
+        }
+
+        switch (action) {
+          case 'create':
+            await addDoc(collection(db, collectionName), {
+              ...data,
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp()
+            });
+            break;
+          
+          case 'update':
+            const docRef = doc(db, collectionName, data.id);
+            await updateDoc(docRef, {
+              ...data,
+              updatedAt: serverTimestamp()
+            });
+            break;
+          
+          case 'delete':
+            await deleteDoc(doc(db, collectionName, data.id));
+            break;
+        }
         
         // After successful sync, remove from pending
-        await clearPendingSyncItem(item.timestamp);
+        await clearPendingSyncItem(item);
       } catch (error) {
         console.error(`Failed to sync ${item.type} ${item.action}:`, error);
         // Keep the item in pending sync for retry later

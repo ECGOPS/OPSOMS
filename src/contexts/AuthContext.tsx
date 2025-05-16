@@ -249,8 +249,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         while (retryCount < MAX_RETRIES) {
           try {
             await updateDoc(userRef, {
-              lastActive: serverTimestamp()
-            });
+          lastActive: serverTimestamp()
+        });
             retryCount = 0; // Reset retry count on success
             break;
           } catch (error: any) {

@@ -318,34 +318,19 @@ export function OverheadLineInspectionForm({ inspection, onSubmit, onCancel }: O
     setIsSubmitting(true);
 
     try {
-      // Helper function to clean nested objects and arrays
       const cleanValue = (value: any): any => {
-        if (value === undefined || value === null) return null;
-        if (Array.isArray(value)) {
-          return value.map(item => cleanValue(item));
-        }
-        if (typeof value === 'object') {
-          return Object.fromEntries(
-            Object.entries(value)
-              .map(([key, val]) => [key, cleanValue(val)])
-              .filter(([_, val]) => val !== undefined)
-          );
-        }
+        if (value === null || value === undefined || value === "") return undefined;
+        if (typeof value === "object" && Object.keys(value).length === 0) return undefined;
         return value;
       };
 
-      // Clean up the data by removing undefined values and providing defaults
       const cleanData = {
         ...formData,
-        items: formData.items || [],
-        inspector: formData.inspector || { name: "", designation: "" },
-        region: formData.region,
-        district: formData.district,
-        createdAt: new Date().toISOString(),
+        date: formData.date || new Date().toISOString().split('T')[0],
+        time: formData.time || new Date().toTimeString().slice(0, 5),
         updatedAt: new Date().toISOString()
       };
 
-      // Remove any remaining undefined values
       const finalData = Object.fromEntries(
         Object.entries(cleanData)
           .map(([key, value]) => [key, cleanValue(value)])
@@ -353,8 +338,22 @@ export function OverheadLineInspectionForm({ inspection, onSubmit, onCancel }: O
       ) as OverheadLineInspection;
 
       if (inspection) {
-        await updateOverheadLineInspection(inspection.id, finalData);
-        toast({ title: "Success", description: "Inspection updated successfully" });
+        try {
+          await updateOverheadLineInspection(inspection.id, finalData);
+          toast({ title: "Success", description: "Inspection updated successfully" });
+        } catch (error) {
+          if (error instanceof Error && error.message.includes("not found")) {
+            // If the inspection was not found, create a new one instead
+            const { id, ...dataWithoutId } = finalData;
+            await addOverheadLineInspection(dataWithoutId);
+            toast({ 
+              title: "Success", 
+              description: "Inspection was not found and has been recreated" 
+            });
+          } else {
+            throw error;
+          }
+        }
       } else {
         const { id, ...dataWithoutId } = finalData;
         await addOverheadLineInspection(dataWithoutId);

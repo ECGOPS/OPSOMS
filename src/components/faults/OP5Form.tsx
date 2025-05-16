@@ -878,14 +878,14 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
             
             <TabsContent value="calculations" className="pt-4 sm:pt-6">
               <div className="space-y-4 sm:space-y-8">
-                <div className="space-y-2">
-                  <Label htmlFor="mttr" className="font-medium text-sm">MTTR (Mean Time To Repair)</Label>
-                  <div className="bg-muted/50 rounded-md p-2 sm:p-3 text-sm border border-muted">
-                    {mttr !== null 
-                      ? formatDuration(mttr)
-                      : "Not calculated yet"}
+                  <div className="space-y-2">
+                    <Label htmlFor="mttr" className="font-medium text-sm">MTTR (Mean Time To Repair)</Label>
+                    <div className="bg-muted/50 rounded-md p-2 sm:p-3 text-sm border border-muted">
+                      {mttr !== null 
+                        ? formatDuration(mttr)
+                        : "Not calculated yet"}
+                    </div>
                   </div>
-                </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="customerLostHours" className="font-medium text-sm">Customer Lost Hours</Label>
@@ -903,7 +903,7 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
                       <div className="font-medium text-sm">Rural Population</div>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
                         <div className="bg-muted/50 rounded-md p-2 sm:p-3 text-sm border border-muted">
-                          <div className="font-medium">SAIDI</div>
+                      <div className="font-medium">SAIDI</div>
                           <div>{(reliabilityIndices.rural.saidi ?? 0).toFixed(2)}</div>
                         </div>
                         <div className="bg-muted/50 rounded-md p-2 sm:p-3 text-sm border border-muted">
@@ -925,7 +925,7 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
                           <div>{(reliabilityIndices.urban.saidi ?? 0).toFixed(2)}</div>
                         </div>
                         <div className="bg-muted/50 rounded-md p-2 sm:p-3 text-sm border border-muted">
-                          <div className="font-medium">SAIFI</div>
+                      <div className="font-medium">SAIFI</div>
                           <div>{(reliabilityIndices.urban.saifi ?? 0).toFixed(2)}</div>
                         </div>
                         <div className="bg-muted/50 rounded-md p-2 sm:p-3 text-sm border border-muted">
@@ -947,7 +947,7 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
                           <div>{(reliabilityIndices.metro.saifi ?? 0).toFixed(2)}</div>
                         </div>
                         <div className="bg-muted/50 rounded-md p-2 sm:p-3 text-sm border border-muted">
-                          <div className="font-medium">CAIDI</div>
+                      <div className="font-medium">CAIDI</div>
                           <div>{(reliabilityIndices.metro.caidi ?? 0).toFixed(2)}</div>
                         </div>
                       </div>

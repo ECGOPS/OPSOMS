@@ -86,8 +86,8 @@ const resetFirestoreConnection = async () => {
     await new Promise(resolve => setTimeout(resolve, 100));
     
     try {
-      await disableNetwork(db);
-      console.log('[Firebase] Network disabled');
+    await disableNetwork(db);
+    console.log('[Firebase] Network disabled');
     } catch (disableError) {
       console.warn('[Firebase] Error disabling network:', disableError);
       // Continue anyway as the network might already be disabled
@@ -97,8 +97,8 @@ const resetFirestoreConnection = async () => {
     await new Promise(resolve => setTimeout(resolve, 1000));
     
     try {
-      await enableNetwork(db);
-      console.log('[Firebase] Network re-enabled');
+    await enableNetwork(db);
+    console.log('[Firebase] Network re-enabled');
     } catch (enableError) {
       console.error('[Firebase] Error enabling network:', enableError);
       // If we can't re-enable the network, we should probably reload the page

@@ -1,4 +1,5 @@
 import { InspectionItem } from './types';
+import { BaseRecord } from '../utils/db';
 
 export interface FeederLeg {
   id: string;
@@ -8,8 +9,7 @@ export interface FeederLeg {
   neutralCurrent: number | '';
 }
 
-export interface LoadMonitoringData {
-  id: string;
+export interface LoadMonitoringData extends BaseRecord {
   date: string;
   time: string;
   regionId: string;
@@ -52,8 +52,6 @@ export interface LoadMonitoringData {
     id: string;
     name: string;
   };
-
-  updatedAt?: string;
 }
 
 export type ConditionStatus = 'good' | 'bad';

@@ -273,7 +273,7 @@ export default function DashboardPage() {
     // Calculate pagination
     const startIndex = (currentPage - 1) * pageSize;
     const endIndex = startIndex + pageSize;
-    
+
     return filteredFaults.slice(startIndex, endIndex);
   }, [activeTab, faults.op5Faults, faults.controlOutages, currentPage, pageSize]);
 
@@ -427,11 +427,11 @@ export default function DashboardPage() {
                   {paginatedFaults.map(fault => {
                     const isOP5Fault = faults.op5Faults.some(f => f.id === fault.id);
                     return (
-                      <FaultCard 
+                    <FaultCard 
                         key={`${activeTab}-${fault.id}`} 
-                        fault={fault} 
+                      fault={fault} 
                         type={isOP5Fault ? "op5" : "control"} 
-                      />
+                    />
                     );
                   })}
                 </div>

@@ -46,7 +46,7 @@ const formatDateForInput = (dateString: string | null | undefined): string => {
 
 export default function EditControlOutagePage() {
   const { id } = useParams<{ id: string }>();
-  const { controlOutages, updateControlOutage, regions, districts } = useData();
+  const { controlSystemOutages, updateControlSystemOutage, regions, districts } = useData();
   const { user } = useAuth();
   const navigate = useNavigate();
   
@@ -63,8 +63,13 @@ export default function EditControlOutagePage() {
 
   // Fetch outage data
   useEffect(() => {
+    if (!controlSystemOutages) {
+      setIsLoading(true);
+      return;
+    }
+
     if (id) {
-      const fetchedOutage = controlOutages.find(o => o.id === id);
+      const fetchedOutage = controlSystemOutages.find(o => o.id === id);
       if (fetchedOutage) {
         setOutage(fetchedOutage);
         setFormData({
@@ -84,7 +89,7 @@ export default function EditControlOutagePage() {
       navigate("/dashboard"); // Redirect if no ID
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, navigate]); // Removed controlOutages to prevent loop if context updates unnecessarily
+  }, [id, navigate, controlSystemOutages]);
 
   // Calculate metrics in real-time
   useEffect(() => {
@@ -138,7 +143,7 @@ export default function EditControlOutagePage() {
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!outage || typeof updateControlOutage !== 'function') { toast.error("Cannot submit: Component not ready."); return; }
+    if (!outage || typeof updateControlSystemOutage !== 'function') { toast.error("Cannot submit: Component not ready."); return; }
     if (!formData.regionId || !formData.districtId) { toast.error("Please select region and district"); return; }
     if (!formData.occurrenceDate) { toast.error("Occurrence Date is required."); return; }
     if (formData.loadMW === null || formData.loadMW <= 0) { toast.error("Load (MW) must be a positive number."); return; }
@@ -165,17 +170,18 @@ export default function EditControlOutagePage() {
         districtId: formData.districtId,
         occurrenceDate: formattedOccurrenceDate,
         restorationDate: formattedRestorationDate,
-        faultType: formData.faultType,
+        faultType: formData.faultType as FaultType,
         specificFaultType: formData.specificFaultType,
         reason: formData.reason,
         controlPanelIndications: formData.controlPanelIndications,
         areaAffected: formData.areaAffected,
-        loadMW: formData.loadMW, // loadMW is required and validated above
-        unservedEnergyMWh: finalUnservedEnergy, // Submit calculated value
+        loadMW: formData.loadMW,
+        unservedEnergyMWh: finalUnservedEnergy,
         customersAffected: formData.customersAffected || { rural: 0, urban: 0, metro: 0 },
+        status: formData.restorationDate ? 'resolved' : 'active'
       };
 
-      await updateControlOutage(outage.id, formDataToSubmit);
+      await updateControlSystemOutage(outage.id, formDataToSubmit);
       toast.success("Control System Outage updated successfully");
       navigate("/dashboard");
     } catch (error) {

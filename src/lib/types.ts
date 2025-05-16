@@ -1,6 +1,7 @@
 import { type ClassValue } from "clsx";
 import { LoadMonitoringData } from "./asset-types";
 import { DateRange } from "react-day-picker";
+import { BaseRecord } from '../utils/db';
 
 export type UserRole = "district_engineer" | "regional_engineer" | "global_engineer" | "technician" | "system_admin" | null;
 
@@ -134,57 +135,47 @@ export interface BaseAsset {
   createdBy: string;
 }
 
-export interface OP5Fault {
-  id: string;
-  date: string;
-  region: string;
-  district: string;
-  regionId: string;
-  districtId: string;
-  description: string;
-  materialsUsed: {
-    id: string;
-    type: string;
-    details: {
-      rating?: string;
-      type?: string;
-      description?: string;
-    };
-  }[];
+export interface OP5Fault extends BaseRecord {
+  faultType: string;
+  substationName: string;
+  substationNo: string;
   occurrenceDate: string;
   restorationDate?: string;
   repairDate?: string;
-  faultType: string;
-  specificFaultType: string;
-  faultLocation: string;
-  affectedPopulation: {
+  description: string;
+  status: 'active' | 'resolved';
+  mttr?: number;
+  regionId: string;
+  region: string;
+  districtId: string;
+  district: string;
+  affectedPopulation?: {
     rural: number;
     urban: number;
     metro: number;
   };
-  mttr: number;
-  reliabilityIndices: {
-    saidi: number;
-    saifi: number;
-    caidi: number;
-  };
-  status: "active" | "resolved";
-  createdAt: string;
-  updatedAt: string;
-  createdBy: string;
+  clientId?: string;
 }
 
-export interface ControlSystemOutage extends BaseAsset {
+export interface ControlSystemOutage extends BaseRecord {
   regionId: string;
   districtId: string;
-  outageDescription: string;
   occurrenceDate: string;
-  restorationDate: string | null;
-  status: "active" | "resolved";
-  system: string;
+  restorationDate?: string;
   faultType: FaultType;
+  specificFaultType?: UnplannedFaultType | EmergencyFaultType;
+  reason?: string;
+  controlPanelIndications?: string;
+  areaAffected?: string;
   loadMW: number;
-  unservedEnergyMWh: number;
+  unservedEnergyMWh?: number;
+  customersAffected?: {
+    rural: number;
+    urban: number;
+    metro: number;
+  };
+  status: 'active' | 'resolved';
+  clientId?: string;
 }
 
 // VIT Asset Types
@@ -406,6 +397,7 @@ export type PoleType = "CP" | "WP" | "SP" | "ST"; // CP - Concrete, WP - Wood, S
 
 export interface OverheadLineInspection {
   id: string;
+  originalOfflineId?: string;
   createdAt: string;
   updatedAt: string;
   date?: string;

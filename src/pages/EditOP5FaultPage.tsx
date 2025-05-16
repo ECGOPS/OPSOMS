@@ -176,8 +176,12 @@ export default function EditOP5FaultPage() {
       districtId
     } = formData;
     
-    // Log input strings for calculation
-    // console.log("[Calc Effect] Date Strings from formData:", { occStr, repStr, resStr });
+    // Debug logging for MTTR calculation
+    console.log("[MTTR Debug] Input dates:", { 
+      occurrenceDate: occStr,
+      repairDate: repStr,
+      restorationDate: resStr
+    });
 
     let duration: number | null = null;
     let mttrValue: number | null = null;
@@ -192,22 +196,67 @@ export default function EditOP5FaultPage() {
     let repDate: Date | null = null;
     let resDate: Date | null = null;
 
-    // Safely parse dates, logging potential issues
-    if (occStr) { try { occDate = new Date(occStr); if(isNaN(occDate.getTime())) { /* console.warn("[Calc Effect] Invalid Occurrence Date string:", occStr); */ occDate = null; } } catch { occDate = null; } }
-    if (repStr) { try { repDate = new Date(repStr); if(isNaN(repDate.getTime())) { /* console.warn("[Calc Effect] Invalid Repair Date string:", repStr); */ repDate = null; } } catch { repDate = null; } }
-    if (resStr) { try { resDate = new Date(resStr); if(isNaN(resDate.getTime())) { /* console.warn("[Calc Effect] Invalid Restoration Date string:", resStr); */ resDate = null; } } catch { resDate = null; } }
+    // Safely parse dates with debug logging
+    if (occStr) { 
+      try { 
+        occDate = new Date(occStr); 
+        if(isNaN(occDate.getTime())) { 
+          console.warn("[MTTR Debug] Invalid Occurrence Date:", occStr);
+          occDate = null; 
+        } 
+      } catch (error) { 
+        console.error("[MTTR Debug] Error parsing Occurrence Date:", error);
+        occDate = null; 
+      } 
+    }
+    if (repStr) { 
+      try { 
+        repDate = new Date(repStr); 
+        if(isNaN(repDate.getTime())) { 
+          console.warn("[MTTR Debug] Invalid Repair Date:", repStr);
+          repDate = null; 
+        } 
+      } catch (error) { 
+        console.error("[MTTR Debug] Error parsing Repair Date:", error);
+        repDate = null; 
+      } 
+    }
+    if (resStr) { 
+      try { 
+        resDate = new Date(resStr); 
+        if(isNaN(resDate.getTime())) { 
+          console.warn("[MTTR Debug] Invalid Restoration Date:", resStr);
+          resDate = null; 
+        } 
+      } catch (error) { 
+        console.error("[MTTR Debug] Error parsing Restoration Date:", error);
+        resDate = null; 
+      } 
+    }
     
-    // Log parsed Date objects
-    // console.log("[Calc Effect] Parsed Date Objects:", { occDate, repDate, resDate });
+    // Debug logging for parsed dates
+    console.log("[MTTR Debug] Parsed dates:", { 
+      occurrenceDate: occDate?.toISOString(),
+      repairDate: repDate?.toISOString(),
+      restorationDate: resDate?.toISOString()
+    });
 
     // Calculate duration only if both dates are valid and in correct order
     if (occDate && resDate && resDate > occDate) {
-       duration = calculateOutageDuration(occStr!, resStr!); // Pass original strings
+       duration = calculateOutageDuration(occStr!, resStr!);
+       console.log("[MTTR Debug] Calculated duration:", duration);
     }
 
     // Calculate MTTR only if both dates are valid and in correct order
     if (occDate && repDate && repDate > occDate) {
-        mttrValue = calculateMTTR(occStr!, repStr!); // Pass original strings
+        mttrValue = calculateMTTR(occStr!, repStr!);
+        console.log("[MTTR Debug] Calculated MTTR:", mttrValue);
+    } else {
+        console.log("[MTTR Debug] MTTR not calculated because:", {
+            hasOccurrenceDate: !!occDate,
+            hasRepairDate: !!repDate,
+            isRepairAfterOccurrence: occDate && repDate ? repDate > occDate : false
+        });
     }
     
     // Calculate lost hours if duration is valid and population exists
