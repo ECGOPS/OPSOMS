@@ -15,12 +15,21 @@ export default function LoginPage() {
   }, [isAuthenticated, navigate]);
   
   return (
-    <Layout>
-      <div className="container mx-auto py-10 px-4">
-        <div className="max-w-md mx-auto">
-          <LoginForm />
+    <div className="relative min-h-screen">
+      <div 
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+        style={{ 
+          backgroundImage: "url('/images/ops.png')",
+          zIndex: -1
+        }}
+      />
+      <Layout>
+        <div className="container mx-auto py-10 px-4">
+          <div className="max-w-md mx-auto">
+            <LoginForm />
+          </div>
         </div>
-      </div>
-    </Layout>
+      </Layout>
+    </div>
   );
 }
