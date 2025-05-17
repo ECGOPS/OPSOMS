@@ -163,18 +163,24 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
   
   // Calculate metrics when dates or load changes
   useEffect(() => {
-    if (occurrenceDate && restorationDate && loadMW > 0) {
-      // Ensure restoration date is after occurrence date
-      if (new Date(restorationDate) <= new Date(occurrenceDate)) {
-        toast.error("Restoration date must be after occurrence date");
-        return;
+    if (occurrenceDate) {
+      // Validate restoration date if it exists
+      if (restorationDate) {
+        if (new Date(restorationDate) <= new Date(occurrenceDate)) {
+          toast.error("Restoration date must be after occurrence date");
+          setRestorationDate("");
+          return;
+        }
+
+        // Calculate metrics only if dates are valid
+        if (loadMW > 0) {
+          const duration = calculateDurationHours(occurrenceDate, restorationDate);
+          setDurationHours(duration);
+          
+          const unservedEnergy = calculateUnservedEnergy(loadMW, duration);
+          setUnservedEnergyMWh(unservedEnergy);
+        }
       }
-      
-      const duration = calculateDurationHours(occurrenceDate, restorationDate);
-      setDurationHours(duration);
-      
-      const unservedEnergy = calculateUnservedEnergy(loadMW, duration);
-      setUnservedEnergyMWh(unservedEnergy);
     }
   }, [occurrenceDate, restorationDate, loadMW]);
   

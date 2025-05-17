@@ -63,6 +63,7 @@ import {
 } from '../utils/db';
 import { openDB } from "idb";
 import { deleteDB } from "idb";
+import { FaultService } from '@/services/FaultService';
 
 const DB_NAME = 'ecg-oms-db';
 const DB_VERSION = 3;
@@ -1823,22 +1824,25 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   // Add OP5 fault functions
   const addOP5Fault = async (fault: Omit<OP5Fault, "id">) => {
     try {
-      const docRef = await addDoc(collection(db, "op5Faults"), {
-        ...fault,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
-      
-      const newFault: OP5Fault = {
-        ...fault,
-        id: docRef.id,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-      
-      setOP5Faults(prev => [...prev, newFault]);
-      toast.success("Fault saved successfully");
-      return docRef.id;
+      // Use FaultService to create the fault, which handles adding createdBy/updatedBy
+      const faultService = FaultService.getInstance();
+      const docId = await faultService.createOP5Fault(fault);
+
+      // Fetch the newly created fault to get the complete data including timestamps and user info
+      const docSnap = await getDoc(doc(db, "op5Faults", docId));
+      if (docSnap.exists()) {
+        const newFault = { id: docSnap.id, ...docSnap.data() } as OP5Fault;
+         // Update the local state with the full fault data
+        // setOP5Faults(prev => [...prev, newFault]); // Remove this line
+        toast.success("Fault saved successfully");
+        return docId;
+      } else {
+        // This case should ideally not happen if creation was successful
+        console.error("Error fetching newly created fault:", docId);
+        toast.error("Failed to retrieve full fault data after saving");
+        return docId; // Return the ID even if fetching failed
+      }
+
     } catch (error) {
       console.error("Error saving fault:", error);
       toast.error("Failed to save fault");

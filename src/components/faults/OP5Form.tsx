@@ -141,64 +141,80 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
 
   // Calculate metrics when dates change
   useEffect(() => {
-    if (occurrenceDate && restorationDate) {
-      // Ensure restoration date is after occurrence date
-      if (new Date(restorationDate) <= new Date(occurrenceDate)) {
-        toast.error("Restoration date must be after occurrence date");
-        return;
+    if (occurrenceDate) {
+      // Validate repair date if it exists
+      if (repairDate) {
+        if (new Date(repairDate) <= new Date(occurrenceDate)) {
+          toast.error("Repair date must be after occurrence date");
+          setRepairDate("");
+          return;
+        }
       }
 
-      // Ensure restoration date is after repair date if repair date exists
-      if (repairDate && new Date(restorationDate) <= new Date(repairDate)) {
-        toast.error("Restoration date must be after repair date");
-        return;
+      // Validate restoration date if it exists
+      if (restorationDate) {
+        if (new Date(restorationDate) <= new Date(occurrenceDate)) {
+          toast.error("Restoration date must be after occurrence date");
+          setRestorationDate("");
+          return;
+        }
+
+        // Ensure restoration date is after repair date if repair date exists
+        if (repairDate && new Date(restorationDate) <= new Date(repairDate)) {
+          toast.error("Restoration date must be after repair date");
+          setRestorationDate("");
+          return;
+        }
       }
-      
-      const duration = calculateOutageDuration(occurrenceDate, restorationDate);
-      setOutageDuration(duration);
-      
-      // Calculate MTTR if repair date is available
-      if (repairDate && restorationDate) {
-        const mttr = calculateMTTR(repairDate, restorationDate);
-        setMttr(mttr);
-      }
-      
-      // Calculate customer lost hours
-      const lostHours = calculateCustomerLostHours(duration, {
-        rural: ruralAffected || 0,
-        urban: urbanAffected || 0,
-        metro: metroAffected || 0
-      });
-      setCustomerLostHours(lostHours);
-      
-      const selectedDistrict = districts.find(d => d.id === districtId);
-      if (selectedDistrict?.population) {
-        const totalPopulation = (selectedDistrict.population.rural || 0) + 
-                              (selectedDistrict.population.urban || 0) + 
-                              (selectedDistrict.population.metro || 0);
+
+      // Calculate metrics only if dates are valid
+      if (restorationDate) {
+        const duration = calculateOutageDuration(occurrenceDate, restorationDate);
+        setOutageDuration(duration);
         
-        if (totalPopulation > 0) {
-          setReliabilityIndices({
-            rural: calculateReliabilityIndicesByType(
-              duration,
-              { rural: ruralAffected || 0, urban: 0, metro: 0 },
-              totalPopulation
-            ),
-            urban: calculateReliabilityIndicesByType(
-              duration,
-              { rural: 0, urban: urbanAffected || 0, metro: 0 },
-              totalPopulation
-            ),
-            metro: calculateReliabilityIndicesByType(
-              duration,
-              { rural: 0, urban: 0, metro: metroAffected || 0 },
-              totalPopulation
-            ),
-          });
+        // Calculate MTTR if repair date is available
+        if (repairDate) {
+          const mttr = calculateMTTR(repairDate, restorationDate);
+          setMttr(mttr);
+        }
+        
+        // Calculate customer lost hours
+        const lostHours = calculateCustomerLostHours(duration, {
+          rural: ruralAffected || 0,
+          urban: urbanAffected || 0,
+          metro: metroAffected || 0
+        });
+        setCustomerLostHours(lostHours);
+        
+        const selectedDistrict = districts.find(d => d.id === districtId);
+        if (selectedDistrict?.population) {
+          const totalPopulation = (selectedDistrict.population.rural || 0) + 
+                                (selectedDistrict.population.urban || 0) + 
+                                (selectedDistrict.population.metro || 0);
+          
+          if (totalPopulation > 0) {
+            setReliabilityIndices({
+              rural: calculateReliabilityIndicesByType(
+                duration,
+                { rural: ruralAffected || 0, urban: 0, metro: 0 },
+                totalPopulation
+              ),
+              urban: calculateReliabilityIndicesByType(
+                duration,
+                { rural: 0, urban: urbanAffected || 0, metro: 0 },
+                totalPopulation
+              ),
+              metro: calculateReliabilityIndicesByType(
+                duration,
+                { rural: 0, urban: 0, metro: metroAffected || 0 },
+                totalPopulation
+              ),
+            });
+          }
         }
       }
     }
-  }, [occurrenceDate, repairDate, restorationDate, ruralAffected, urbanAffected, metroAffected, districtId, districts]);
+  }, [occurrenceDate, repairDate, restorationDate, districtId, districts, ruralAffected, urbanAffected, metroAffected]);
   
   // Reset specific fault type when fault type changes
   useEffect(() => {

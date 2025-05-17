@@ -1047,6 +1047,7 @@ export default function AnalyticsPage() {
   const showFaultDetails = (fault: any) => {
     setSelectedFault(fault);
     setDetailsOpen(true);
+    console.log('Selected fault:', fault);
   };
   
   // Function to export only the recent faults shown in the overview table
@@ -1413,7 +1414,7 @@ export default function AnalyticsPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl sm:text-3xl font-bold text-blue-900">
-                {filteredFaults.filter((f: any) => 'faultLocation' in f).length}
+                {filteredFaults.filter((f: any) => 'substationNo' in f).length}
               </div>
               <p className="text-xs text-blue-700">
                 {filterRegion || filterDistrict ? `In selected area` : 'Across all regions'}
@@ -1891,15 +1892,16 @@ export default function AnalyticsPage() {
           <DialogContent className="max-w-md sm:max-w-2xl max-h-[80vh] overflow-y-auto">
             {selectedFault && (
               <>
+                {/* {console.log('Selected Fault Data:', selectedFault)} */}
                 <DialogHeader>
                   <DialogTitle className="flex items-center gap-2">
                     {selectedFault.faultType === 'Unplanned' && <AlertTriangle className="h-5 w-5 text-orange-500" />}
                     {selectedFault.faultType === 'Planned' && <Calendar className="h-5 w-5 text-blue-500" />}
                     {selectedFault.faultType === 'Emergency' && <AlertTriangle className="h-5 w-5 text-red-500" />}
                     {selectedFault.faultType === 'Load Shedding' && <ChartIcon className="h-5 w-5 text-purple-500" />}
-                    {'faultLocation' in selectedFault ? 'OP5 Fault Details' : 'Control System Outage Details'}
+                    {'loadMW' in selectedFault ? 'Control System Outage Details' : 'OP5 Fault Details'}
                   </DialogTitle>
-                  <DialogDescription>
+                  <DialogDescription asChild>
                     <div className="flex items-center gap-1 mt-1">
                       <MapPin className="h-4 w-4 text-muted-foreground" />
                       <span>{getRegionName(selectedFault.regionId)}, {getDistrictName(selectedFault.districtId)}</span>
@@ -2001,6 +2003,28 @@ export default function AnalyticsPage() {
                           <p className="text-sm">{selectedFault.unservedEnergyMWh.toFixed(2)} MWh</p>
                         </div>
                       )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-6">
+                  <h3 className="text-sm font-medium mb-2">Audit Information</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <span className="text-xs text-muted-foreground">Created By</span>
+                      <p className="text-sm">{getUserNameById(selectedFault.createdBy)}</p>
+                    </div>
+                    <div>
+                      <span className="text-xs text-muted-foreground">Created At</span>
+                      <p className="text-sm">{formatSafeDate(selectedFault.createdAt)}</p>
+                    </div>
+                    <div>
+                      <span className="text-xs text-muted-foreground">Updated By</span>
+                      <p className="text-sm">{getUserNameById(selectedFault.updatedBy)}</p>
+                    </div>
+                    <div>
+                      <span className="text-xs text-muted-foreground">Updated At</span>
+                      <p className="text-sm">{formatSafeDate(selectedFault.updatedAt)}</p>
                     </div>
                   </div>
                 </div>

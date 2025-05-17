@@ -166,6 +166,8 @@ export interface OP5Fault extends BaseRecord {
       description?: string;
     };
   }[];
+  createdBy: string;
+  updatedBy: string;
 }
 
 export interface ControlSystemOutage extends BaseRecord {
