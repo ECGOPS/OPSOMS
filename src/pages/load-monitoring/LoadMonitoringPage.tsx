@@ -8,6 +8,9 @@ import moment from 'moment';
 import { getFirestore, collection, query, where, orderBy, limit, startAt, getCountFromServer, getDocs, startAfter } from 'firebase/firestore';
 import { useAuth } from '@/contexts/AuthContext';
 import { Label } from '@/components/ui/label';
+import { LoadMonitoringService } from '@/services/LoadMonitoringService';
+import { Link } from 'react-router-dom';
+import { toast } from 'react-hot-toast';
 
 const { Option } = Select;
 
@@ -46,6 +49,10 @@ const LoadMonitoringPage: React.FC = () => {
   // Cache for frequently accessed data
   const [dataCache, setDataCache] = useState<{ [key: string]: LoadMonitoringData[] }>({});
   const [totalCountCache, setTotalCountCache] = useState<{ [key: string]: number }>({});
+
+  // Online/offline status
+  const [isOnline, setIsOnline] = useState(true);
+  const [pendingSync, setPendingSync] = useState(false);
 
   // Build cache key based on current filters
   const getCacheKey = useCallback(() => {
@@ -269,6 +276,55 @@ const LoadMonitoringPage: React.FC = () => {
     });
   };
 
+  // Add effect to handle online/offline status
+  useEffect(() => {
+    const loadMonitoringService = LoadMonitoringService.getInstance();
+    setIsOnline(loadMonitoringService.isInternetAvailable());
+
+    const handleOnlineStatusChange = () => {
+      const isOnlineNow = loadMonitoringService.isInternetAvailable();
+      setIsOnline(isOnlineNow);
+      
+      if (isOnlineNow) {
+        loadMonitoringService.syncLoadMonitoringRecords();
+      }
+    };
+
+    window.addEventListener('online', handleOnlineStatusChange);
+    window.addEventListener('offline', handleOnlineStatusChange);
+
+    return () => {
+      window.removeEventListener('online', handleOnlineStatusChange);
+      window.removeEventListener('offline', handleOnlineStatusChange);
+    };
+  }, []);
+
+  // Add effect to handle pending sync status
+  useEffect(() => {
+    const loadMonitoringService = LoadMonitoringService.getInstance();
+    
+    const checkPendingSync = async () => {
+      const pendingRecords = await loadMonitoringService.getPendingLoadMonitoringRecords();
+      setPendingSync(pendingRecords.length > 0);
+    };
+
+    checkPendingSync();
+    const interval = setInterval(checkPendingSync, 5000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleSync = async () => {
+    try {
+      const loadMonitoringService = LoadMonitoringService.getInstance();
+      await loadMonitoringService.syncLoadMonitoringRecords();
+      toast.success('Load monitoring records synced successfully');
+    } catch (error) {
+      console.error('Error syncing load monitoring records:', error);
+      toast.error('Failed to sync load monitoring records');
+    }
+  };
+
   const columns = [
     {
       title: 'Date',
@@ -319,10 +375,38 @@ const LoadMonitoringPage: React.FC = () => {
   return (
     <AccessControlWrapper type="asset">
       <div className="container mx-auto p-4">
-        <div style={{ marginBottom: '16px' }}>
-          <Button type="primary" onClick={handleAdd}>
-            Add Load Monitoring Record
-          </Button>
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">Load Monitoring</h1>
+          <div className="flex items-center gap-4">
+            {!isOnline && (
+              <div className="flex items-center gap-2 text-yellow-600">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <span>You are offline</span>
+              </div>
+            )}
+            {pendingSync && (
+              <button
+                onClick={handleSync}
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Sync Now
+              </button>
+            )}
+            <Link
+              to="/load-monitoring/create"
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Add New Record
+            </Link>
+          </div>
         </div>
 
         <Table

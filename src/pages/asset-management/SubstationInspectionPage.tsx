@@ -15,10 +15,12 @@ import {
 import { v4 as uuidv4 } from "uuid";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
-import { SubstationInspection, ConditionStatus, InspectionItem } from "@/lib/types";
+import { ConditionStatus, InspectionItem } from "@/lib/types";
+import { SubstationInspection } from "@/lib/asset-types";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
 import { useNavigate, useParams } from "react-router-dom";
+import { SubstationInspectionService } from "@/services/SubstationInspectionService";
 
 interface Category {
   id: string;
@@ -31,33 +33,50 @@ export default function SubstationInspectionPage() {
   const { regions, districts, saveInspection, getSavedInspection, savedInspections } = useData();
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
+  const inspectionService = SubstationInspectionService.getInstance();
   
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isOnline, setIsOnline] = useState(inspectionService.isInternetAvailable());
   const [regionId, setRegionId] = useState<string>("");
   const [districtId, setDistrictId] = useState<string>("");
-  const [formData, setFormData] = useState<SubstationInspection>({
-    id: uuidv4(),
-    region: "",
-    regionId: "",
-    district: "",
-    districtId: "",
-    substationName: "",
+  const [formData, setFormData] = useState({
+    date: new Date().toISOString().split('T')[0],
+    inspectionDate: new Date().toISOString().split('T')[0],
     substationNo: "",
-    type: "indoor",
-    date: new Date().toISOString(),
-    inspectionDate: new Date().toISOString(),
+    substationName: "",
+    type: "indoor" as "indoor" | "outdoor",
+    location: "",
+    voltageLevel: "",
+    status: "Pending",
+    remarks: "",
+    cleanDustFree: "",
+    protectionButtonEnabled: "",
+    recloserButtonEnabled: "",
+    groundEarthButtonEnabled: "",
+    acPowerOn: "",
+    batteryPowerLow: "",
+    handleLockOn: "",
+    remoteButtonEnabled: "",
+    gasLevelLow: "",
+    earthingArrangementAdequate: "",
+    noFusesBlown: "",
+    noDamageToBushings: "",
+    noDamageToHVConnections: "",
+    insulatorsClean: "",
+    paintworkAdequate: "",
+    ptFuseLinkIntact: "",
+    noCorrosion: "",
+    silicaGelCondition: "",
+    correctLabelling: "",
+    region: "",
+    district: "",
+    regionId: "",
+    districtId: "",
     items: [],
     generalBuilding: [],
     controlEquipment: [],
     powerTransformer: [],
-    outdoorEquipment: [],
-    remarks: "",
-    createdBy: user?.name || "",
-    createdAt: new Date().toISOString(),
-    inspectedBy: user?.name || "",
-    location: "",
-    voltageLevel: "",
-    status: "Pending"
+    outdoorEquipment: []
   });
   const [categories, setCategories] = useState<Category[]>([]);
 
@@ -213,10 +232,34 @@ export default function SubstationInspectionPage() {
       const inspection = getSavedInspection(id);
       if (inspection) {
         // Set formData without items array to avoid duplication
-        const { items, ...formDataWithoutItems } = inspection;
+        const { items, id, ...formDataWithoutItems } = inspection;
         setFormData({
           ...formDataWithoutItems,
-          id: inspection.id,
+          substationName: formDataWithoutItems.substationName || "",
+          type: formDataWithoutItems.type || "indoor",
+          location: formDataWithoutItems.location || "",
+          voltageLevel: formDataWithoutItems.voltageLevel || "",
+          status: formDataWithoutItems.status || "Pending",
+          remarks: formDataWithoutItems.remarks || "",
+          cleanDustFree: formDataWithoutItems.cleanDustFree || "",
+          protectionButtonEnabled: formDataWithoutItems.protectionButtonEnabled || "",
+          recloserButtonEnabled: formDataWithoutItems.recloserButtonEnabled || "",
+          groundEarthButtonEnabled: formDataWithoutItems.groundEarthButtonEnabled || "",
+          acPowerOn: formDataWithoutItems.acPowerOn || "",
+          batteryPowerLow: formDataWithoutItems.batteryPowerLow || "",
+          handleLockOn: formDataWithoutItems.handleLockOn || "",
+          remoteButtonEnabled: formDataWithoutItems.remoteButtonEnabled || "",
+          gasLevelLow: formDataWithoutItems.gasLevelLow || "",
+          earthingArrangementAdequate: formDataWithoutItems.earthingArrangementAdequate || "",
+          noFusesBlown: formDataWithoutItems.noFusesBlown || "",
+          noDamageToBushings: formDataWithoutItems.noDamageToBushings || "",
+          noDamageToHVConnections: formDataWithoutItems.noDamageToHVConnections || "",
+          insulatorsClean: formDataWithoutItems.insulatorsClean || "",
+          paintworkAdequate: formDataWithoutItems.paintworkAdequate || "",
+          ptFuseLinkIntact: formDataWithoutItems.ptFuseLinkIntact || "",
+          noCorrosion: formDataWithoutItems.noCorrosion || "",
+          silicaGelCondition: formDataWithoutItems.silicaGelCondition || "",
+          correctLabelling: formDataWithoutItems.correctLabelling || "",
           items: [] // Clear items array to avoid duplication
         });
         
@@ -311,8 +354,8 @@ export default function SubstationInspectionPage() {
             { id: `oe-breakers-${uuidv4()}`, name: "Circuit Breakers", status: undefined, remarks: "", category: "outdoor equipment" },
             { id: `oe-switches-${uuidv4()}`, name: "Disconnect Switches", status: undefined, remarks: "", category: "outdoor equipment" },
             { id: `oe-arresters-${uuidv4()}`, name: "Surge Arresters", status: undefined, remarks: "", category: "outdoor equipment" },
-            { id: `oe-grounding-${uuidv4()}`, name: "Grounding System", status: undefined, remarks: "", category: "outdoor equipment" },
-            { id: `oe-fencing-${uuidv4()}`, name: "Fencing", status: undefined, remarks: "", category: "outdoor equipment" },
+            { id: `oe-bushings-${uuidv4()}`, name: "Bushings", status: undefined, remarks: "", category: "outdoor equipment" },
+            { id: `oe-insulators-${uuidv4()}`, name: "Insulators", status: undefined, remarks: "", category: "outdoor equipment" },
           ],
         },
       ];
@@ -343,7 +386,22 @@ export default function SubstationInspectionPage() {
     });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Add online status listener
+  useEffect(() => {
+    const handleOnlineStatusChange = () => {
+      setIsOnline(inspectionService.isInternetAvailable());
+    };
+
+    window.addEventListener('online', handleOnlineStatusChange);
+    window.addEventListener('offline', handleOnlineStatusChange);
+
+    return () => {
+      window.removeEventListener('online', handleOnlineStatusChange);
+      window.removeEventListener('offline', handleOnlineStatusChange);
+    };
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
 
@@ -360,10 +418,15 @@ export default function SubstationInspectionPage() {
       const selectedRegion = regions.find(r => r.id === regionId)?.name || "";
       const selectedDistrict = districts.find(d => d.id === districtId)?.name || "";
       
-      const inspectionData: Omit<SubstationInspection, "id"> = {
+      // Log the form data before creating inspection
+      console.log('Form data before creating inspection:', formData);
+      console.log('Categories data:', categories);
+      
+      const inspectionData: SubstationInspection = {
+        id: uuidv4(),
         region: selectedRegion,
-        district: selectedDistrict,
         regionId: regionId,
+        district: selectedDistrict,
         districtId: districtId,
         date: formData.date || new Date().toISOString().split('T')[0],
         inspectionDate: formData.inspectionDate || new Date().toISOString().split('T')[0],
@@ -371,26 +434,105 @@ export default function SubstationInspectionPage() {
         substationName: formData.substationName || "",
         type: formData.type || "indoor",
         items: [
-          ...inspectionItems.generalBuilding,
-          ...inspectionItems.controlEquipment,
-          ...inspectionItems.powerTransformer,
-          ...inspectionItems.outdoorEquipment
+          ...inspectionItems.generalBuilding.map(item => ({
+            id: item.id || uuidv4(),
+            name: item.name || "",
+            category: item.category || "",
+            status: item.status,
+            remarks: item.remarks || ""
+          })),
+          ...inspectionItems.controlEquipment.map(item => ({
+            id: item.id || uuidv4(),
+            name: item.name || "",
+            category: item.category || "",
+            status: item.status,
+            remarks: item.remarks || ""
+          })),
+          ...inspectionItems.powerTransformer.map(item => ({
+            id: item.id || uuidv4(),
+            name: item.name || "",
+            category: item.category || "",
+            status: item.status,
+            remarks: item.remarks || ""
+          })),
+          ...inspectionItems.outdoorEquipment.map(item => ({
+            id: item.id || uuidv4(),
+            name: item.name || "",
+            category: item.category || "",
+            status: item.status,
+            remarks: item.remarks || ""
+          }))
         ],
-        generalBuilding: inspectionItems.generalBuilding,
-        controlEquipment: inspectionItems.controlEquipment,
-        powerTransformer: inspectionItems.powerTransformer,
-        outdoorEquipment: inspectionItems.outdoorEquipment,
+        generalBuilding: inspectionItems.generalBuilding.map(item => ({
+          id: item.id || uuidv4(),
+          name: item.name || "",
+          category: item.category || "general building",
+          status: item.status,
+          remarks: item.remarks || ""
+        })),
+        controlEquipment: inspectionItems.controlEquipment.map(item => ({
+          id: item.id || uuidv4(),
+          name: item.name || "",
+          category: item.category || "control equipment",
+          status: item.status,
+          remarks: item.remarks || ""
+        })),
+        powerTransformer: inspectionItems.powerTransformer.map(item => ({
+          id: item.id || uuidv4(),
+          name: item.name || "",
+          category: item.category || "power transformer",
+          status: item.status,
+          remarks: item.remarks || ""
+        })),
+        outdoorEquipment: inspectionItems.outdoorEquipment.map(item => ({
+          id: item.id || uuidv4(),
+          name: item.name || "",
+          category: item.category || "outdoor equipment",
+          status: item.status,
+          remarks: item.remarks || ""
+        })),
         remarks: formData.remarks || "",
         createdBy: user?.name || "Unknown",
         createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         inspectedBy: user?.name || "Unknown",
         location: formData.location || "",
         voltageLevel: formData.voltageLevel || "",
-        status: formData.status || "Pending"
+        status: formData.status || "Pending",
+        cleanDustFree: formData.cleanDustFree || "",
+        protectionButtonEnabled: formData.protectionButtonEnabled || "",
+        recloserButtonEnabled: formData.recloserButtonEnabled || "",
+        groundEarthButtonEnabled: formData.groundEarthButtonEnabled || "",
+        acPowerOn: formData.acPowerOn || "",
+        batteryPowerLow: formData.batteryPowerLow || "",
+        handleLockOn: formData.handleLockOn || "",
+        remoteButtonEnabled: formData.remoteButtonEnabled || "",
+        gasLevelLow: formData.gasLevelLow || "",
+        earthingArrangementAdequate: formData.earthingArrangementAdequate || "",
+        noFusesBlown: formData.noFusesBlown || "",
+        noDamageToBushings: formData.noDamageToBushings || "",
+        noDamageToHVConnections: formData.noDamageToHVConnections || "",
+        insulatorsClean: formData.insulatorsClean || "",
+        paintworkAdequate: formData.paintworkAdequate || "",
+        ptFuseLinkIntact: formData.ptFuseLinkIntact || "",
+        noCorrosion: formData.noCorrosion || "",
+        silicaGelCondition: formData.silicaGelCondition || "",
+        correctLabelling: formData.correctLabelling || ""
       };
-      
-      saveInspection(inspectionData);
-      toast.success("Inspection saved successfully");
+
+      // Log the inspection data before saving
+      console.log('Inspection data before saving:', inspectionData);
+
+      if (isOnline) {
+        // If online, save directly to Firestore
+        await saveInspection(inspectionData);
+        toast.success("Inspection saved successfully");
+      } else {
+        // If offline, save to IndexedDB
+        await inspectionService.saveSubstationInspectionOffline(inspectionData, 'create');
+        toast.success("Inspection saved offline. It will be synced when you're back online.");
+      }
+
       navigate("/asset-management/inspection-management");
     } catch (error) {
       console.error("Error saving inspection:", error);
@@ -418,6 +560,11 @@ export default function SubstationInspectionPage() {
             <h1 className="text-3xl font-bold tracking-tight">New Substation Inspection</h1>
             <p className="text-muted-foreground mt-1">
               Record a new inspection for a substation
+              {!isOnline && (
+                <span className="ml-2 text-yellow-600 font-medium">
+                  (Offline Mode)
+                </span>
+              )}
             </p>
           </div>
         </div>

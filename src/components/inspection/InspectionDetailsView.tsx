@@ -27,26 +27,17 @@ export function InspectionDetailsView({
     if (!inspection) return { good: 0, requiresAttention: 0 };
     
     if (isSubstationInspection(inspection)) {
-      const allItems = [
-        ...(inspection.generalBuilding || []),
-        ...(inspection.controlEquipment || []),
-        ...(inspection.powerTransformer || []),
-        ...(inspection.outdoorEquipment || [])
-      ];
+      // Calculate counts directly from inspection.items, handling undefined
+      const goodItems = inspection.items ? inspection.items.filter(item => item?.status === "good").length : 0;
+      const badItems = inspection.items ? inspection.items.filter(item => item?.status === "bad").length : 0;
       
-      return allItems.reduce((acc: { good: number; requiresAttention: number }, item) => {
-        if (item.status === 'good') {
-          acc.good++;
-        } else if (item.status === 'bad') {
-          acc.requiresAttention++;
-        }
-        return acc;
-      }, { good: 0, requiresAttention: 0 });
+      return { good: goodItems, requiresAttention: badItems };
     } else {
       // For overhead line inspections, count items based on their status
+      const itemsWithStatus = inspection.items?.filter(item => item.status) || [];
       return {
-        good: inspection.items?.filter(item => item.status === "good").length || 0,
-        requiresAttention: inspection.items?.filter(item => item.status === "bad").length || 0
+        good: itemsWithStatus.filter(item => item.status === "good").length,
+        requiresAttention: itemsWithStatus.filter(item => item.status === "bad").length
       };
     }
   };

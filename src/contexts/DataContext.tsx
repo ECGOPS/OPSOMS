@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { v4 as uuidv4 } from "uuid";
 import { toast } from "@/components/ui/sonner";
@@ -13,15 +13,14 @@ import {
   VITStatus,
   YesNoOption,
   GoodBadOption,
-  SubstationInspection,
   FaultType,
   InspectionItem,
-  Inspection,
   AffectedPopulation,
   ReliabilityIndices,
-  OverheadLineInspection
+  OverheadLineInspection,
+  ConditionStatus
 } from "@/lib/types";
-import { LoadMonitoringData } from "@/lib/asset-types";
+import { LoadMonitoringData, SubstationInspection } from "@/lib/asset-types";
 import { calculateUnservedEnergy, calculateOutageDuration, calculateMTTR } from "@/utils/calculations";
 import { PermissionService } from '@/services/PermissionService';
 import { db } from "@/config/firebase";
@@ -64,6 +63,8 @@ import {
 import { openDB } from "idb";
 import { deleteDB } from "idb";
 import { FaultService } from '@/services/FaultService';
+import { LoadMonitoringService } from '@/services/LoadMonitoringService';
+import { SubstationInspectionService } from '@/services/SubstationInspectionService';
 
 const DB_NAME = 'ecg-oms-db';
 const DB_VERSION = 3;
@@ -81,6 +82,7 @@ const STORE_NAMES = {
   LOAD_MONITORING: 'loadMonitoring' as StoreName,
   LOAD_MONITORING_CACHE: 'loadMonitoring-cache' as StoreName,
   SUBSTATION_INSPECTIONS: 'substationInspections' as StoreName,
+  SUBSTATION_INSPECTIONS_CACHE: 'substationInspections-cache' as StoreName,
   OVERHEAD_LINE_INSPECTIONS: 'overheadLineInspections' as StoreName,
   OVERHEAD_LINE_INSPECTIONS_CACHE: 'overheadLineInspections-cache' as StoreName,
   PENDING_SYNC: 'pending-sync' as StoreName,
@@ -266,7 +268,7 @@ export interface DataContextType {
   deleteVITInspection: (id: string) => Promise<void>;
   savedInspections: SubstationInspection[];
   setSavedInspections: React.Dispatch<React.SetStateAction<SubstationInspection[]>>;
-  saveInspection: (data: Omit<SubstationInspection, "id">) => Promise<string>;
+  saveInspection: (inspection: SubstationInspection) => Promise<string>;
   updateSubstationInspection: (id: string, updates: Partial<SubstationInspection>) => Promise<void>;
   deleteInspection: (id: string) => Promise<void>;
   updateDistrict: (id: string, updates: Partial<District>) => Promise<void>;
@@ -284,6 +286,8 @@ export interface DataContextType {
   addOverheadLineInspection: (inspection: Omit<OverheadLineInspection, "id">) => Promise<string>;
   updateOverheadLineInspection: (id: string, updates: Partial<OverheadLineInspection>) => Promise<void>;
   deleteOverheadLineInspection: (id: string) => Promise<void>;
+  canEditLoadMonitoring: boolean;
+  canDeleteLoadMonitoring: boolean;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -418,6 +422,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [vitInspections, setVITInspections] = useState<VITInspectionChecklist[]>([]);
   const [savedInspections, setSavedInspections] = useState<SubstationInspection[]>([]);
   const [overheadLineInspections, setOverheadLineInspections] = useState<OverheadLineInspection[]>([]);
+  const [canEditLoadMonitoring, setCanEditLoadMonitoring] = useState(false);
+  const [canDeleteLoadMonitoring, setCanDeleteLoadMonitoring] = useState(false);
+  const inspectionService = SubstationInspectionService.getInstance();
 
   useEffect(() => {
     // Initialize the database when the component mounts
@@ -861,53 +868,63 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!user) return;
 
-    let q = query(collection(db, "substationInspections"));
+    let q = query(collection(db, "substationInspections"), orderBy("createdAt", "desc"));
     
     // Only apply filters if not system_admin or global_engineer
     if (user.role !== "system_admin" && user.role !== "global_engineer") {
       if (user.role === "district_engineer" || user.role === "technician") {
-        q = query(collection(db, "substationInspections"), where("district", "==", user.district));
+        const userDistrict = districts.find(d => d.name === user.district);
+        if (userDistrict) {
+          q = query(collection(db, "substationInspections"), 
+            where("districtId", "==", userDistrict.id),
+            orderBy("createdAt", "desc")
+          );
+        }
       } else if (user.role === "regional_engineer") {
-        q = query(collection(db, "substationInspections"), where("region", "==", user.region));
+        const userRegion = regions.find(r => r.name === user.region);
+        if (userRegion) {
+          q = query(collection(db, "substationInspections"), 
+            where("regionId", "==", userRegion.id),
+            orderBy("createdAt", "desc")
+          );
+        }
       }
     }
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const inspections = snapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          region: data.region || '',
-          district: data.district || '',
-          substationNo: data.substationNo || '',
-          substationName: data.substationName || '',
-          type: data.type || 'indoor',
-          date: data.date || '', // Assuming date is stored as string
-          inspectionDate: data.inspectionDate || '', // Assuming date is stored as string
-          remarks: data.remarks || '',
-          createdBy: data.createdBy || '',
-          inspectedBy: data.inspectedBy || '',
-          createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt || '', // Convert Timestamp
-          // Explicitly map items, ensuring status is present or null
-          items: (data.items || []).map((item: any) => ({
-            id: item.id || uuidv4(), // Ensure ID exists
-            category: item.category || '',
-            name: item.name || '',
-            status: item.status || null, // Default missing status to null (or undefined)
-            remarks: item.remarks || ''
-          })),
-          // Also map category-specific arrays if needed (adjust based on data model)
-          generalBuilding: (data.generalBuilding || []).map((item: any) => ({ /* ... map item ... */ id: item.id, name: item.name, category: item.category, status: item.status || null, remarks: item.remarks || '' })),
-          controlEquipment: (data.controlEquipment || []).map((item: any) => ({ /* ... map item ... */ id: item.id, name: item.name, category: item.category, status: item.status || null, remarks: item.remarks || '' })),
-          powerTransformer: (data.powerTransformer || []).map((item: any) => ({ /* ... map item ... */ id: item.id, name: item.name, category: item.category, status: item.status || null, remarks: item.remarks || '' })),
-          outdoorEquipment: (data.outdoorEquipment || []).map((item: any) => ({ /* ... map item ... */ id: item.id, name: item.name, category: item.category, status: item.status || null, remarks: item.remarks || '' }))
-        } as SubstationInspection;
-      });
-      setSavedInspections(inspections);
+      try {
+        // Get all documents and ensure no duplicates by using a Map
+        const inspectionsMap = new Map();
+        
+        snapshot.docs.forEach(doc => {
+          const data = doc.data();
+          // Use a combination of substationNo and date as a unique key
+          const uniqueKey = `${data.substationNo}_${data.date}`;
+          inspectionsMap.set(uniqueKey, {
+            id: doc.id,
+            ...data
+          });
+        });
+
+        // Convert Map to array
+        const inspections = Array.from(inspectionsMap.values());
+        console.log('Setting inspections:', inspections.length);
+        setSavedInspections(inspections);
+      } catch (error) {
+        console.error('[DataContext] Error updating substation inspections:', error);
+        if (navigator.onLine) {
+          toast.error("Error updating inspections list");
+        }
+      }
+    }, (error) => {
+      console.error('[DataContext] Error in substation inspections subscription:', error);
+      if (navigator.onLine) {
+        toast.error("Error connecting to database");
+      }
     });
 
     return () => unsubscribe();
-  }, [user]);
+  }, [user, regions, districts]);
 
   // Initialize load monitoring records
   useEffect(() => {
@@ -1219,49 +1236,82 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const saveInspection = async (data: Omit<SubstationInspection, "id">) => {
+  const saveInspection = async (inspection: SubstationInspection): Promise<string> => {
     try {
-      const now = new Date().toISOString();
-      const newInspection: SubstationInspection & BaseRecord = {
-        ...data,
-        id: uuidv4(),
-        createdAt: now,
-        updatedAt: now,
-        // Ensure all required fields have valid values
-        region: data.region || "",
-        regionId: data.regionId || "",
-        district: data.district || "",
-        districtId: data.districtId || "",
-        substationNo: data.substationNo || "",
-        substationName: data.substationName || "",
-        type: data.type || "indoor",
-        date: data.date || now,
-        inspectionDate: data.inspectionDate || now,
-        items: data.items || [],
-        generalBuilding: data.generalBuilding || [],
-        controlEquipment: data.controlEquipment || [],
-        powerTransformer: data.powerTransformer || [],
-        outdoorEquipment: data.outdoorEquipment || [],
-        remarks: data.remarks || "",
-        createdBy: data.createdBy || "Unknown",
-        inspectedBy: data.inspectedBy || "Unknown",
-        location: data.location || "",
-        voltageLevel: data.voltageLevel || "",
-        status: data.status || "Pending"
-      };
+      // Check for existing inspection with same substationNo and date
+      const inspectionsRef = collection(db, "substationInspections");
+      const q = query(
+        inspectionsRef, 
+        where("substationNo", "==", inspection.substationNo),
+        where("date", "==", inspection.date)
+      );
+      const querySnapshot = await getDocs(q);
 
-      if (navigator.onLine) {
-        // Online mode - save to Firestore
-        const docRef = await addDoc(collection(db, "substationInspections"), newInspection);
-        newInspection.id = docRef.id;
-      } else {
-        // Offline mode - save to IndexedDB
-        await safeAddItem(STORE_NAMES.SUBSTATION_INSPECTIONS, newInspection);
-        await addToPendingSync(STORE_NAMES.SUBSTATION_INSPECTIONS, "create", newInspection);
+      if (!querySnapshot.empty) {
+        toast.error("An inspection for this substation on this date already exists");
+        throw new Error("Duplicate inspection");
       }
 
-      setSavedInspections(prev => [...prev, newInspection]);
-      return newInspection.id;
+      // Create a sanitized version of the inspection with default values for undefined fields
+      const sanitizedInspection = {
+        ...inspection,
+        region: inspection.region || "",
+        regionId: inspection.regionId || "",
+        district: inspection.district || "",
+        districtId: inspection.districtId || "",
+        date: inspection.date || new Date().toISOString().split('T')[0],
+        inspectionDate: inspection.inspectionDate || new Date().toISOString().split('T')[0],
+        substationNo: inspection.substationNo || "",
+        substationName: inspection.substationName || "",
+        type: inspection.type || "indoor",
+        location: inspection.location || "",
+        voltageLevel: inspection.voltageLevel || "",
+        status: inspection.status || "Pending",
+        remarks: inspection.remarks || "",
+        createdBy: inspection.createdBy || "Unknown",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        inspectedBy: inspection.inspectedBy || "Unknown",
+        items: (inspection.items || []).map(item => ({
+          id: item.id || uuidv4(),
+          name: item.name || "",
+          category: item.category || "",
+          status: item.status || "",
+          remarks: item.remarks || ""
+        })),
+        generalBuilding: (inspection.generalBuilding || []).map(item => ({
+          id: item.id || uuidv4(),
+          name: item.name || "",
+          category: item.category || "general building",
+          status: item.status || "",
+          remarks: item.remarks || ""
+        })),
+        controlEquipment: (inspection.controlEquipment || []).map(item => ({
+          id: item.id || uuidv4(),
+          name: item.name || "",
+          category: item.category || "control equipment",
+          status: item.status || "",
+          remarks: item.remarks || ""
+        })),
+        powerTransformer: (inspection.powerTransformer || []).map(item => ({
+          id: item.id || uuidv4(),
+          name: item.name || "",
+          category: item.category || "power transformer",
+          status: item.status || "",
+          remarks: item.remarks || ""
+        })),
+        outdoorEquipment: (inspection.outdoorEquipment || []).map(item => ({
+          id: item.id || uuidv4(),
+          name: item.name || "",
+          category: item.category || "outdoor equipment",
+          status: item.status || "",
+          remarks: item.remarks || ""
+        }))
+      };
+
+      // Save to Firestore
+      const docRef = await addDoc(collection(db, "substationInspections"), sanitizedInspection);
+      return docRef.id;
     } catch (error) {
       console.error("Error saving inspection:", error);
       throw error;
@@ -1270,32 +1320,119 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const updateSubstationInspection = async (id: string, updates: Partial<SubstationInspection>) => {
     try {
-      const now = new Date().toISOString();
-      const baseRecord: BaseRecord = {
-        id,
-        updatedAt: now,
-        createdAt: now
+      // First find the inspection in our local state
+      const inspection = savedInspections.find(i => i.id === id);
+      if (!inspection) {
+        console.log('No local inspection found with ID:', id);
+        toast.error("Inspection not found");
+        return;
+      }
+
+      // Try to find the document in Firestore using the local ID first
+      const docRef = doc(db, "substationInspections", id);
+      const docSnap = await getDoc(docRef);
+
+      // Prepare the update data, preserving existing checklist selections
+      const updateData = {
+        ...updates,
+        // Preserve existing items if not being updated
+        items: updates.items || inspection.items,
+        generalBuilding: updates.generalBuilding || inspection.generalBuilding,
+        controlEquipment: updates.controlEquipment || inspection.controlEquipment,
+        powerTransformer: updates.powerTransformer || inspection.powerTransformer,
+        outdoorEquipment: updates.outdoorEquipment || inspection.outdoorEquipment,
+        updatedAt: new Date().toISOString()
       };
 
-      if (navigator.onLine) {
-      // Online mode - update Firestore
-        const docRef = doc(db, "substationInspections", id);
-        await updateDoc(docRef, {
-          ...updates,
-        updatedAt: serverTimestamp()
-      });
-    } else {
-        // Offline mode - update IndexedDB
-        const updatedData = {
-          ...updates,
-          ...baseRecord
-        };
-        await safeUpdateItem(STORE_NAMES.SUBSTATION_INSPECTIONS, updatedData);
-        await addToPendingSync(STORE_NAMES.SUBSTATION_INSPECTIONS, "update", updatedData);
+      if (docSnap.exists()) {
+        // If document exists with this ID, update it
+        await updateDoc(docRef, updateData);
+      } else {
+        // If not found by ID, try to find by substationNo
+        const inspectionsRef = collection(db, "substationInspections");
+        const q = query(inspectionsRef, where("substationNo", "==", inspection.substationNo));
+        const querySnapshot = await getDocs(q);
+        
+        if (querySnapshot.empty) {
+          console.log('No matching document found in Firestore');
+          toast.error("Inspection not found in database");
+          return;
+        }
+
+        // Get the first matching document
+        const docToUpdate = querySnapshot.docs[0];
+        console.log('Found document to update:', docToUpdate.id);
+        
+        // Update in Firestore
+        await updateDoc(doc(db, "substationInspections", docToUpdate.id), updateData);
+
+        // Update local state with the correct Firestore ID
+        setSavedInspections(prev => prev.map(inspection => 
+          inspection.id === id 
+            ? { ...inspection, ...updateData, id: docToUpdate.id }
+            : inspection
+        ));
+        
+        toast.success("Inspection updated successfully");
+        return;
       }
+      
+      // Update local state
+      setSavedInspections(prev => prev.map(inspection => 
+        inspection.id === id 
+          ? { ...inspection, ...updateData }
+          : inspection
+      ));
+      
+      toast.success("Inspection updated successfully");
     } catch (error) {
-      console.error("Error updating inspection:", error);
+      console.error('[DataContext] Error updating inspection:', error);
       toast.error("Failed to update inspection");
+      throw error;
+    }
+  };
+
+  const deleteInspection = async (id: string) => {
+    try {
+      console.log('Attempting to delete inspection with ID:', id);
+      
+      // First try to find the inspection in our local state
+      const inspection = savedInspections.find(i => i.id === id);
+      if (!inspection) {
+        console.log('No local inspection found with ID:', id);
+        toast.error("Inspection not found");
+        return;
+      }
+
+      // Try to find the document in Firestore
+      const inspectionsRef = collection(db, "substationInspections");
+      const q = query(inspectionsRef, where("substationNo", "==", inspection.substationNo));
+      const querySnapshot = await getDocs(q);
+      
+      if (querySnapshot.empty) {
+        console.log('No matching document found in Firestore');
+        // Update local state
+        setSavedInspections(prev => prev.filter(inspection => inspection.id !== id));
+        toast.success("Inspection removed from list");
+        return;
+      }
+
+      // Get the first matching document
+      const docToDelete = querySnapshot.docs[0];
+      console.log('Found document to delete:', docToDelete.id);
+      
+      // Delete from Firestore
+      await deleteDoc(doc(db, "substationInspections", docToDelete.id));
+      console.log('Successfully deleted document from Firestore');
+      
+      // Update local state
+      setSavedInspections(prev => prev.filter(inspection => inspection.id !== id));
+      
+      toast.success("Inspection deleted successfully");
+    } catch (error) {
+      console.error('[DataContext] Error deleting inspection:', error);
+      toast.error("Failed to delete inspection");
+      throw error;
     }
   };
 
@@ -1575,23 +1712,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error("Error updating overhead line inspection:", error);
       toast.error("Failed to update inspection");
-      throw error;
-    }
-  };
-
-  const deleteInspection = async (id: string) => {
-    try {
-    if (navigator.onLine) {
-        // Online mode - delete from Firestore
-        await deleteDoc(doc(db, "substationInspections", id));
-      } else {
-        // Offline mode - delete from IndexedDB
-        await safeDeleteItem(STORE_NAMES.SUBSTATION_INSPECTIONS, id);
-        await addToPendingSync(STORE_NAMES.SUBSTATION_INSPECTIONS, "delete", { id });
-      }
-      setSavedInspections(prev => prev.filter(inspection => inspection.id !== id));
-    } catch (error) {
-      console.error("Error deleting inspection:", error);
       throw error;
     }
   };
@@ -1885,22 +2005,32 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   // Add load monitoring functions
   const saveLoadMonitoringRecord = async (record: Omit<LoadMonitoringData, "id">) => {
     try {
-      const docRef = await addDoc(collection(db, "loadMonitoring"), {
-        ...record,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
-      
-      const newRecord: LoadMonitoringData = {
-        ...record,
-        id: docRef.id,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-      
-      setLoadMonitoringRecords(prev => [...prev, newRecord]);
-      toast.success("Load monitoring record saved successfully");
-      return docRef.id;
+      const loadMonitoringService = LoadMonitoringService.getInstance();
+      const isOnline = loadMonitoringService.isInternetAvailable();
+
+      if (isOnline) {
+        const docRef = await addDoc(collection(db, "loadMonitoring"), {
+          ...record,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+        
+        const newRecord: LoadMonitoringData = {
+          ...record,
+          id: docRef.id,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        
+        setLoadMonitoringRecords(prev => [...prev, newRecord]);
+        toast.success("Load monitoring record saved successfully");
+        return docRef.id;
+      } else {
+        // Save offline
+        await loadMonitoringService.saveLoadMonitoringOffline(record, 'create');
+        toast.success("Load monitoring record saved offline. It will be synced when internet connection is restored.");
+        return 'offline_' + Date.now();
+      }
     } catch (error) {
       console.error("Error saving load monitoring record:", error);
       toast.error("Failed to save load monitoring record");
@@ -1925,19 +2055,37 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const updateLoadMonitoringRecord = async (id: string, data: Partial<LoadMonitoringData>) => {
     try {
-      const recordRef = doc(db, "loadMonitoring", id);
-      await updateDoc(recordRef, {
-        ...data,
-        updatedAt: serverTimestamp()
-      });
-      
-      setLoadMonitoringRecords(prev => prev.map(record => 
-        record.id === id 
-          ? { ...record, ...data, updatedAt: new Date().toISOString() }
-          : record
-      ));
-      
-      toast.success("Load monitoring record updated successfully");
+      const loadMonitoringService = LoadMonitoringService.getInstance();
+      const isOnline = loadMonitoringService.isInternetAvailable();
+
+      if (isOnline) {
+        const recordRef = doc(db, "loadMonitoring", id);
+        await updateDoc(recordRef, {
+          ...data,
+          updatedAt: serverTimestamp()
+        });
+        
+        setLoadMonitoringRecords(prev => prev.map(record => 
+          record.id === id 
+            ? { ...record, ...data, updatedAt: new Date().toISOString() }
+            : record
+        ));
+        
+        toast.success("Load monitoring record updated successfully");
+      } else {
+        // Get the full record to update
+        const existingRecord = loadMonitoringRecords.find(r => r.id === id);
+        if (!existingRecord) {
+          throw new Error('Record not found');
+        }
+
+        // Save offline update
+        await loadMonitoringService.saveLoadMonitoringOffline(
+          { ...existingRecord, ...data },
+          'update'
+        );
+        toast.success("Load monitoring record updated offline. It will be synced when internet connection is restored.");
+      }
     } catch (error) {
       console.error("Error updating load monitoring record:", error);
       toast.error("Failed to update load monitoring record");
@@ -1946,9 +2094,28 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const deleteLoadMonitoringRecord = async (id: string) => {
     try {
-      await deleteDoc(doc(db, "loadMonitoring", id));
-      setLoadMonitoringRecords(prev => prev.filter(record => record.id !== id));
-      toast.success("Load monitoring record deleted successfully");
+      const loadMonitoringService = LoadMonitoringService.getInstance();
+      const isOnline = loadMonitoringService.isInternetAvailable();
+
+      if (isOnline) {
+        await deleteDoc(doc(db, "loadMonitoring", id));
+        setLoadMonitoringRecords(prev => prev.filter(record => record.id !== id));
+        toast.success("Load monitoring record deleted successfully");
+      } else {
+        // Get the full record to delete
+        const existingRecord = loadMonitoringRecords.find(r => r.id === id);
+        if (!existingRecord) {
+          throw new Error('Record not found');
+        }
+
+        // Save offline delete
+        await loadMonitoringService.saveLoadMonitoringOffline(
+          existingRecord,
+          'delete'
+        );
+        setLoadMonitoringRecords(prev => prev.filter(record => record.id !== id));
+        toast.success("Load monitoring record deleted offline. It will be synced when internet connection is restored.");
+      }
     } catch (error) {
       console.error("Error deleting load monitoring record:", error);
       toast.error("Failed to delete load monitoring record");
@@ -1982,65 +2149,112 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  // Add effect to handle offline load monitoring records
+  useEffect(() => {
+    const handleLoadMonitoringRecordAdded = (event: CustomEvent) => {
+      const { record, action, status, error } = event.detail;
+      
+      if (status === 'error') {
+        console.error('[DataContext] Error saving load monitoring record offline:', error);
+        toast.error('Failed to save load monitoring record offline. Please try again.');
+        return;
+      }
+
+      if (status === 'success') {
+        if (action === 'create') {
+          setLoadMonitoringRecords(prev => [...prev, record]);
+        } else if (action === 'update') {
+          setLoadMonitoringRecords(prev => prev.map(r => 
+            r.id === record.id ? { ...r, ...record } : r
+          ));
+        } else if (action === 'delete') {
+          setLoadMonitoringRecords(prev => prev.filter(r => r.id !== record.id));
+        }
+      }
+    };
+
+    window.addEventListener('loadMonitoringRecordAdded', handleLoadMonitoringRecordAdded as EventListener);
+
+    return () => {
+      window.removeEventListener('loadMonitoringRecordAdded', handleLoadMonitoringRecordAdded as EventListener);
+    };
+  }, []);
+
+  // Add effect to set load monitoring permissions
+  useEffect(() => {
+    if (user) {
+      const hasEditPermission = user.role === 'system_admin' || user.role === 'load_monitoring_edit';
+      const hasDeletePermission = user.role === 'system_admin' || user.role === 'load_monitoring_delete';
+      
+      setCanEditLoadMonitoring(hasEditPermission);
+      setCanDeleteLoadMonitoring(hasDeletePermission);
+    } else {
+      setCanEditLoadMonitoring(false);
+      setCanDeleteLoadMonitoring(false);
+    }
+  }, [user]);
+
+  const contextValue: DataContextType = {
+    regions,
+    districts,
+    regionsLoading,
+    districtsLoading,
+    regionsError,
+    districtsError,
+    retryRegionsAndDistricts: () => fetchRegionsAndDistricts(),
+    op5Faults,
+    controlSystemOutages,
+    addOP5Fault,
+    updateOP5Fault,
+    deleteOP5Fault,
+    addControlSystemOutage,
+    updateControlSystemOutage,
+    deleteControlSystemOutage,
+    canResolveFault,
+    getFilteredFaults,
+    resolveFault,
+    deleteFault,
+    canEditFault,
+    loadMonitoringRecords,
+    setLoadMonitoringRecords,
+    saveLoadMonitoringRecord,
+    getLoadMonitoringRecord,
+    updateLoadMonitoringRecord,
+    deleteLoadMonitoringRecord,
+    vitAssets,
+    setVITAssets,
+    vitInspections,
+    setVITInspections,
+    addVITAsset,
+    updateVITAsset,
+    deleteVITAsset,
+    addVITInspection,
+    updateVITInspection,
+    deleteVITInspection,
+    savedInspections,
+    setSavedInspections,
+    saveInspection,
+    updateSubstationInspection,
+    deleteInspection,
+    updateDistrict,
+    canEditAsset,
+    canEditInspection,
+    canDeleteAsset,
+    canDeleteInspection,
+    getSavedInspection,
+    canAddAsset,
+    canAddInspection,
+    getOP5FaultById,
+    overheadLineInspections,
+    addOverheadLineInspection,
+    updateOverheadLineInspection,
+    deleteOverheadLineInspection,
+    canEditLoadMonitoring,
+    canDeleteLoadMonitoring
+  };
+
   return (
-    <DataContext.Provider
-      value={{
-        regions,
-        districts,
-        regionsLoading,
-        districtsLoading,
-        regionsError,
-        districtsError,
-        retryRegionsAndDistricts: () => fetchRegionsAndDistricts(),
-        op5Faults,
-        controlSystemOutages,
-        addOP5Fault,
-        updateOP5Fault,
-        deleteOP5Fault,
-        addControlSystemOutage,
-        updateControlSystemOutage,
-        deleteControlSystemOutage,
-        canResolveFault,
-        getFilteredFaults,
-        resolveFault,
-        deleteFault,
-        canEditFault,
-        loadMonitoringRecords,
-        setLoadMonitoringRecords,
-        saveLoadMonitoringRecord,
-        getLoadMonitoringRecord,
-        updateLoadMonitoringRecord,
-        deleteLoadMonitoringRecord,
-        vitAssets,
-        setVITAssets,
-        vitInspections,
-        setVITInspections,
-        addVITAsset,
-        updateVITAsset,
-        deleteVITAsset,
-        addVITInspection,
-        updateVITInspection,
-        deleteVITInspection,
-        savedInspections,
-        setSavedInspections,
-        saveInspection,
-        updateSubstationInspection,
-        deleteInspection,
-        updateDistrict,
-        canEditAsset,
-        canEditInspection,
-        canDeleteAsset,
-        canDeleteInspection,
-        getSavedInspection,
-        canAddAsset,
-        canAddInspection,
-        getOP5FaultById,
-        overheadLineInspections,
-        addOverheadLineInspection,
-        updateOverheadLineInspection,
-        deleteOverheadLineInspection
-      }}
-    >
+    <DataContext.Provider value={contextValue}>
       {children}
     </DataContext.Provider>
   );

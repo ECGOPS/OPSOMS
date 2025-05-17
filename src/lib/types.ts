@@ -1,15 +1,26 @@
 import { type ClassValue } from "clsx";
-import { LoadMonitoringData } from "./asset-types";
+import { LoadMonitoringData, SubstationInspection } from "./asset-types";
 import { DateRange } from "react-day-picker";
 import { BaseRecord } from '../utils/db';
 
-export type UserRole = "district_engineer" | "regional_engineer" | "global_engineer" | "technician" | "system_admin" | null;
+export type UserRole = 
+  | "district_engineer" 
+  | "regional_engineer" 
+  | "global_engineer" 
+  | "technician" 
+  | "system_admin"
+  | "load_monitoring_edit"
+  | "load_monitoring_delete"
+  | "admin"
+  | null;
 
-export type User = {
+export interface User {
+  uid: string;
+  email: string;
+  displayName: string;
+  role: UserRole;
   id: string;
   name: string;
-  email: string;
-  role: UserRole;
   region?: string;
   regionId?: string;
   district?: string;
@@ -19,7 +30,7 @@ export type User = {
   password?: string;
   staffId?: string;
   disabled?: boolean;
-};
+}
 
 export type RegionPopulation = {
   rural: number;
@@ -268,53 +279,6 @@ export interface InspectionCategory {
   items: InspectionItem[];
 }
 
-export interface SubstationInspection {
-  id: string;
-  region: string;
-  regionId: string;
-  district: string;
-  districtId: string;
-  date: string;
-  substationNo: string;
-  substationName?: string;
-  type: 'indoor' | 'outdoor';
-  items: InspectionItem[];
-  createdAt?: string;
-  updatedAt?: string;
-  createdBy?: string;
-  inspectionDate: string;
-  inspectedBy: string;
-  location?: string;
-  voltageLevel?: string;
-  status?: string;
-  cleanDustFree?: string;
-  protectionButtonEnabled?: string;
-  recloserButtonEnabled?: string;
-  groundEarthButtonEnabled?: string;
-  acPowerOn?: string;
-  batteryPowerLow?: string;
-  handleLockOn?: string;
-  remoteButtonEnabled?: string;
-  gasLevelLow?: string;
-  earthingArrangementAdequate?: string;
-  noFusesBlown?: string;
-  noDamageToBushings?: string;
-  noDamageToHVConnections?: string;
-  insulatorsClean?: string;
-  paintworkAdequate?: string;
-  ptFuseLinkIntact?: string;
-  noCorrosion?: string;
-  silicaGelCondition?: string;
-  correctLabelling?: string;
-  remarks?: string;
-  generalBuilding: InspectionItem[];
-  controlEquipment: InspectionItem[];
-  powerTransformer: InspectionItem[];
-  outdoorEquipment: InspectionItem[];
-}
-
-export type Inspection = VITInspectionChecklist | SubstationInspection;
-
 export interface AuthContextType {
   user: {
     name: string;
@@ -381,6 +345,8 @@ export interface DataContextType {
   getLoadMonitoringRecord: (id: string) => LoadMonitoringData | undefined;
   updateLoadMonitoringRecord: (id: string, data: Partial<LoadMonitoringData>) => void;
   deleteLoadMonitoringRecord: (id: string) => void;
+  canEditLoadMonitoring: boolean;
+  canDeleteLoadMonitoring: boolean;
 }
 
 // Exported for use elsewhere
