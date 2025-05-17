@@ -2008,31 +2008,53 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   // Add load monitoring functions
   const saveLoadMonitoringRecord = async (record: Omit<LoadMonitoringData, "id">) => {
     try {
-      const loadMonitoringService = LoadMonitoringService.getInstance();
-      const isOnline = loadMonitoringService.isInternetAvailable();
-
-      if (isOnline) {
+      const timestamp = new Date().toISOString();
+      const offlineId = 'offline_' + Date.now();
+      
+      if (navigator.onLine) {
         const docRef = await addDoc(collection(db, "loadMonitoring"), {
           ...record,
           createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
+          updatedAt: serverTimestamp(),
+          syncStatus: 'synced' as const
         });
         
         const newRecord: LoadMonitoringData = {
           ...record,
           id: docRef.id,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          syncStatus: 'synced' as const
         };
+        
+        // Save to both stores
+        await safeAddItem(STORE_NAMES.LOAD_MONITORING_CACHE, newRecord);
+        await safeAddItem(STORE_NAMES.LOAD_MONITORING, newRecord);
         
         setLoadMonitoringRecords(prev => [...prev, newRecord]);
         toast.success("Load monitoring record saved successfully");
         return docRef.id;
       } else {
         // Save offline
-        await loadMonitoringService.saveLoadMonitoringOffline(record, 'create');
+        const offlineRecord: LoadMonitoringData = {
+          ...record,
+          id: offlineId,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          originalOfflineId: offlineId,
+          syncStatus: 'pending' as const
+        };
+
+        // Save to both stores
+        await safeAddItem(STORE_NAMES.LOAD_MONITORING, offlineRecord);
+        await safeAddItem(STORE_NAMES.LOAD_MONITORING_CACHE, offlineRecord);
+        
+        // Add to pending sync
+        await addToPendingSync(STORE_NAMES.LOAD_MONITORING, "create", offlineRecord);
+        
+        setLoadMonitoringRecords(prev => [...prev, offlineRecord]);
         toast.success("Load monitoring record saved offline. It will be synced when internet connection is restored.");
-        return 'offline_' + Date.now();
+        return offlineId;
       }
     } catch (error) {
       console.error("Error saving load monitoring record:", error);
@@ -2043,25 +2065,36 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const getLoadMonitoringRecord = async (id: string) => {
     try {
-      // First check if we're online
-      if (navigator.onLine) {
-        const docRef = doc(db, "loadMonitoring", id);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          return docSnap.data() as LoadMonitoringData;
-        }
-      }
-
-      // If online lookup failed or we're offline, check offline storage
+      // First check offline store
       const offlineRecord = await safeGetItem<LoadMonitoringData>(STORE_NAMES.LOAD_MONITORING, id);
       if (offlineRecord) {
         return offlineRecord;
       }
 
-      // Check cache as last resort
+      // Then check cache
       const cachedRecord = await safeGetItem<LoadMonitoringData>(STORE_NAMES.LOAD_MONITORING_CACHE, id);
       if (cachedRecord) {
         return cachedRecord;
+      }
+
+      // Finally check Firestore if online
+      if (navigator.onLine) {
+        const docRef = doc(db, "loadMonitoring", id);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          const record: LoadMonitoringData = {
+            id: docSnap.id,
+            ...data,
+            createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt,
+            updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : data.updatedAt,
+            syncStatus: 'synced' as const
+          };
+          
+          // Cache the record
+          await safeAddItem(STORE_NAMES.LOAD_MONITORING_CACHE, record);
+          return record;
+        }
       }
 
       return null;
@@ -2072,104 +2105,43 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const updateLoadMonitoringRecord = async (id: string, data: Partial<LoadMonitoringData>) => {
-    try {
-      const timestamp = new Date().toISOString();
-      const updates = {
-        ...data,
-        updatedAt: timestamp,
-        createdAt: data.createdAt || timestamp // Ensure createdAt is set for BaseRecord type
-      };
-
-      if (navigator.onLine) {
-        // Online mode - update Firestore
-        const recordRef = doc(db, "loadMonitoring", id);
-        await updateDoc(recordRef, {
-          ...updates,
-          updatedAt: serverTimestamp(),
-          syncStatus: 'synced'
-        });
-        
-        // Update local state
-        setLoadMonitoringRecords(prev => prev.map(record => 
-          record.id === id 
-            ? { ...record, ...updates, syncStatus: 'synced' }
-            : record
-        ));
-
-        // Update cache
-        await safeUpdateItem(STORE_NAMES.LOAD_MONITORING_CACHE, {
-          id,
-          ...updates,
-          syncStatus: 'synced'
-        });
-        
-        toast.success("Load monitoring record updated successfully");
-      } else {
-        // Offline mode - update IndexedDB
-        const existingRecord = await safeGetItem<LoadMonitoringData>(STORE_NAMES.LOAD_MONITORING, id) ||
-                             await safeGetItem<LoadMonitoringData>(STORE_NAMES.LOAD_MONITORING_CACHE, id);
-
-        if (!existingRecord) {
-          throw new Error('Record not found');
-        }
-
-        const updatedRecord = {
-          ...existingRecord,
-          ...updates,
-          originalOfflineId: existingRecord.originalOfflineId || id, // Preserve original ID for sync
-          syncStatus: 'pending' as const
-        };
-
-        // Save to offline storage using update instead of add
-        await safeUpdateItem(STORE_NAMES.LOAD_MONITORING, updatedRecord);
-        
-        // Add to pending sync with the original ID
-        await addToPendingSync(STORE_NAMES.LOAD_MONITORING, "update", {
-          ...updatedRecord,
-          id: updatedRecord.originalOfflineId // Use original ID for sync
-        });
-        
-        // Update local state
-        setLoadMonitoringRecords(prev => prev.map(record => 
-          record.id === id 
-            ? updatedRecord
-            : record
-        ));
-
-        toast.success("Load monitoring record updated offline. It will be synced when internet connection is restored.");
-      }
-    } catch (error) {
-      console.error("Error updating load monitoring record:", error);
-      toast.error("Failed to update load monitoring record");
-      throw error;
-    }
-  };
-
   const deleteLoadMonitoringRecord = async (id: string) => {
     try {
+      // First try to get the record from any store
+      const record = await getLoadMonitoringRecord(id);
+      if (!record) {
+        throw new Error('Record not found');
+      }
+
       if (navigator.onLine) {
         // Online mode - delete from Firestore
-        await deleteDoc(doc(db, "loadMonitoring", id));
+        if (record.originalOfflineId) {
+          // This is an offline record that was synced
+          const q = query(
+            collection(db, "loadMonitoring"),
+            where("originalOfflineId", "==", record.originalOfflineId)
+          );
+          const querySnapshot = await getDocs(q);
+          if (!querySnapshot.empty) {
+            await deleteDoc(doc(db, "loadMonitoring", querySnapshot.docs[0].id));
+          }
+        } else {
+          // Regular online record
+          await deleteDoc(doc(db, "loadMonitoring", id));
+        }
         
-        // Remove from cache
+        // Remove from both stores
         await safeDeleteItem(STORE_NAMES.LOAD_MONITORING_CACHE, id);
+        await safeDeleteItem(STORE_NAMES.LOAD_MONITORING, id);
         
         // Update local state
         setLoadMonitoringRecords(prev => prev.filter(record => record.id !== id));
         
         toast.success("Load monitoring record deleted successfully");
       } else {
-        // Offline mode - get record from either store
-        const existingRecord = await safeGetItem<LoadMonitoringData>(STORE_NAMES.LOAD_MONITORING, id) ||
-                             await safeGetItem<LoadMonitoringData>(STORE_NAMES.LOAD_MONITORING_CACHE, id);
-
-        if (!existingRecord) {
-          throw new Error('Record not found');
-        }
-
+        // Offline mode
         // Add to pending sync
-        await addToPendingSync(STORE_NAMES.LOAD_MONITORING, "delete", existingRecord);
+        await addToPendingSync(STORE_NAMES.LOAD_MONITORING, "delete", record);
         
         // Remove from both stores
         await safeDeleteItem(STORE_NAMES.LOAD_MONITORING, id);
@@ -2183,6 +2155,211 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error("Error deleting load monitoring record:", error);
       toast.error("Failed to delete load monitoring record");
+      throw error;
+    }
+  };
+
+  const updateLoadMonitoringRecord = async (id: string, data: Partial<LoadMonitoringData>) => {
+    const MAX_RETRIES = 3;
+    const RETRY_DELAY = 1000; // 1 second
+
+    const retryOperation = async (operation: () => Promise<any>, retryCount = 0): Promise<any> => {
+      try {
+        return await operation();
+      } catch (error) {
+        if (retryCount < MAX_RETRIES) {
+          console.log(`Retrying operation (attempt ${retryCount + 1}/${MAX_RETRIES})...`);
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * (retryCount + 1)));
+          return retryOperation(operation, retryCount + 1);
+        }
+        throw error;
+      }
+    };
+
+    try {
+      const timestamp = new Date().toISOString();
+      const updates = {
+        ...data,
+        updatedAt: timestamp,
+        createdAt: data.createdAt || timestamp
+      };
+
+      // Get the record from any store
+      const existingRecord = await getLoadMonitoringRecord(id);
+      if (!existingRecord) {
+        console.error('Record not found in any store:', id);
+        // If we're offline and the record doesn't exist, create it
+        if (!navigator.onLine) {
+          console.log('Creating new offline record');
+          const newRecord: LoadMonitoringData = {
+            id,
+            ...data,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            originalOfflineId: id,
+            syncStatus: 'pending' as const
+          };
+          
+          await safeAddItem(STORE_NAMES.LOAD_MONITORING, newRecord);
+          await addToPendingSync(STORE_NAMES.LOAD_MONITORING, "create", newRecord);
+          setLoadMonitoringRecords(prev => [...(prev || []), newRecord]);
+          toast.success("New load monitoring record created offline");
+          return;
+        }
+        throw new Error('Record not found');
+      }
+
+      if (navigator.onLine) {
+        // Online mode - check if this is an offline record that needs to be created first
+        if (existingRecord.originalOfflineId) {
+          try {
+            // Check if a document with this originalOfflineId already exists
+            const q = query(
+              collection(db, "loadMonitoring"),
+              where("originalOfflineId", "==", existingRecord.originalOfflineId)
+            );
+            const querySnapshot = await getDocs(q);
+
+            let docRef;
+            if (!querySnapshot.empty) {
+              // Document already exists, update it instead
+              const existingDoc = querySnapshot.docs[0];
+              docRef = doc(db, "loadMonitoring", existingDoc.id);
+              await updateDoc(docRef, {
+                ...existingRecord,
+                ...updates,
+                updatedAt: serverTimestamp(),
+                syncStatus: 'synced' as const
+              });
+            } else {
+              // Create new document
+              docRef = await addDoc(collection(db, "loadMonitoring"), {
+                ...existingRecord,
+                ...updates,
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+                syncStatus: 'synced' as const
+              });
+            }
+
+            // Update local state with the new Firestore ID
+            const updatedRecord: LoadMonitoringData = {
+              ...existingRecord,
+              ...updates,
+              id: docRef.id,
+              syncStatus: 'synced' as const
+            };
+
+            // Update both stores
+            await retryOperation(async () => {
+              await safeUpdateItem(STORE_NAMES.LOAD_MONITORING_CACHE, updatedRecord);
+              await safeUpdateItem(STORE_NAMES.LOAD_MONITORING, updatedRecord);
+            });
+            
+            // Update local state
+            setLoadMonitoringRecords(prev => prev.map(record => 
+              record.id === id ? updatedRecord : record
+            ));
+
+            toast.success("Load monitoring record updated successfully");
+          } catch (error) {
+            console.error("Error syncing offline record:", error);
+            // If sync fails, keep the offline record and mark it for retry
+            const failedRecord: LoadMonitoringData = {
+              ...existingRecord,
+              ...updates,
+              syncStatus: 'failed' as const
+            };
+            await safeUpdateItem(STORE_NAMES.LOAD_MONITORING, failedRecord);
+            setLoadMonitoringRecords(prev => prev.map(record => 
+              record.id === id ? failedRecord : record
+            ));
+            throw error;
+          }
+        } else {
+          // Regular online update
+          try {
+            const recordRef = doc(db, "loadMonitoring", id);
+            await updateDoc(recordRef, {
+              ...updates,
+              updatedAt: serverTimestamp(),
+              syncStatus: 'synced' as const
+            });
+            
+            const updatedRecord: LoadMonitoringData = {
+              ...existingRecord,
+              ...updates,
+              syncStatus: 'synced' as const
+            };
+
+            // Update both stores
+            await retryOperation(async () => {
+              await safeUpdateItem(STORE_NAMES.LOAD_MONITORING_CACHE, updatedRecord);
+              await safeUpdateItem(STORE_NAMES.LOAD_MONITORING, updatedRecord);
+            });
+            
+            // Update local state
+            setLoadMonitoringRecords(prev => prev.map(record => 
+              record.id === id ? updatedRecord : record
+            ));
+            
+            toast.success("Load monitoring record updated successfully");
+          } catch (error) {
+            console.error("Error updating online record:", error);
+            // If update fails, mark it for retry
+            const failedRecord: LoadMonitoringData = {
+              ...existingRecord,
+              ...updates,
+              syncStatus: 'failed' as const
+            };
+            await safeUpdateItem(STORE_NAMES.LOAD_MONITORING, failedRecord);
+            setLoadMonitoringRecords(prev => prev.map(record => 
+              record.id === id ? failedRecord : record
+            ));
+            throw error;
+          }
+        }
+      } else {
+        // Offline mode - update IndexedDB
+        const updatedRecord: LoadMonitoringData = {
+          ...existingRecord,
+          ...updates,
+          originalOfflineId: existingRecord.originalOfflineId || id,
+          syncStatus: 'pending' as const
+        };
+
+        // Update both stores
+        await retryOperation(async () => {
+          try {
+            await safeUpdateItem(STORE_NAMES.LOAD_MONITORING, updatedRecord);
+            await safeUpdateItem(STORE_NAMES.LOAD_MONITORING_CACHE, updatedRecord);
+          } catch (error) {
+            // If update fails, try to add it
+            await safeAddItem(STORE_NAMES.LOAD_MONITORING, updatedRecord);
+            await safeAddItem(STORE_NAMES.LOAD_MONITORING_CACHE, updatedRecord);
+          }
+        });
+        
+        // Add to pending sync with the original ID
+        await retryOperation(async () => {
+          await addToPendingSync(STORE_NAMES.LOAD_MONITORING, "update", {
+            ...updatedRecord,
+            id: updatedRecord.originalOfflineId
+          });
+        });
+        
+        // Update local state
+        setLoadMonitoringRecords(prev => prev.map(record => 
+          record.id === id 
+            ? updatedRecord
+            : record
+        ));
+
+        toast.success("Load monitoring record updated offline. It will be synced when internet connection is restored.");
+      }
+    } catch (error) {
+      console.error("Error updating load monitoring record:", error);
+      toast.error("Failed to update load monitoring record. Please try again.");
       throw error;
     }
   };
