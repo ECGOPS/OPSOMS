@@ -38,12 +38,31 @@ import {
   serverTimestamp,
   orderBy,
   getDoc,
-  setDoc
+  setDoc,
+  Timestamp,
+  DocumentData,
+  QueryDocumentSnapshot
 } from "firebase/firestore";
 import { getUserRegionAndDistrict } from "@/utils/user-utils";
 import { resetFirestoreConnection } from "@/config/firebase";
-import { BaseRecord, StoreName, safeAddItem, safeUpdateItem, safeDeleteItem, safeGetAllItems, safeGetItem, safeClearStore, addToPendingSync, getPendingSyncItems, clearPendingSyncItem, addItem, updateItem, deleteItem, initDB } from '../utils/db';
+import { 
+  StoreName,
+  safeAddItem, 
+  safeUpdateItem, 
+  safeDeleteItem, 
+  safeGetAllItems, 
+  safeGetItem, 
+  safeClearStore, 
+  addToPendingSync, 
+  getPendingSyncItems, 
+  clearPendingSyncItem, 
+  addItem, 
+  updateItem, 
+  deleteItem, 
+  initDB 
+} from '../utils/db';
 import { openDB } from "idb";
+import { deleteDB } from "idb";
 
 const DB_NAME = 'ecg-oms-db';
 const DB_VERSION = 3;
@@ -222,7 +241,7 @@ export interface DataContextType {
   addOP5Fault: (fault: Omit<OP5Fault, "id">) => Promise<string>;
   updateOP5Fault: (id: string, data: Partial<OP5Fault>) => Promise<void>;
   deleteOP5Fault: (id: string) => Promise<void>;
-  addControlSystemOutage: (outage: Omit<ControlSystemOutage, "id">) => Promise<string>;
+  addControlSystemOutage: (outage: Omit<ControlSystemOutage, "id" | "createdAt" | "updatedAt" | "createdBy" | "updatedBy">) => Promise<string>;
   updateControlSystemOutage: (id: string, data: Partial<ControlSystemOutage>) => Promise<void>;
   deleteControlSystemOutage: (id: string) => Promise<void>;
   canResolveFault: (fault: OP5Fault | ControlSystemOutage) => boolean;
@@ -270,6 +289,117 @@ const DataContext = createContext<DataContextType | undefined>(undefined);
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000; // 1 second
+
+// Add after the imports and before the DataProvider component
+const getCacheStoreName = (storeType: StoreName): StoreName => {
+  switch (storeType) {
+    case STORE_NAMES.OP5_FAULTS:
+      return STORE_NAMES.OP5_FAULTS_CACHE;
+    case STORE_NAMES.CONTROL_OUTAGES:
+      return STORE_NAMES.CONTROL_OUTAGES_CACHE;
+    case STORE_NAMES.LOAD_MONITORING:
+      return STORE_NAMES.LOAD_MONITORING_CACHE;
+    case STORE_NAMES.VIT_ASSETS:
+      return STORE_NAMES.VIT_ASSETS_CACHE;
+    case STORE_NAMES.VIT_INSPECTIONS:
+      return STORE_NAMES.VIT_INSPECTIONS_CACHE;
+    case STORE_NAMES.OVERHEAD_LINE_INSPECTIONS:
+      return STORE_NAMES.OVERHEAD_LINE_INSPECTIONS_CACHE;
+    default:
+      throw new Error(`No cache store for store name: ${storeType}`);
+  }
+};
+
+const collectionMap: Partial<Record<StoreName, string>> = {
+  [STORE_NAMES.OP5_FAULTS]: 'op5Faults',
+  [STORE_NAMES.CONTROL_OUTAGES]: 'controlOutages',
+  [STORE_NAMES.LOAD_MONITORING]: 'loadMonitoring',
+  [STORE_NAMES.VIT_ASSETS]: 'vitAssets',
+  [STORE_NAMES.VIT_INSPECTIONS]: 'vitInspections',
+  [STORE_NAMES.SUBSTATION_INSPECTIONS]: 'substationInspections',
+  [STORE_NAMES.OVERHEAD_LINE_INSPECTIONS]: 'overheadLineInspections'
+};
+
+// Add this function after the existing utility functions
+async function clearAndReinitializeDB() {
+  try {
+    console.log('=== CLEARING AND REINITIALIZING DATABASE ===');
+    // Close the current database connection
+    const db = await openDB(DB_NAME, DB_VERSION);
+    await db.close();
+    
+    // Delete the database
+    await deleteDB(DB_NAME);
+    console.log('Database deleted');
+    
+    // Reinitialize the database
+    await initDB();
+    console.log('Database reinitialized');
+    
+    return true;
+  } catch (error) {
+    console.error('Error clearing and reinitializing database:', error);
+    return false;
+  }
+}
+
+// Add these types at the top of the file after imports
+interface BaseRecord {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Add these utility functions
+async function saveToFirebase<T extends DocumentData>(
+  collectionName: string,
+  data: T,
+  isUpdate: boolean = false
+): Promise<T> {
+  try {
+    if (isUpdate) {
+      // Update existing document
+      const docRef = doc(db, collectionName, data.id);
+      await updateDoc(docRef, {
+        ...data,
+        updatedAt: serverTimestamp()
+      });
+      return data;
+    } else {
+      // Create new document
+      const docRef = await addDoc(collection(db, collectionName), {
+        ...data,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      return {
+        ...data,
+        id: docRef.id
+      };
+    }
+  } catch (error) {
+    console.error('Error saving to Firebase:', error);
+    throw error;
+  }
+}
+
+async function saveToLocal<T extends BaseRecord>(
+  storeName: StoreName,
+  data: T
+): Promise<T> {
+  try {
+    const localData = {
+      ...data,
+      syncStatus: 'local' as const,
+      lastModified: Date.now()
+    };
+    await safeAddItem(storeName, localData);
+    return localData;
+  } catch (error) {
+    console.error('Error saving to local storage:', error);
+    throw error;
+  }
+}
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
@@ -582,86 +712,22 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
 
     console.log('[DataContext] Setting up OP5 faults subscription');
-    const unsubscribe = onSnapshot(q, 
-      async (snapshot) => {
-        try {
-          // Get Firestore data (online)
-          const firestoreData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as OP5Fault[];
-
-          // Get offline data (unsynced changes)
-          const offlineData = await safeGetAllItems<OP5Fault & BaseRecord>(STORE_NAMES.OP5_FAULTS);
-          
-          // Get pending sync items to identify synced records
-          const pendingItems = await getPendingSyncItems();
-          const syncedIds = new Set(
-            pendingItems
-              .filter(item => item.type === STORE_NAMES.OP5_FAULTS)
-              .map(item => item.data.id)
-          );
-
-          const recordMap = new Map<string, OP5Fault & { isOnline: boolean; synced: boolean }>();
-
-          // Add all Firestore records first (assume they're online and synced)
-          firestoreData.forEach(fault => {
-            const key = fault.clientId || fault.id;
-            recordMap.set(key, {
-              ...fault,
-              isOnline: true,
-              synced: true
-            });
-          });
-
-          // Then add/update offline records
-          offlineData.forEach(item => {
-            const key = item.clientId || item.id;
-            const existing = recordMap.get(key);
-
-            const isPending = syncedIds.has(item.id);
-
-            const itemDate = new Date(item.updatedAt);
-            const existingDate = existing ? new Date(existing.updatedAt) : null;
-
-            if (
-              !existing || // not in Firestore
-              (!isPending && existingDate && itemDate > existingDate) // newer and not yet synced
-            ) {
-              recordMap.set(key, {
-                ...item,
-                isOnline: false,
-                synced: false
-              });
-            }
-          });
-
-          // Convert map to array and sort by updatedAt
-          const allFaults = Array.from(recordMap.values())
-            .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-
-          // Update state
-          setOP5Faults(allFaults);
-
-          // Update cache with current data
-          await clearStore(STORE_NAMES.OP5_FAULTS);
-          for (const fault of allFaults) {
-            await safeAddItem(STORE_NAMES.OP5_FAULTS, fault);
-          }
-        } catch (error) {
-          console.error('[DataContext] Error updating OP5 faults:', error);
-          if (navigator.onLine) {
-            toast.error("Error updating faults list");
-          }
-        }
-      },
-      (error) => {
-        console.error('[DataContext] Error in OP5 faults snapshot:', error);
-        if (navigator.onLine) {
-          toast.error("Error connecting to database");
-        }
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      try {
+        console.log('[DataContext] OP5 faults snapshot update received.', { docChanges: snapshot.docChanges().map(change => ({ type: change.type, docId: change.doc.id })) });
+        const faults = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as OP5Fault[];
+        
+        // Update state with Firestore data
+        console.log('[DataContext] OP5 faults after mapping:', faults.length, 'faults');
+        setOP5Faults(faults);
+      } catch (error) {
+        console.error('[DataContext] Error updating OP5 faults:', error);
+        toast.error("Error updating faults list");
       }
-    );
+    });
 
     return () => {
       console.log('[DataContext] Cleaning up OP5 faults subscription');
@@ -693,69 +759,18 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     console.log('[DataContext] Setting up control outages subscription');
     const unsubscribe = onSnapshot(q, async (snapshot) => {
       try {
+        console.log('[DataContext] Control outages snapshot update received.', { docChanges: snapshot.docChanges().map(change => ({ type: change.type, docId: change.doc.id })) });
         // Get Firestore data (online)
         const firestoreData = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       })) as ControlSystemOutage[];
 
-        // Get offline data (unsynced changes)
-        const offlineData = await safeGetAllItems<ControlSystemOutage & BaseRecord>(STORE_NAMES.CONTROL_OUTAGES);
-        
-        // Get pending sync items to identify synced records
-        const pendingItems = await getPendingSyncItems();
-        const syncedIds = new Set(
-          pendingItems
-            .filter(item => item.type === STORE_NAMES.CONTROL_OUTAGES)
-            .map(item => item.data.id)
-        );
+        console.log('[DataContext] Control outages firestore data:', firestoreData.length, 'outages');
 
-        const recordMap = new Map<string, ControlSystemOutage & { isOnline: boolean; synced: boolean }>();
-
-        // Add all Firestore records first (assume they're online and synced)
-        firestoreData.forEach(outage => {
-          const key = outage.clientId || outage.id;
-          recordMap.set(key, {
-            ...outage,
-            isOnline: true,
-            synced: true
-          });
-        });
-
-        // Then add/update offline records
-        offlineData.forEach(item => {
-          const key = item.clientId || item.id;
-          const existing = recordMap.get(key);
-
-          const isPending = syncedIds.has(item.id);
-
-          const itemDate = new Date(item.updatedAt);
-          const existingDate = existing ? new Date(existing.updatedAt) : null;
-
-          if (
-            !existing || // not in Firestore
-            (!isPending && existingDate && itemDate > existingDate) // newer and not yet synced
-          ) {
-            recordMap.set(key, {
-              ...item,
-              isOnline: false,
-              synced: false
-            });
-          }
-        });
-
-        // Convert map to array and sort by updatedAt
-        const allOutages = Array.from(recordMap.values())
-          .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-
-        // Update state
-        setControlSystemOutages(allOutages);
-
-        // Update cache with current data
-        await clearStore(STORE_NAMES.CONTROL_OUTAGES);
-        for (const outage of allOutages) {
-          await safeAddItem(STORE_NAMES.CONTROL_OUTAGES, outage);
-        }
+        // Update state directly with Firestore data
+        setControlSystemOutages(firestoreData);
+        console.log('[DataContext] Control outages state updated directly from Firestore:', firestoreData.length, 'outages');
       } catch (error) {
         console.error('[DataContext] Error updating control outages:', error);
         if (navigator.onLine) {
@@ -896,30 +911,30 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   // Initialize load monitoring records
   useEffect(() => {
     const initializeLoadMonitoring = async () => {
-    if (!user) return;
+      if (!user) return;
 
       console.log("Initializing load monitoring records...");
       try {
-    let q = query(collection(db, "loadMonitoring"));
-    const { regionId, districtId } = getUserRegionAndDistrict(user, regions, districts);
+        let q = query(collection(db, "loadMonitoring"));
+        const { regionId, districtId } = getUserRegionAndDistrict(user, regions, districts);
 
-    // Filter based on role
-    if (user.role === "district_engineer" || user.role === "technician") {
-      if (districtId) {
-        q = query(collection(db, "loadMonitoring"), where("districtId", "==", districtId));
-      }
-    } else if (user.role === "regional_engineer") {
-      if (regionId) {
-        q = query(collection(db, "loadMonitoring"), where("regionId", "==", regionId));
-      }
-    }
+        // Filter based on role
+        if (user.role === "district_engineer" || user.role === "technician") {
+          if (districtId) {
+            q = query(collection(db, "loadMonitoring"), where("districtId", "==", districtId));
+          }
+        } else if (user.role === "regional_engineer") {
+          if (regionId) {
+            q = query(collection(db, "loadMonitoring"), where("regionId", "==", regionId));
+          }
+        }
 
         const snapshot = await getDocs(q);
         const records = snapshot.docs.map(doc => {
           const data = doc.data();
           const now = new Date().toISOString();
           return {
-          id: doc.id,
+            id: doc.id,
             ...data,
             createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt || now,
             updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : data.updatedAt || now
@@ -928,14 +943,39 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
         console.log("Initial load monitoring records:", records.length);
         
-        // Store in local storage
+        // Clear existing records before adding new ones
+        await clearStore(STORE_NAMES.LOAD_MONITORING);
+        await clearStore(STORE_NAMES.LOAD_MONITORING_CACHE);
+        
+        // Store in local storage with error handling
         for (const record of records) {
-          await safeAddItem(STORE_NAMES.LOAD_MONITORING, record);
+          try {
+            await safeAddItem(STORE_NAMES.LOAD_MONITORING, record);
+            await safeAddItem(STORE_NAMES.LOAD_MONITORING_CACHE, record);
+          } catch (error) {
+            if (error.name === 'ConstraintError') {
+              console.log(`Record ${record.id} already exists, updating instead`);
+              await safeUpdateItem(STORE_NAMES.LOAD_MONITORING, record);
+              await safeUpdateItem(STORE_NAMES.LOAD_MONITORING_CACHE, record);
+            } else {
+              console.error(`Error storing record ${record.id}:`, error);
+            }
+          }
         }
 
         setLoadMonitoringRecords(records);
       } catch (error) {
         console.error("Error initializing load monitoring records:", error);
+        // Try to recover by loading from cache
+        try {
+          const cachedRecords = await safeGetAllItems<LoadMonitoringData>(STORE_NAMES.LOAD_MONITORING_CACHE);
+          if (cachedRecords.length > 0) {
+            console.log("Recovered from cache:", cachedRecords.length, "records");
+            setLoadMonitoringRecords(cachedRecords);
+          }
+        } catch (cacheError) {
+          console.error("Failed to recover from cache:", cacheError);
+        }
       }
     };
 
@@ -1017,504 +1057,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       unsubscribe();
     };
   }, [user, regions, districts]);
-
-  // Remove duplicate function declarations and keep only the new ones with offline support
-  const addOP5Fault = async (fault: Omit<OP5Fault, "id">) => {
-    try {
-      const timestamp = new Date().toISOString();
-      const faultWithTimestamps = {
-          ...fault, 
-        createdAt: timestamp,
-        updatedAt: timestamp,
-        status: fault.restorationDate ? "resolved" as const : "active" as const
-      };
-
-      if (navigator.onLine) {
-        const docRef = await addDoc(collection(db, "op5Faults"), {
-          ...faultWithTimestamps,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
-        toast.success("Fault saved successfully");
-        return docRef.id;
-      } else {
-        // Offline mode - store locally
-        const id = uuidv4();
-        const offlineFault = {
-          ...faultWithTimestamps,
-          id
-        };
-        await safeAddItem(STORE_NAMES.OP5_FAULTS, offlineFault);
-        await addToPendingSync(STORE_NAMES.OP5_FAULTS, "create", offlineFault);
-        toast.success("Fault saved offline");
-        setOP5Faults(prev => [...prev, offlineFault]);
-        return id;
-      }
-    } catch (error) {
-      console.error("Error saving fault:", error);
-      toast.error("Failed to save fault");
-      throw error;
-    }
-  };
-
-  const updateOP5Fault = async (faultId: string, data: Partial<OP5Fault>) => {
-    try {
-      console.log('[DataContext] Updating fault:', { faultId, data });
-      
-      // Check if the fault exists in our local state
-      const existingFault = op5Faults.find(f => f.id === faultId);
-      if (!existingFault) {
-        console.error('[DataContext] Fault not found in local state:', faultId);
-        toast.error('Fault not found. Please refresh the page and try again.');
-        return;
-      }
-
-      // Clean the data by removing undefined values
-      const cleanedData = Object.entries(data).reduce((acc, [key, value]) => {
-        if (value !== undefined) {
-          acc[key] = value;
-        }
-        return acc;
-      }, {} as Record<string, any>);
-
-      // Create the updated fault data
-      const updatedFault = {
-        ...existingFault,
-        ...cleanedData,
-        updatedAt: new Date().toISOString()
-      };
-
-      // Update local state first
-      const updatedFaults = op5Faults.map(fault => 
-        fault.id === faultId ? updatedFault : fault
-      );
-      setOP5Faults(updatedFaults);
-
-      // If online, update Firestore
-      if (navigator.onLine) {
-        try {
-          // First try to get the document
-          const faultRef = doc(db, 'op5Faults', faultId);
-          const faultSnap = await getDoc(faultRef);
-          
-          if (faultSnap.exists()) {
-            // Document exists, update it
-            await updateDoc(faultRef, {
-              ...cleanedData,
-              updatedAt: serverTimestamp()
-            });
-            console.log('[DataContext] Successfully updated existing fault in Firestore');
-          } else {
-            // Document doesn't exist, create new one
-            console.log('[DataContext] Document not found, creating new one');
-            const newDocRef = await addDoc(collection(db, 'op5Faults'), {
-              ...updatedFault,
-              createdAt: serverTimestamp(),
-              updatedAt: serverTimestamp()
-            });
-            
-            // Update local state with new ID
-            const newFault = {
-              ...updatedFault,
-              id: newDocRef.id,
-              isOnline: true,
-              synced: true
-            };
-            
-            setOP5Faults(prev => prev.map(fault => 
-              fault.id === faultId ? newFault : fault
-            ));
-            
-            // Update local storage
-            await safeDeleteItem(STORE_NAMES.OP5_FAULTS, faultId);
-            await safeAddItem(STORE_NAMES.OP5_FAULTS, newFault);
-            
-            console.log('[DataContext] Successfully created new fault in Firestore:', newDocRef.id);
-          }
-        } catch (error) {
-          console.error('[DataContext] Error updating Firestore:', error);
-          // If Firestore update fails, add to pending sync
-          await addToPendingSync(STORE_NAMES.OP5_FAULTS, "update", updatedFault);
-          toast.success('Fault updated (will sync when online)');
-        }
-      } else {
-        // Handle offline update
-        await safeUpdateItem(STORE_NAMES.OP5_FAULTS, updatedFault);
-        await addToPendingSync(STORE_NAMES.OP5_FAULTS, "update", updatedFault);
-        console.log('[DataContext] Successfully updated offline fault');
-      }
-    } catch (error) {
-      console.error('[DataContext] Error updating fault:', error);
-      toast.error('Failed to update fault. Please try again.');
-    }
-  };
-
-  const deleteOP5Fault = async (id: string) => {
-    try {
-      if (navigator.onLine) {
-      await deleteDoc(doc(db, "op5Faults", id));
-      toast.success("Fault deleted successfully");
-      } else {
-        // Offline mode - mark for deletion
-        await safeDeleteItem("op5Faults", id);
-        await addToPendingSync("op5Faults", "delete", { id });
-        toast.success("Fault marked for deletion");
-      }
-    } catch (error) {
-      console.error("Error deleting fault:", error);
-      toast.error("Failed to delete fault");
-    }
-  };
-
-  const addControlSystemOutage = async (outage: Omit<ControlSystemOutage, "id">) => {
-    try {
-      if (navigator.onLine) {
-        const docRef = await addDoc(collection(db, "controlOutages"), {
-      ...outage,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
-        toast.success("Outage saved successfully");
-        return docRef.id;
-      } else {
-        // Offline mode - store locally
-        const id = uuidv4();
-        const timestamp = new Date().toISOString();
-        const offlineOutage = {
-          ...outage,
-          id,
-          createdAt: timestamp,
-          updatedAt: timestamp
-        };
-        await safeAddItem(STORE_NAMES.CONTROL_OUTAGES, offlineOutage);
-        await addToPendingSync(STORE_NAMES.CONTROL_OUTAGES, "create", offlineOutage);
-        toast.success("Outage saved offline");
-        setControlSystemOutages(prev => [...prev, offlineOutage]);
-        return id;
-      }
-    } catch (error) {
-      console.error("Error saving outage:", error);
-      toast.error("Failed to save outage");
-      throw error;
-    }
-  };
-
-  const updateControlSystemOutage = async (id: string, data: Partial<ControlSystemOutage>) => {
-    try {
-      if (navigator.onLine) {
-      const outageRef = doc(db, "controlOutages", id);
-      await updateDoc(outageRef, {
-          ...data,
-        updatedAt: serverTimestamp()
-      });
-      toast.success("Outage updated successfully");
-      } else {
-        // Offline mode - update local storage
-        const offlineOutage = {
-          ...data,
-          id,
-          updatedAt: new Date().toISOString(),
-          createdAt: new Date().toISOString() // Add required createdAt field
-        };
-        await safeUpdateItem(STORE_NAMES.CONTROL_OUTAGES, offlineOutage);
-        await addToPendingSync(STORE_NAMES.CONTROL_OUTAGES, "update", offlineOutage);
-        toast.success("Outage updated offline");
-      }
-    } catch (error) {
-      console.error("Error updating outage:", error);
-      toast.error("Failed to update outage");
-    }
-  };
-
-  const deleteControlSystemOutage = async (id: string) => {
-    try {
-      if (navigator.onLine) {
-      await deleteDoc(doc(db, "controlOutages", id));
-      toast.success("Outage deleted successfully");
-      } else {
-        // Offline mode - mark for deletion
-        await safeDeleteItem(STORE_NAMES.CONTROL_OUTAGES, id);
-        await addToPendingSync(STORE_NAMES.CONTROL_OUTAGES, "delete", { id });
-        toast.success("Outage marked for deletion");
-      }
-    } catch (error) {
-      console.error("Error deleting outage:", error);
-      toast.error("Failed to delete outage");
-    }
-  };
-
-  // Function to get filtered faults
-  const getFilteredFaults = useCallback((regionId?: string, districtId?: string) => {
-    console.log('[DataContext] getFilteredFaults called with:', { regionId, districtId });
-    console.log('[DataContext] Current faults:', { 
-      op5Faults: op5Faults,
-      controlSystemOutages: controlSystemOutages
-    });
-
-    let filteredOP5Faults = [...op5Faults];
-    let filteredControlOutages = [...controlSystemOutages];
-
-    if (regionId) {
-      filteredOP5Faults = filteredOP5Faults.filter(fault => fault.regionId === regionId);
-      filteredControlOutages = filteredControlOutages.filter(outage => outage.regionId === regionId);
-    }
-
-    if (districtId) {
-      filteredOP5Faults = filteredOP5Faults.filter(fault => fault.districtId === districtId);
-      filteredControlOutages = filteredControlOutages.filter(outage => outage.districtId === districtId);
-    }
-
-    console.log('[DataContext] Filtered faults:', {
-      op5Faults: filteredOP5Faults,
-      controlOutages: filteredControlOutages
-    });
-
-    return {
-      op5Faults: filteredOP5Faults,
-      controlOutages: filteredControlOutages
-    };
-  }, [op5Faults, controlSystemOutages]);
-
-  // Function to check if user can resolve faults
-  const canResolveFault = useCallback((fault: OP5Fault | ControlSystemOutage) => {
-    if (!user) return false;
-    return PermissionService.getInstance().canAccessFeature(user.role, 'fault_resolution');
-  }, [user]);
-
-  // Function to check if user can edit faults
-  const canEditFault = useCallback((fault: OP5Fault | ControlSystemOutage) => {
-    if (!user) return false;
-
-    // Check if user has permission to edit faults
-    if (!PermissionService.getInstance().canAccessFeature(user.role, 'fault_reporting_update')) {
-      return false;
-    }
-
-    // System admins and global engineers can edit any fault
-    if (user.role === "system_admin" || user.role === "global_engineer") {
-      return true;
-    }
-
-    // Regional engineers can edit faults in their region
-    if (user.role === "regional_engineer") {
-      const userRegion = regions.find(r => r.name === user.region);
-      return userRegion?.id === fault.regionId;
-    }
-
-    // District engineers and technicians can edit faults in their district
-    if (user.role === "district_engineer" || user.role === "technician") {
-      const userDistrict = districts.find(d => d.name === user.district);
-      return userDistrict?.id === fault.districtId;
-    }
-
-    return false;
-  }, [user, regions, districts]);
-
-  // Function to resolve a fault
-  const resolveFault = useCallback(async (id: string, isOP5: boolean) => {
-    try {
-      const formattedDate = new Date().toISOString();
-      const updateData = {
-        status: "resolved" as const,
-        restorationDate: formattedDate,
-        updatedAt: formattedDate
-      };
-      
-      // Get the current fault/outage data
-      const currentData = isOP5 
-        ? op5Faults.find(f => f.id === id)
-        : controlSystemOutages.find(o => o.id === id);
-
-      if (!currentData) {
-        throw new Error("Fault not found");
-      }
-
-      // Update local state first for immediate feedback
-      if (isOP5) {
-        setOP5Faults(prevFaults => 
-          prevFaults.map(fault => 
-            fault.id === id 
-              ? { ...fault, ...updateData }
-              : fault
-          )
-        );
-      } else {
-        setControlSystemOutages(prevOutages => 
-          prevOutages.map(outage => 
-            outage.id === id 
-              ? { ...outage, ...updateData }
-              : outage
-          )
-        );
-      }
-
-      // Store the update in local storage
-      const storeName = isOP5 ? STORE_NAMES.OP5_FAULTS : STORE_NAMES.CONTROL_OUTAGES;
-      const updatedRecord = {
-        ...currentData,
-        ...updateData,
-        id: currentData.id,
-        createdAt: currentData.createdAt,
-        updatedAt: formattedDate
-      };
-
-      // Always update local storage first
-      await safeUpdateItem(storeName, updatedRecord);
-      await safeUpdateItem(getCacheStoreName(storeName), updatedRecord);
-
-      if (navigator.onLine) {
-      // Online mode - update Firestore
-        const collectionName = isOP5 ? "op5Faults" : "controlOutages";
-        const docRef = doc(db, collectionName, id);
-        
-        try {
-          await updateDoc(docRef, {
-            ...updateData,
-        updatedAt: serverTimestamp()
-      });
-          toast.success(`${isOP5 ? "OP5 Fault" : "Control System Outage"} resolved successfully`);
-    } catch (error) {
-          console.error("Error updating Firestore:", error);
-          // If Firestore update fails, add to pending sync
-          await addToPendingSync(storeName, "update", updatedRecord);
-          toast.success(`${isOP5 ? "OP5 Fault" : "Control System Outage"} resolved (will sync when online)`);
-        }
-      } else {
-        // Offline mode - add to pending sync
-        await addToPendingSync(storeName, "update", updatedRecord);
-        toast.success(`${isOP5 ? "OP5 Fault" : "Control System Outage"} resolved offline`);
-      }
-        } catch (error) {
-      console.error("Error resolving fault:", error);
-      toast.error("Failed to resolve fault");
-      
-      // Revert local state on error
-      if (isOP5) {
-        setOP5Faults(prevFaults => 
-          prevFaults.map(fault => 
-            fault.id === id 
-              ? { ...fault, status: "active", restorationDate: undefined }
-              : fault
-          )
-        );
-      } else {
-        setControlSystemOutages(prevOutages => 
-          prevOutages.map(outage => 
-            outage.id === id 
-              ? { ...outage, status: "active", restorationDate: undefined }
-              : outage
-          )
-        );
-      }
-    }
-  }, [op5Faults, controlSystemOutages]);
-
-  // Add missing functions
-  const saveLoadMonitoringRecord = async (record: Omit<LoadMonitoringData, "id">) => {
-    try {
-      const now = new Date().toISOString();
-      const newRecord: LoadMonitoringData = {
-        ...record,
-        id: uuidv4(),
-        createdAt: now,
-        updatedAt: now
-      };
-
-      if (navigator.onLine) {
-        // Online mode - save to Firestore
-        const docRef = await addDoc(collection(db, "loadMonitoring"), newRecord);
-        newRecord.id = docRef.id;
-      } else {
-        // Offline mode - save to IndexedDB
-        await safeAddItem(STORE_NAMES.LOAD_MONITORING, newRecord);
-        await addToPendingSync(STORE_NAMES.LOAD_MONITORING, "create", newRecord);
-      }
-
-      setLoadMonitoringRecords(prev => [...prev, newRecord]);
-      return newRecord.id;
-    } catch (error) {
-      console.error("Error saving load monitoring record:", error);
-      throw error;
-    }
-  };
-
-  const getLoadMonitoringRecord = async (id: string): Promise<LoadMonitoringData | undefined> => {
-    try {
-      if (navigator.onLine) {
-        // Online mode - get from Firestore
-        const docRef = doc(db, "loadMonitoring", id);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          const now = new Date().toISOString();
-          return {
-            id: docSnap.id,
-            ...data,
-            createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt || now,
-            updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : data.updatedAt || now
-          } as LoadMonitoringData;
-        }
-      } else {
-        // Offline mode - get from IndexedDB
-        return await safeGetItem<LoadMonitoringData>(STORE_NAMES.LOAD_MONITORING, id);
-      }
-    } catch (error) {
-      console.error("Error getting load monitoring record:", error);
-      throw error;
-    }
-  };
-
-  const updateLoadMonitoringRecord = async (id: string, data: Partial<LoadMonitoringData>) => {
-    try {
-      const now = new Date().toISOString();
-      const updatedData = {
-          ...data,
-        updatedAt: now
-      };
-
-      if (navigator.onLine) {
-        // Online mode - update Firestore
-        const docRef = doc(db, "loadMonitoring", id);
-        await updateDoc(docRef, updatedData);
-      } else {
-        // Offline mode - update IndexedDB
-        const existingRecord = await safeGetItem<LoadMonitoringData>(STORE_NAMES.LOAD_MONITORING, id);
-        if (existingRecord) {
-          const updatedRecord = {
-            ...existingRecord,
-            ...updatedData
-          };
-          await safeUpdateItem(STORE_NAMES.LOAD_MONITORING, updatedRecord);
-          await addToPendingSync(STORE_NAMES.LOAD_MONITORING, "update", updatedRecord);
-        }
-      }
-
-      setLoadMonitoringRecords(prev => 
-        prev.map(record => record.id === id ? { ...record, ...updatedData } : record)
-      );
-    } catch (error) {
-      console.error("Error updating load monitoring record:", error);
-      throw error;
-    }
-  };
-
-  const deleteLoadMonitoringRecord = async (id: string) => {
-    try {
-      if (navigator.onLine) {
-        // Online mode - delete from Firestore
-        await deleteDoc(doc(db, "loadMonitoring", id));
-      } else {
-        // Offline mode - delete from IndexedDB
-        await safeDeleteItem(STORE_NAMES.LOAD_MONITORING, id);
-        await addToPendingSync(STORE_NAMES.LOAD_MONITORING, "delete", { id });
-      }
-
-      setLoadMonitoringRecords(prev => prev.filter(record => record.id !== id));
-        } catch (error) {
-      console.error("Error deleting load monitoring record:", error);
-      throw error;
-    }
-  };
 
   // Add VIT asset
   const addVITAsset = async (asset: Omit<VITAsset, "id">) => {
@@ -2086,179 +1628,307 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Add sync handler for when device comes back online
-  useEffect(() => {
-    const handleOnline = async () => {
-      try {
-        console.log('=== SYNC STARTED ===');
-        console.log('Device is back online, syncing pending changes...');
-        const pendingItems = await getPendingSyncItems();
-        console.log('Pending items to sync:', JSON.stringify(pendingItems, null, 2));
-        
-        if (pendingItems.length === 0) {
-          console.log('No pending items to sync');
-          return;
-        }
+  // Function to get filtered faults
+  const getFilteredFaults = useCallback((regionId?: string, districtId?: string) => {
+    console.log('[DataContext] getFilteredFaults called with:', { regionId, districtId });
+    
+    let filteredOP5Faults = [...op5Faults];
+    let filteredControlOutages = [...controlSystemOutages];
 
-        // Group items by type to handle them in batches
-        const itemsByType = pendingItems.reduce((acc, item) => {
-          if (!acc[item.type]) {
-            acc[item.type] = [];
-          }
-          acc[item.type].push(item);
-          return acc;
-        }, {} as Record<string, typeof pendingItems>);
+    if (regionId) {
+      filteredOP5Faults = filteredOP5Faults.filter(fault => fault.regionId === regionId);
+      filteredControlOutages = filteredControlOutages.filter(outage => outage.regionId === regionId);
+    }
 
-        console.log('Items grouped by type:', Object.keys(itemsByType));
+    if (districtId) {
+      filteredOP5Faults = filteredOP5Faults.filter(fault => fault.districtId === districtId);
+      filteredControlOutages = filteredControlOutages.filter(outage => outage.districtId === districtId);
+    }
 
-        // Process each type of item
-        for (const [storeType, items] of Object.entries(itemsByType)) {
-          try {
-            console.log(`\n=== Processing ${storeType} ===`);
-            console.log(`Number of items to process: ${items.length}`);
+    return {
+      op5Faults: filteredOP5Faults,
+      controlOutages: filteredControlOutages
+    };
+  }, [op5Faults, controlSystemOutages]);
 
-            let collectionName = '';
-            let setState: React.Dispatch<React.SetStateAction<any[]>>;
-            
-            switch (storeType) {
-              case STORE_NAMES.OP5_FAULTS:
-                collectionName = 'op5Faults';
-                setState = setOP5Faults;
-                break;
-              case STORE_NAMES.CONTROL_OUTAGES:
-                collectionName = 'controlOutages';
-                setState = setControlSystemOutages;
-                break;
-              default:
-                console.log(`Skipping unknown store type: ${storeType}`);
-                continue;
-            }
+  // Function to check if user can resolve faults
+  const canResolveFault = useCallback((fault: OP5Fault | ControlSystemOutage) => {
+    if (!user) return false;
+    return PermissionService.getInstance().canAccessFeature(user.role, 'fault_resolution');
+  }, [user]);
 
-            console.log(`Using collection: ${collectionName}`);
+  // Function to check if user can edit faults
+  const canEditFault = useCallback((fault: OP5Fault | ControlSystemOutage) => {
+    if (!user) return false;
 
-            // Get all existing items from Firestore for this type
-            const snapshot = await getDocs(collection(db, collectionName));
-            const existingIds = new Set(snapshot.docs.map(doc => doc.id));
-            const existingClientIds = new Set(
-              snapshot.docs
-                .map(doc => doc.data().clientId)
-                .filter(id => id !== undefined)
-            );
+    // Check if user has permission to edit faults
+    if (!PermissionService.getInstance().canAccessFeature(user.role, 'fault_reporting_update')) {
+      return false;
+    }
 
-            console.log(`Found ${existingIds.size} existing documents in Firestore`);
+    // System admins and global engineers can edit any fault
+    if (user.role === "system_admin" || user.role === "global_engineer") {
+      return true;
+    }
 
-            // Track successfully synced items and deleted items
-            const syncedItems = new Set<string>();
-            const deletedItems = new Set<string>();
+    // Regional engineers can edit faults in their region
+    if (user.role === "regional_engineer") {
+      const userRegion = regions.find(r => r.name === user.region);
+      return userRegion?.id === fault.regionId;
+    }
 
-            // Process each item
-            for (const item of items) {
-              try {
-                console.log(`\nProcessing item:`, {
-                  id: item.data.id,
-                  action: item.action,
-                  type: item.type
-                });
+    // District engineers and technicians can edit faults in their district
+    if (user.role === "district_engineer" || user.role === "technician") {
+      const userDistrict = districts.find(d => d.name === user.district);
+      return userDistrict?.id === fault.districtId;
+    }
 
-                if (item.action === 'create' || item.action === 'update') {
-                  console.log('Creating new document in Firestore...');
-                  
-                  // Always create as new document in Firestore
-                  const docRef = await addDoc(collection(db, collectionName), {
-                    ...item.data,
-                    createdAt: serverTimestamp(),
-                    updatedAt: serverTimestamp()
-                  });
-                  
-                  console.log('Successfully created document:', {
-                    oldId: item.data.id,
-                    newId: docRef.id
-                  });
-                  
-                  // Replace the offline record with the new Firestore record
-                  await safeDeleteItem(storeType, item.data.id);
-                  await safeAddItem(storeType, {
-                    ...item.data,
-                    id: docRef.id,
-                    isOnline: true,
-                    synced: true
-                  });
-                  syncedItems.add(item.data.id);
-                } else if (item.action === 'delete') {
-                  console.log('Processing delete operation...');
-                  await safeDeleteItem(storeType, item.data.id);
-                  deletedItems.add(item.data.id);
-                  console.log('Successfully processed delete');
-                }
+    return false;
+  }, [user, regions, districts]);
 
-                // Clear the pending sync item
-                await clearPendingSyncItem(item);
-                console.log('Cleared pending sync item');
-              } catch (error) {
-                console.error(`Error processing item ${item.data.id}:`, error);
-                continue;
-              }
-            }
+  // Function to resolve a fault
+  const resolveFault = useCallback(async (id: string, isOP5: boolean) => {
+    try {
+      const formattedDate = new Date().toISOString();
+      const updateData = {
+        status: "resolved" as const,
+        restorationDate: formattedDate,
+        updatedAt: serverTimestamp()
+      };
+      
+      // Get the current fault/outage data
+      const currentData = isOP5 
+        ? op5Faults.find(f => f.id === id)
+        : controlSystemOutages.find(o => o.id === id);
 
-            console.log(`\nSync summary for ${storeType}:`, {
-              syncedItems: Array.from(syncedItems),
-              deletedItems: Array.from(deletedItems)
-            });
-
-            // After processing all items of this type:
-            console.log('\nUpdating cache and state...');
-            
-            // 1. Clear the cache
-            await clearStore(storeType);
-            await clearStore(getCacheStoreName(storeType));
-            
-            // 2. Get fresh data from Firestore
-            const freshSnapshot = await getDocs(collection(db, collectionName));
-            const freshData = freshSnapshot.docs.map(doc => {
-              const data = doc.data();
-              return {
-                id: doc.id,
-                ...data,
-                createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt || new Date().toISOString(),
-                updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : data.updatedAt || new Date().toISOString(),
-                isOnline: true,
-                synced: true
-              };
-            });
-
-            console.log(`Retrieved ${freshData.length} fresh documents from Firestore`);
-
-            // 3. Update state with fresh data
-            setState(freshData.filter(item => !deletedItems.has(item.id)));
-            
-            // 4. Update cache
-            for (const item of freshData) {
-              if (!deletedItems.has(item.id)) {
-                await safeAddItem(storeType, item);
-                await safeAddItem(getCacheStoreName(storeType), item);
-              }
-            }
-
-            console.log(`Successfully completed sync for ${storeType}`);
-      } catch (error) {
-            console.error(`Error syncing ${storeType}:`, error);
-            toast.error(`Failed to sync ${storeType}`);
-          }
-        }
-
-        console.log('=== SYNC COMPLETED ===');
-        toast.success("Sync completed successfully");
-      } catch (error) {
-        console.error("Error during sync:", error);
-        toast.error("Error syncing data");
+      if (!currentData) {
+        throw new Error("Fault not found");
       }
-    };
 
-    window.addEventListener('online', handleOnline);
-    return () => {
-      window.removeEventListener('online', handleOnline);
-    };
-  }, []);
+      // Update Firestore
+      const collectionName = isOP5 ? "op5Faults" : "controlOutages";
+      const docRef = doc(db, collectionName, id);
+      await updateDoc(docRef, updateData);
+
+      // Update local state
+      if (isOP5) {
+        setOP5Faults(prevFaults => 
+          prevFaults.map(fault => 
+            fault.id === id 
+              ? { ...fault, ...updateData, updatedAt: formattedDate }
+              : fault
+          )
+        );
+      } else {
+        setControlSystemOutages(prevOutages => 
+          prevOutages.map(outage => 
+            outage.id === id 
+              ? { ...outage, ...updateData, updatedAt: formattedDate }
+              : outage
+          )
+        );
+      }
+
+      toast.success(`${isOP5 ? "OP5 Fault" : "Control System Outage"} resolved successfully`);
+    } catch (error) {
+      console.error("Error resolving fault:", error);
+      toast.error("Failed to resolve fault");
+    }
+  }, [op5Faults, controlSystemOutages]);
+
+  // Add control system outage functions
+  const addControlSystemOutage = async (outage: Omit<ControlSystemOutage, "id" | "createdAt" | "updatedAt" | "createdBy" | "updatedBy">) => {
+    try {
+      // Access user directly from the hook within the function
+      const docRef = await addDoc(collection(db, "controlOutages"), {
+        ...outage,
+        createdAt: serverTimestamp(), // Use server timestamp for Firestore
+        updatedAt: serverTimestamp(), // Use server timestamp for Firestore
+        createdBy: user?.id || 'unknown', // Use user ID from AuthContext, fallback to 'unknown'
+        updatedBy: user?.id || 'unknown'  // Use user ID from AuthContext, fallback to 'unknown'
+      });
+      
+      const newOutage: ControlSystemOutage = {
+        ...outage,
+        id: docRef.id,
+        createdAt: new Date().toISOString(), // Use client timestamp for immediate state update
+        updatedAt: new Date().toISOString(), // Use client timestamp for immediate state update
+        createdBy: user?.id || 'unknown', // Include user ID in local state
+        updatedBy: user?.id || 'unknown'  // Include user ID in local state
+      };
+      
+      setControlSystemOutages(prev => [...prev, newOutage]);
+      toast.success("Outage saved successfully");
+      return docRef.id;
+    } catch (error) {
+      console.error("Error saving outage:", error);
+      toast.error("Failed to save outage");
+      throw error;
+    }
+  };
+
+  const updateControlSystemOutage = async (id: string, data: Partial<ControlSystemOutage>) => {
+    try {
+      const outageRef = doc(db, "controlOutages", id);
+      await updateDoc(outageRef, {
+        ...data,
+        updatedAt: serverTimestamp()
+      });
+      
+      setControlSystemOutages(prev => prev.map(outage => 
+        outage.id === id 
+          ? { ...outage, ...data, updatedAt: new Date().toISOString() }
+          : outage
+      ));
+      
+      toast.success("Outage updated successfully");
+    } catch (error) {
+      console.error("Error updating outage:", error);
+      toast.error("Failed to update outage");
+    }
+  };
+
+  const deleteControlSystemOutage = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, "controlOutages", id));
+      setControlSystemOutages(prev => prev.filter(outage => outage.id !== id));
+      toast.success("Outage deleted successfully");
+    } catch (error) {
+      console.error("Error deleting outage:", error);
+      toast.error("Failed to delete outage");
+    }
+  };
+
+  // Add OP5 fault functions
+  const addOP5Fault = async (fault: Omit<OP5Fault, "id">) => {
+    try {
+      const docRef = await addDoc(collection(db, "op5Faults"), {
+        ...fault,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      
+      const newFault: OP5Fault = {
+        ...fault,
+        id: docRef.id,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      
+      setOP5Faults(prev => [...prev, newFault]);
+      toast.success("Fault saved successfully");
+      return docRef.id;
+    } catch (error) {
+      console.error("Error saving fault:", error);
+      toast.error("Failed to save fault");
+      throw error;
+    }
+  };
+
+  const updateOP5Fault = async (id: string, data: Partial<OP5Fault>) => {
+    try {
+      const faultRef = doc(db, "op5Faults", id);
+      await updateDoc(faultRef, {
+        ...data,
+        updatedAt: serverTimestamp()
+      });
+      
+      setOP5Faults(prev => prev.map(fault => 
+        fault.id === id 
+          ? { ...fault, ...data, updatedAt: new Date().toISOString() }
+          : fault
+      ));
+      
+      toast.success("Fault updated successfully");
+    } catch (error) {
+      console.error("Error updating fault:", error);
+      toast.error("Failed to update fault");
+    }
+  };
+
+  const deleteOP5Fault = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, "op5Faults", id));
+      setOP5Faults(prev => prev.filter(fault => fault.id !== id));
+      toast.success("Fault deleted successfully");
+    } catch (error) {
+      console.error("Error deleting fault:", error);
+      toast.error("Failed to delete fault");
+    }
+  };
+
+  // Add load monitoring functions
+  const saveLoadMonitoringRecord = async (record: Omit<LoadMonitoringData, "id">) => {
+    try {
+      const docRef = await addDoc(collection(db, "loadMonitoring"), {
+        ...record,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      
+      const newRecord: LoadMonitoringData = {
+        ...record,
+        id: docRef.id,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      
+      setLoadMonitoringRecords(prev => [...prev, newRecord]);
+      toast.success("Load monitoring record saved successfully");
+      return docRef.id;
+    } catch (error) {
+      console.error("Error saving load monitoring record:", error);
+      toast.error("Failed to save load monitoring record");
+      throw error;
+    }
+  };
+
+  const getLoadMonitoringRecord = async (id: string) => {
+    try {
+      const docRef = doc(db, "loadMonitoring", id);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        return docSnap.data() as LoadMonitoringData;
+      }
+      return null;
+    } catch (error) {
+      console.error("Error getting load monitoring record:", error);
+      toast.error("Failed to get load monitoring record");
+      return null;
+    }
+  };
+
+  const updateLoadMonitoringRecord = async (id: string, data: Partial<LoadMonitoringData>) => {
+    try {
+      const recordRef = doc(db, "loadMonitoring", id);
+      await updateDoc(recordRef, {
+        ...data,
+        updatedAt: serverTimestamp()
+      });
+      
+      setLoadMonitoringRecords(prev => prev.map(record => 
+        record.id === id 
+          ? { ...record, ...data, updatedAt: new Date().toISOString() }
+          : record
+      ));
+      
+      toast.success("Load monitoring record updated successfully");
+    } catch (error) {
+      console.error("Error updating load monitoring record:", error);
+      toast.error("Failed to update load monitoring record");
+    }
+  };
+
+  const deleteLoadMonitoringRecord = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, "loadMonitoring", id));
+      setLoadMonitoringRecords(prev => prev.filter(record => record.id !== id));
+      toast.success("Load monitoring record deleted successfully");
+    } catch (error) {
+      console.error("Error deleting load monitoring record:", error);
+      toast.error("Failed to delete load monitoring record");
+    }
+  };
 
   return (
     <DataContext.Provider
@@ -2330,24 +2000,4 @@ export function useData() {
     throw new Error("useData must be used within a DataProvider");
   }
   return context;
-}
-
-// Helper function to get cache store name
-function getCacheStoreName(storeName: StoreName): StoreName {
-  switch (storeName) {
-    case STORE_NAMES.OP5_FAULTS:
-      return STORE_NAMES.OP5_FAULTS_CACHE;
-    case STORE_NAMES.CONTROL_OUTAGES:
-      return STORE_NAMES.CONTROL_OUTAGES_CACHE;
-    case STORE_NAMES.LOAD_MONITORING:
-      return STORE_NAMES.LOAD_MONITORING_CACHE;
-    case STORE_NAMES.VIT_ASSETS:
-      return STORE_NAMES.VIT_ASSETS_CACHE;
-    case STORE_NAMES.VIT_INSPECTIONS:
-      return STORE_NAMES.VIT_INSPECTIONS_CACHE;
-    case STORE_NAMES.OVERHEAD_LINE_INSPECTIONS:
-      return STORE_NAMES.OVERHEAD_LINE_INSPECTIONS_CACHE;
-    default:
-      throw new Error(`No cache store for store name: ${storeName}`);
-  }
 }
