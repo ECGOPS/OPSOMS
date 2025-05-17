@@ -1951,6 +1951,33 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  useEffect(() => {
+    // Listen for offline fault additions
+    const handleFaultAdded = (event: CustomEvent) => {
+      const { fault, type, status, error } = event.detail;
+      
+      if (status === 'error') {
+        console.error('[DataContext] Error saving fault offline:', error);
+        toast.error('Failed to save fault offline. Please try again.');
+        return;
+      }
+
+      if (status === 'success') {
+        if (type === 'op5') {
+          setOP5Faults(prev => [...prev, fault]);
+        } else {
+          setControlSystemOutages(prev => [...prev, fault]);
+        }
+      }
+    };
+
+    window.addEventListener('faultAdded', handleFaultAdded as EventListener);
+
+    return () => {
+      window.removeEventListener('faultAdded', handleFaultAdded as EventListener);
+    };
+  }, []);
+
   return (
     <DataContext.Provider
       value={{

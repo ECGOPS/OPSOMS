@@ -155,7 +155,12 @@ export class OfflineStorageService {
     const key = `fault_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const pendingFault: PendingFault = {
       key,
-      fault,
+      fault: {
+        ...fault,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        isOffline: true
+      },
       timestamp: Date.now(),
       type
     };
@@ -164,8 +169,51 @@ export class OfflineStorageService {
       console.log('[OfflineStorage] Saving fault with key:', key);
       await this.db.add('pendingFaults', pendingFault);
       console.log('[OfflineStorage] Fault saved successfully');
+
+      // Add to local state for immediate UI update
+      if (type === 'op5') {
+        const op5Fault = pendingFault.fault as Omit<OP5Fault, 'id'>;
+        const newFault: OP5Fault & { isOnline: boolean; synced: boolean } = {
+          ...op5Fault,
+          id: key,
+          isOnline: false,
+          synced: false
+        };
+        // Update local state through event
+        window.dispatchEvent(new CustomEvent('faultAdded', { 
+          detail: { 
+            fault: newFault, 
+            type: 'op5',
+            status: 'success'
+          } 
+        }));
+      } else {
+        const controlOutage = pendingFault.fault as Omit<ControlSystemOutage, 'id'>;
+        const newOutage: ControlSystemOutage & { isOnline: boolean; synced: boolean } = {
+          ...controlOutage,
+          id: key,
+          isOnline: false,
+          synced: false
+        };
+        // Update local state through event
+        window.dispatchEvent(new CustomEvent('faultAdded', { 
+          detail: { 
+            fault: newOutage, 
+            type: 'control',
+            status: 'success'
+          } 
+        }));
+      }
     } catch (error) {
       console.error('[OfflineStorage] Error saving fault:', error);
+      // Dispatch error event
+      window.dispatchEvent(new CustomEvent('faultAdded', { 
+        detail: { 
+          error: error.message,
+          type,
+          status: 'error'
+        } 
+      }));
       throw error;
     }
   }

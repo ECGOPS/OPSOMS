@@ -399,41 +399,25 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
         console.log('[OP5Form] Submitting fault online...');
         await addOP5Fault(cleanData);
         toast.success("Fault report submitted successfully");
+        resetForm();
+        navigate("/dashboard");
       } else {
         console.log('[OP5Form] Saving fault offline...');
         try {
           await offlineStorage.saveFaultOffline(cleanData, 'op5');
           toast.success("Fault report saved offline. It will be synced when internet connection is restored.");
+          resetForm();
+          navigate("/dashboard");
         } catch (error) {
           console.error('[OP5Form] Error saving fault offline:', error);
           toast.error("Failed to save fault offline. Please try again when you have internet connection.");
-          return;
+        } finally {
+          setIsSubmitting(false);
         }
       }
-      
-      // Show notification for successful fault creation
-      const notificationTitle = 'OP5 Fault Created';
-      const notificationBody = `New ${outageType} fault created in ${getRegionName(regionId)} - ${getDistrictName(districtId)}`;
-      
-      // Show both types of notifications
-      showServiceWorkerNotification(notificationTitle, {
-        body: notificationBody,
-        data: { url: window.location.href }
-      });
-      
-      showNotification(notificationTitle, {
-        body: notificationBody
-      });
-      
-      // Reset form
-      resetForm();
-      
-      // Navigate to dashboard
-      navigate("/dashboard");
     } catch (error) {
       console.error("[OP5Form] Error submitting fault:", error);
       toast.error("Failed to submit fault report. Please try again.");
-    } finally {
       setIsSubmitting(false);
     }
   };

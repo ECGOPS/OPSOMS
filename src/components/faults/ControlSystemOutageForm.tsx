@@ -253,53 +253,36 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
 
       if (isOnline) {
         console.log('[ControlSystemOutageForm] Submitting outage online...');
-        // When online, rely on addControlSystemOutage or backend to set audit fields
-        // The DataContext's addControlSystemOutage currently adds serverTimestamp, 
-        // and should ideally also add createdBy/updatedBy from authenticated user context.
         await addControlSystemOutage(formDataToSubmit as Omit<ControlSystemOutage, "id">);
         toast.success("Outage report submitted successfully");
+        resetForm();
+        navigate("/dashboard");
       } else {
         console.log('[ControlSystemOutageForm] Saving outage offline...');
         try {
           // When offline, explicitly add client-side timestamp and 'offline_user'
           const offlineDataWithAudit = {
-             ...formDataToSubmit,
-             createdAt: new Date().toISOString(), // Client-side timestamp for offline record
-             updatedAt: new Date().toISOString(), // Client-side timestamp for offline record
-             createdBy: user?.id || 'offline_user', // Use user ID (from AuthContext) or fallback for offline
-             updatedBy: user?.id || 'offline_user', // Use user ID (from AuthContext) or fallback for offline
-             isOffline: true
+            ...formDataToSubmit,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            createdBy: user?.id || 'offline_user',
+            updatedBy: user?.id || 'offline_user',
+            isOffline: true
           };
           await offlineStorage.saveFaultOffline(offlineDataWithAudit as Omit<ControlSystemOutage, "id">, 'control');
           toast.success("Outage report saved offline. It will be synced when internet connection is restored.");
+          resetForm();
+          navigate("/dashboard");
         } catch (error) {
           console.error('[ControlSystemOutageForm] Error saving outage offline:', error);
           toast.error("Failed to save outage offline. Please try again when you have internet connection.");
-          return;
+        } finally {
+          setIsSubmitting(false);
         }
       }
-      
-      // Show notification for successful outage creation
-      const notificationTitle = 'Control System Outage Created';
-      const notificationBody = `New ${faultType} outage created in ${getRegionName(regionId)} - ${getDistrictName(districtId)}`;
-      
-      // Show both types of notifications
-      showServiceWorkerNotification(notificationTitle, {
-        body: notificationBody,
-        data: { url: window.location.href }
-      });
-      
-      showNotification(notificationTitle, { body: notificationBody });
-      
-      // Reset form
-      resetForm();
-      
-      // Navigate to dashboard
-      navigate("/dashboard");
     } catch (error) {
       console.error("[ControlSystemOutageForm] Error submitting outage:", error);
       toast.error("Failed to submit outage report. Please try again.");
-    } finally {
       setIsSubmitting(false);
     }
   };
