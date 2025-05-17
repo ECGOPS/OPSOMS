@@ -52,6 +52,10 @@ export interface LoadMonitoringData extends BaseRecord {
     id: string;
     name: string;
   };
+
+  // Sync Information
+  originalOfflineId?: string;
+  syncStatus?: 'pending' | 'synced' | 'failed';
 }
 
 export type ConditionStatus = 'good' | 'bad';

@@ -65,6 +65,7 @@ import { deleteDB } from "idb";
 import { FaultService } from '@/services/FaultService';
 import { LoadMonitoringService } from '@/services/LoadMonitoringService';
 import { SubstationInspectionService } from '@/services/SubstationInspectionService';
+import { syncPendingChanges } from '@/utils/sync';
 
 const DB_NAME = 'ecg-oms-db';
 const DB_VERSION = 3;
@@ -258,6 +259,7 @@ export interface DataContextType {
   getLoadMonitoringRecord: (id: string) => Promise<LoadMonitoringData | undefined>;
   updateLoadMonitoringRecord: (id: string, data: Partial<LoadMonitoringData>) => Promise<void>;
   deleteLoadMonitoringRecord: (id: string) => Promise<void>;
+  initializeLoadMonitoring: () => Promise<void>;
   vitAssets: VITAsset[];
   vitInspections: VITInspectionChecklist[];
   addVITAsset: (asset: Omit<VITAsset, "id" | "createdAt" | "updatedAt">) => Promise<string>;
@@ -927,76 +929,77 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }, [user, regions, districts]);
 
   // Initialize load monitoring records
-  useEffect(() => {
-    const initializeLoadMonitoring = async () => {
-      if (!user) return;
+  const initializeLoadMonitoring = async () => {
+    if (!user) return;
 
-      console.log("Initializing load monitoring records...");
-      try {
-        let q = query(collection(db, "loadMonitoring"));
-        const { regionId, districtId } = getUserRegionAndDistrict(user, regions, districts);
+    console.log("Initializing load monitoring records...");
+    try {
+      let q = query(collection(db, "loadMonitoring"));
+      const { regionId, districtId } = getUserRegionAndDistrict(user, regions, districts);
 
-        // Filter based on role
-        if (user.role === "district_engineer" || user.role === "technician") {
-          if (districtId) {
-            q = query(collection(db, "loadMonitoring"), where("districtId", "==", districtId));
-          }
-        } else if (user.role === "regional_engineer") {
-          if (regionId) {
-            q = query(collection(db, "loadMonitoring"), where("regionId", "==", regionId));
-          }
+      // Filter based on role
+      if (user.role === "district_engineer" || user.role === "technician") {
+        if (districtId) {
+          q = query(collection(db, "loadMonitoring"), where("districtId", "==", districtId));
         }
-
-        const snapshot = await getDocs(q);
-        const records = snapshot.docs.map(doc => {
-          const data = doc.data();
-          const now = new Date().toISOString();
-          return {
-            id: doc.id,
-            ...data,
-            createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt || now,
-            updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : data.updatedAt || now
-          } as LoadMonitoringData;
-        });
-
-        console.log("Initial load monitoring records:", records.length);
-        
-        // Clear existing records before adding new ones
-        await clearStore(STORE_NAMES.LOAD_MONITORING);
-        await clearStore(STORE_NAMES.LOAD_MONITORING_CACHE);
-        
-        // Store in local storage with error handling
-        for (const record of records) {
-          try {
-            await safeAddItem(STORE_NAMES.LOAD_MONITORING, record);
-            await safeAddItem(STORE_NAMES.LOAD_MONITORING_CACHE, record);
-          } catch (error) {
-            if (error.name === 'ConstraintError') {
-              console.log(`Record ${record.id} already exists, updating instead`);
-              await safeUpdateItem(STORE_NAMES.LOAD_MONITORING, record);
-              await safeUpdateItem(STORE_NAMES.LOAD_MONITORING_CACHE, record);
-            } else {
-              console.error(`Error storing record ${record.id}:`, error);
-            }
-          }
-        }
-
-        setLoadMonitoringRecords(records);
-      } catch (error) {
-        console.error("Error initializing load monitoring records:", error);
-        // Try to recover by loading from cache
-        try {
-          const cachedRecords = await safeGetAllItems<LoadMonitoringData>(STORE_NAMES.LOAD_MONITORING_CACHE);
-          if (cachedRecords.length > 0) {
-            console.log("Recovered from cache:", cachedRecords.length, "records");
-            setLoadMonitoringRecords(cachedRecords);
-          }
-        } catch (cacheError) {
-          console.error("Failed to recover from cache:", cacheError);
+      } else if (user.role === "regional_engineer") {
+        if (regionId) {
+          q = query(collection(db, "loadMonitoring"), where("regionId", "==", regionId));
         }
       }
-    };
 
+      const snapshot = await getDocs(q);
+      const records = snapshot.docs.map(doc => {
+        const data = doc.data();
+        const now = new Date().toISOString();
+        return {
+          id: doc.id,
+          ...data,
+          createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt || now,
+          updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : data.updatedAt || now
+        } as LoadMonitoringData;
+      });
+
+      console.log("Initial load monitoring records:", records.length);
+      
+      // Clear existing records before adding new ones
+      await clearStore(STORE_NAMES.LOAD_MONITORING);
+      await clearStore(STORE_NAMES.LOAD_MONITORING_CACHE);
+      
+      // Store in local storage with error handling
+      for (const record of records) {
+        try {
+          await safeAddItem(STORE_NAMES.LOAD_MONITORING, record);
+          await safeAddItem(STORE_NAMES.LOAD_MONITORING_CACHE, record);
+        } catch (error) {
+          if (error.name === 'ConstraintError') {
+            console.log(`Record ${record.id} already exists, updating instead`);
+            await safeUpdateItem(STORE_NAMES.LOAD_MONITORING, record);
+            await safeUpdateItem(STORE_NAMES.LOAD_MONITORING_CACHE, record);
+          } else {
+            console.error(`Error storing record ${record.id}:`, error);
+          }
+        }
+      }
+
+      setLoadMonitoringRecords(records);
+    } catch (error) {
+      console.error("Error initializing load monitoring records:", error);
+      // Try to recover by loading from cache
+      try {
+        const cachedRecords = await safeGetAllItems<LoadMonitoringData>(STORE_NAMES.LOAD_MONITORING_CACHE);
+        if (cachedRecords.length > 0) {
+          console.log("Recovered from cache:", cachedRecords.length, "records");
+          setLoadMonitoringRecords(cachedRecords);
+        }
+      } catch (cacheError) {
+        console.error("Failed to recover from cache:", cacheError);
+      }
+    }
+  };
+
+  // Initialize load monitoring records on mount
+  useEffect(() => {
     initializeLoadMonitoring();
   }, [user, regions, districts]);
 
@@ -2040,11 +2043,27 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const getLoadMonitoringRecord = async (id: string) => {
     try {
-      const docRef = doc(db, "loadMonitoring", id);
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        return docSnap.data() as LoadMonitoringData;
+      // First check if we're online
+      if (navigator.onLine) {
+        const docRef = doc(db, "loadMonitoring", id);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          return docSnap.data() as LoadMonitoringData;
+        }
       }
+
+      // If online lookup failed or we're offline, check offline storage
+      const offlineRecord = await safeGetItem<LoadMonitoringData>(STORE_NAMES.LOAD_MONITORING, id);
+      if (offlineRecord) {
+        return offlineRecord;
+      }
+
+      // Check cache as last resort
+      const cachedRecord = await safeGetItem<LoadMonitoringData>(STORE_NAMES.LOAD_MONITORING_CACHE, id);
+      if (cachedRecord) {
+        return cachedRecord;
+      }
+
       return null;
     } catch (error) {
       console.error("Error getting load monitoring record:", error);
@@ -2055,70 +2074,116 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const updateLoadMonitoringRecord = async (id: string, data: Partial<LoadMonitoringData>) => {
     try {
-      const loadMonitoringService = LoadMonitoringService.getInstance();
-      const isOnline = loadMonitoringService.isInternetAvailable();
+      const timestamp = new Date().toISOString();
+      const updates = {
+        ...data,
+        updatedAt: timestamp,
+        createdAt: data.createdAt || timestamp // Ensure createdAt is set for BaseRecord type
+      };
 
-      if (isOnline) {
+      if (navigator.onLine) {
+        // Online mode - update Firestore
         const recordRef = doc(db, "loadMonitoring", id);
         await updateDoc(recordRef, {
-          ...data,
-          updatedAt: serverTimestamp()
+          ...updates,
+          updatedAt: serverTimestamp(),
+          syncStatus: 'synced'
         });
         
+        // Update local state
         setLoadMonitoringRecords(prev => prev.map(record => 
           record.id === id 
-            ? { ...record, ...data, updatedAt: new Date().toISOString() }
+            ? { ...record, ...updates, syncStatus: 'synced' }
             : record
         ));
+
+        // Update cache
+        await safeUpdateItem(STORE_NAMES.LOAD_MONITORING_CACHE, {
+          id,
+          ...updates,
+          syncStatus: 'synced'
+        });
         
         toast.success("Load monitoring record updated successfully");
       } else {
-        // Get the full record to update
-        const existingRecord = loadMonitoringRecords.find(r => r.id === id);
+        // Offline mode - update IndexedDB
+        const existingRecord = await safeGetItem<LoadMonitoringData>(STORE_NAMES.LOAD_MONITORING, id) ||
+                             await safeGetItem<LoadMonitoringData>(STORE_NAMES.LOAD_MONITORING_CACHE, id);
+
         if (!existingRecord) {
           throw new Error('Record not found');
         }
 
-        // Save offline update
-        await loadMonitoringService.saveLoadMonitoringOffline(
-          { ...existingRecord, ...data },
-          'update'
-        );
+        const updatedRecord = {
+          ...existingRecord,
+          ...updates,
+          originalOfflineId: existingRecord.originalOfflineId || id, // Preserve original ID for sync
+          syncStatus: 'pending' as const
+        };
+
+        // Save to offline storage using update instead of add
+        await safeUpdateItem(STORE_NAMES.LOAD_MONITORING, updatedRecord);
+        
+        // Add to pending sync with the original ID
+        await addToPendingSync(STORE_NAMES.LOAD_MONITORING, "update", {
+          ...updatedRecord,
+          id: updatedRecord.originalOfflineId // Use original ID for sync
+        });
+        
+        // Update local state
+        setLoadMonitoringRecords(prev => prev.map(record => 
+          record.id === id 
+            ? updatedRecord
+            : record
+        ));
+
         toast.success("Load monitoring record updated offline. It will be synced when internet connection is restored.");
       }
     } catch (error) {
       console.error("Error updating load monitoring record:", error);
       toast.error("Failed to update load monitoring record");
+      throw error;
     }
   };
 
   const deleteLoadMonitoringRecord = async (id: string) => {
     try {
-      const loadMonitoringService = LoadMonitoringService.getInstance();
-      const isOnline = loadMonitoringService.isInternetAvailable();
-
-      if (isOnline) {
+      if (navigator.onLine) {
+        // Online mode - delete from Firestore
         await deleteDoc(doc(db, "loadMonitoring", id));
+        
+        // Remove from cache
+        await safeDeleteItem(STORE_NAMES.LOAD_MONITORING_CACHE, id);
+        
+        // Update local state
         setLoadMonitoringRecords(prev => prev.filter(record => record.id !== id));
+        
         toast.success("Load monitoring record deleted successfully");
       } else {
-        // Get the full record to delete
-        const existingRecord = loadMonitoringRecords.find(r => r.id === id);
+        // Offline mode - get record from either store
+        const existingRecord = await safeGetItem<LoadMonitoringData>(STORE_NAMES.LOAD_MONITORING, id) ||
+                             await safeGetItem<LoadMonitoringData>(STORE_NAMES.LOAD_MONITORING_CACHE, id);
+
         if (!existingRecord) {
           throw new Error('Record not found');
         }
 
-        // Save offline delete
-        await loadMonitoringService.saveLoadMonitoringOffline(
-          existingRecord,
-          'delete'
-        );
+        // Add to pending sync
+        await addToPendingSync(STORE_NAMES.LOAD_MONITORING, "delete", existingRecord);
+        
+        // Remove from both stores
+        await safeDeleteItem(STORE_NAMES.LOAD_MONITORING, id);
+        await safeDeleteItem(STORE_NAMES.LOAD_MONITORING_CACHE, id);
+        
+        // Update local state
         setLoadMonitoringRecords(prev => prev.filter(record => record.id !== id));
+        
         toast.success("Load monitoring record deleted offline. It will be synced when internet connection is restored.");
       }
     } catch (error) {
       console.error("Error deleting load monitoring record:", error);
       toast.error("Failed to delete load monitoring record");
+      throw error;
     }
   };
 
@@ -2194,6 +2259,24 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user]);
 
+  // Add sync status monitoring
+  useEffect(() => {
+    const handleOnline = async () => {
+      try {
+        const { successCount, failureCount } = await syncPendingChanges();
+        if (successCount > 0 || failureCount > 0) {
+          // Refresh data after sync
+          await initializeLoadMonitoring();
+        }
+      } catch (error) {
+        console.error('Error during sync:', error);
+      }
+    };
+
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [initializeLoadMonitoring]);
+
   const contextValue: DataContextType = {
     regions,
     districts,
@@ -2221,10 +2304,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     getLoadMonitoringRecord,
     updateLoadMonitoringRecord,
     deleteLoadMonitoringRecord,
+    initializeLoadMonitoring,
     vitAssets,
-    setVITAssets,
     vitInspections,
-    setVITInspections,
     addVITAsset,
     updateVITAsset,
     deleteVITAsset,
@@ -2241,6 +2323,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     canEditInspection,
     canDeleteAsset,
     canDeleteInspection,
+    setVITAssets,
+    setVITInspections,
     getSavedInspection,
     canAddAsset,
     canAddInspection,

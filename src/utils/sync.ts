@@ -1,6 +1,8 @@
 import { getPendingSyncItems, clearPendingSyncItem } from './db';
 import { doc, updateDoc, deleteDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import { getFirestore, setDoc } from 'firebase/firestore';
+import { toast } from 'sonner';
 
 let isOnline = navigator.onLine;
 let syncInProgress = false;
@@ -16,64 +18,79 @@ window.addEventListener('offline', () => {
 });
 
 export async function syncPendingChanges() {
-  if (!isOnline || syncInProgress) return;
-
-  syncInProgress = true;
   try {
     const pendingItems = await getPendingSyncItems();
-    
+    const firestore = getFirestore();
+    let successCount = 0;
+    let failureCount = 0;
+
     for (const item of pendingItems) {
       try {
-        const { type, action, data } = item;
-        
-        // Map store names to Firestore collection names
-        const collectionMap: Record<string, string> = {
-          'op5-faults': 'op5Faults',
-          'control-outages': 'controlOutages',
-          'load-monitoring': 'loadMonitoring',
-          'vit-assets': 'vitAssets',
-          'vit-inspections': 'vitInspections',
-          'substation-inspections': 'substationInspections',
-          'overhead-line-inspections': 'overheadLineInspections'
-        };
+        const docRef = doc(firestore, item.type, item.data.id);
 
-        const collectionName = collectionMap[type];
-        if (!collectionName) {
-          console.error(`Unknown collection type: ${type}`);
-          continue;
-        }
-
-        switch (action) {
+        switch (item.action) {
           case 'create':
-            await addDoc(collection(db, collectionName), {
-              ...data,
-              createdAt: serverTimestamp(),
-              updatedAt: serverTimestamp()
+            await setDoc(docRef, {
+              ...item.data,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+              syncStatus: 'synced'
             });
             break;
-          
+
           case 'update':
-            const docRef = doc(db, collectionName, data.id);
-            await updateDoc(docRef, {
-              ...data,
-              updatedAt: serverTimestamp()
+            // If this was an offline record, use the originalOfflineId
+            const docId = item.data.originalOfflineId || item.data.id;
+            const updateRef = doc(firestore, item.type, docId);
+            await updateDoc(updateRef, {
+              ...item.data,
+              updatedAt: new Date().toISOString(),
+              syncStatus: 'synced'
             });
             break;
-          
+
           case 'delete':
-            await deleteDoc(doc(db, collectionName, data.id));
+            // If this was an offline record, use the originalOfflineId
+            const deleteId = item.data.originalOfflineId || item.data.id;
+            const deleteRef = doc(firestore, item.type, deleteId);
+            await deleteDoc(deleteRef);
             break;
         }
-        
-        // After successful sync, remove from pending
+
+        // Remove from pending sync after successful sync
         await clearPendingSyncItem(item);
+        successCount++;
       } catch (error) {
-        console.error(`Failed to sync ${item.type} ${item.action}:`, error);
-        // Keep the item in pending sync for retry later
+        console.error(`Failed to sync item ${item.id}:`, error);
+        failureCount++;
+        
+        // Update sync status to failed
+        if (item.data.id) {
+          const docRef = doc(firestore, item.type, item.data.id);
+          try {
+            await updateDoc(docRef, {
+              syncStatus: 'failed',
+              syncError: error.message
+            });
+          } catch (updateError) {
+            console.error('Failed to update sync status:', updateError);
+          }
+        }
       }
     }
-  } finally {
-    syncInProgress = false;
+
+    if (successCount > 0) {
+      toast.success(`Successfully synced ${successCount} items`);
+    }
+    if (failureCount > 0) {
+      toast.error(`Failed to sync ${failureCount} items`);
+    }
+
+    return { successCount, failureCount };
+  } catch (error) {
+    console.error('Error syncing pending changes:', error);
+    toast.error('Failed to sync pending changes');
+    throw error;
   }
 }
 

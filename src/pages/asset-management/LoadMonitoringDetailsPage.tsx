@@ -114,17 +114,19 @@ export default function LoadMonitoringDetailsPage() {
   });
 
   useEffect(() => {
+    let isMounted = true;
+
     const fetchRecordData = async () => {
       if (!id || !getLoadMonitoringRecord) {
         toast.error("Invalid record ID or data context unavailable.");
         navigate("/asset-management/load-monitoring");
-        setIsLoading(false);
         return;
       }
       
       try {
-        setIsLoading(true);
         const fetchedRecord = await getLoadMonitoringRecord(id);
+        
+        if (!isMounted) return;
         
         if (!fetchedRecord) {
           toast.error("Load monitoring record not found.");
@@ -137,23 +139,95 @@ export default function LoadMonitoringDetailsPage() {
         setWarningLevels(calculateWarningLevels(fetchedRecord));
       } catch (error) {
         console.error("Error fetching load monitoring record:", error);
-        toast.error("Failed to load record details.");
-        navigate("/asset-management/load-monitoring");
+        if (isMounted) {
+          toast.error("Failed to load record details.");
+          navigate("/asset-management/load-monitoring");
+        }
       } finally {
-        setIsLoading(false);
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
     };
 
     fetchRecordData();
+
+    return () => {
+      isMounted = false;
+    };
   }, [id, getLoadMonitoringRecord, navigate]);
 
   if (isLoading) {
-    return <Layout><div>Loading record details...</div></Layout>;
+    return (
+      <Layout>
+        <div className="container mx-auto py-8">
+          <div className="flex items-center justify-between mb-6">
+            <Button variant="outline" size="icon" onClick={() => navigate("/asset-management/load-monitoring")}>
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <div className="h-8 w-64 bg-muted animate-pulse rounded"></div>
+            <div className="w-10"></div>
+          </div>
+
+          <div className="grid gap-6">
+            {/* Loading skeleton for Basic Information Card */}
+            <Card>
+              <CardHeader>
+                <div className="h-6 w-48 bg-muted animate-pulse rounded"></div>
+              </CardHeader>
+              <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {[...Array(8)].map((_, i) => (
+                  <div key={i} className="space-y-2">
+                    <div className="h-4 w-24 bg-muted animate-pulse rounded"></div>
+                    <div className="h-6 w-32 bg-muted animate-pulse rounded"></div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            {/* Loading skeleton for Feeder Legs Card */}
+            <Card>
+              <CardHeader>
+                <div className="h-6 w-48 bg-muted animate-pulse rounded"></div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {[...Array(2)].map((_, i) => (
+                  <div key={i} className="border p-4 rounded-md">
+                    <div className="h-5 w-32 bg-muted animate-pulse rounded mb-3"></div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      {[...Array(4)].map((_, j) => (
+                        <div key={j} className="space-y-2">
+                          <div className="h-4 w-24 bg-muted animate-pulse rounded"></div>
+                          <div className="h-6 w-32 bg-muted animate-pulse rounded"></div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            {/* Loading skeleton for Calculated Load Information Card */}
+            <Card>
+              <CardHeader>
+                <div className="h-6 w-48 bg-muted animate-pulse rounded"></div>
+              </CardHeader>
+              <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                {[...Array(12)].map((_, i) => (
+                  <div key={i} className="space-y-2">
+                    <div className="h-4 w-24 bg-muted animate-pulse rounded"></div>
+                    <div className="h-6 w-32 bg-muted animate-pulse rounded"></div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </Layout>
+    );
   }
 
   if (!record) {
-    // This case should ideally be handled by the redirect in useEffect,
-    // but it's good practice to have a fallback.
     return <Layout><div>Record not found.</div></Layout>;
   }
 
@@ -210,10 +284,10 @@ export default function LoadMonitoringDetailsPage() {
                     <div key={leg.id} className="border p-4 rounded-md">
                        <Label className="block font-medium mb-3">Feeder Leg {index + 1}</Label>
                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                           <DetailItem label="Red Phase" value={leg.redPhaseCurrent.toFixed(2)} />
-                           <DetailItem label="Yellow Phase" value={leg.yellowPhaseCurrent.toFixed(2)} />
-                           <DetailItem label="Blue Phase" value={leg.bluePhaseCurrent.toFixed(2)} />
-                           <DetailItem label="Neutral" value={leg.neutralCurrent.toFixed(2)} />
+                           <DetailItem label="Red Phase" value={typeof leg.redPhaseCurrent === 'number' ? leg.redPhaseCurrent.toFixed(2) : 'N/A'} />
+                           <DetailItem label="Yellow Phase" value={typeof leg.yellowPhaseCurrent === 'number' ? leg.yellowPhaseCurrent.toFixed(2) : 'N/A'} />
+                           <DetailItem label="Blue Phase" value={typeof leg.bluePhaseCurrent === 'number' ? leg.bluePhaseCurrent.toFixed(2) : 'N/A'} />
+                           <DetailItem label="Neutral" value={typeof leg.neutralCurrent === 'number' ? leg.neutralCurrent.toFixed(2) : 'N/A'} />
                        </div>
                     </div>
                   ))}
