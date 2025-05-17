@@ -34,9 +34,9 @@ import {
   Cell
 } from 'recharts';
 import { LineChart, Line } from 'recharts';
-import { OP5Fault, ControlSystemOutage } from '../types/faults';
+import { OP5Fault, ControlSystemOutage } from '@/lib/types';
 import MaterialsAnalysis from '@/components/analytics/MaterialsAnalysis';
-import { calculateOutageDuration } from "@/lib/calculations";
+import { calculateOutageDuration, calculateMTTR } from "@/lib/calculations";
 
 // Colors for charts
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
@@ -54,9 +54,9 @@ const formatSafeDate = (dateString: string | undefined | null): string => {
 
 export default function AnalyticsPage() {
   const { toast } = useToast();
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, users } = useAuth(); // Get the list of all users
   const navigate = useNavigate();
-  const { regions, districts, getFilteredFaults } = useData();
+  const { regions, districts, getFilteredFaults, op5Faults, controlSystemOutages } = useData();
   const [filteredFaults, setFilteredFaults] = useState([]);
   const [filterRegion, setFilterRegion] = useState<string | undefined>(undefined);
   const [filterDistrict, setFilterDistrict] = useState<string | undefined>(undefined);
@@ -99,28 +99,34 @@ export default function AnalyticsPage() {
   const [pageSize, setPageSize] = useState(10);
   const [activeTab, setActiveTab] = useState<'all' | 'op5' | 'control'>('all');
 
-  // Calculate paginated faults
+  // Use the same logic as DashboardPage for paginatedFaults
   const paginatedFaults = useMemo(() => {
-    let faultsToDisplay = filteredFaults;
-    
-    // Apply tab filtering
-    if (overviewRecentFaultsTab === 'op5') {
-      faultsToDisplay = filteredFaults.filter((f): f is OP5Fault => 'faultLocation' in f);
-    } else if (overviewRecentFaultsTab === 'control') {
-      faultsToDisplay = filteredFaults.filter((f): f is ControlSystemOutage => 'loadMW' in f);
-    }
-    
-    // Sort by date (most recent first)
-    faultsToDisplay = faultsToDisplay.sort((a, b) => 
-      new Date(b.occurrenceDate).getTime() - new Date(a.occurrenceDate).getTime()
+    // Get the latest filtered faults from context
+    const { op5Faults: op5, controlOutages: control } = getFilteredFaults(
+      selectedRegion === "all" ? undefined : filterRegion,
+      selectedDistrict === "all" ? undefined : filterDistrict
     );
-    
-    // Calculate pagination
+    let faultsToDisplay: (OP5Fault | ControlSystemOutage)[] = [];
+    if (overviewRecentFaultsTab === 'op5') {
+      faultsToDisplay = op5;
+    } else if (overviewRecentFaultsTab === 'control') {
+      faultsToDisplay = control;
+    } else {
+      // Combine both, but ensure uniqueness by id
+      const seenIds = new Set<string>();
+      faultsToDisplay = [...op5, ...control].filter(fault => {
+        if (seenIds.has(fault.id)) return false;
+        seenIds.add(fault.id);
+        return true;
+      });
+    }
+    // Sort by occurrenceDate descending
+    faultsToDisplay.sort((a, b) => new Date(b.occurrenceDate).getTime() - new Date(a.occurrenceDate).getTime());
+    // Pagination
     const startIndex = (currentPage - 1) * pageSize;
     const endIndex = startIndex + pageSize;
-    
     return faultsToDisplay.slice(startIndex, endIndex);
-  }, [filteredFaults, overviewRecentFaultsTab, currentPage, pageSize]);
+  }, [getFilteredFaults, selectedRegion, filterRegion, selectedDistrict, filterDistrict, overviewRecentFaultsTab, currentPage, pageSize]);
 
   // Calculate total pages
   const totalPages = useMemo(() => {
@@ -180,14 +186,17 @@ export default function AnalyticsPage() {
   // Single effect for data loading
   useEffect(() => {
     if (isAuthenticated) {
-      console.log('[DataLoadEffect] Loading data with filters:', {
-        filterRegion,
-        filterDistrict,
-        filterFaultType,
-        dateRange,
-        startDate,
-        endDate
+      console.log('[AnalyticsPage] filteredFaults:', filteredFaults);
+      filteredFaults.forEach((fault, idx) => {
+        console.log(`[AnalyticsPage] Fault #${idx + 1}:`, fault);
+        console.log(`[AnalyticsPage] Fault #${idx + 1} keys:`, Object.keys(fault));
       });
+      // Use either 'faultLocation' or 'substationName' to identify OP5 faults
+      const op5WithDates = filteredFaults.filter(f => 
+        ('faultLocation' in f || 'substationName' in f) && 
+        f.repairDate && f.restorationDate
+      );
+      console.log('[AnalyticsPage] OP5 faults with repairDate and restorationDate:', op5WithDates);
       loadData();
     }
   }, [isAuthenticated, filterRegion, filterDistrict, filterFaultType, dateRange, startDate, endDate]);
@@ -376,22 +385,42 @@ export default function AnalyticsPage() {
       metro: { saidi: 0, saifi: 0, caidi: 0 }
     };
 
-    faults.forEach((fault: any) => {
-      if ('faultLocation' in fault) {
-        const region = regions.find(r => r.id === fault.regionId);
-        if (region) {
+    // Filter only OP5 faults with valid MTTR
+    const op5Faults = faults.filter(fault => 
+      ('faultLocation' in fault || 'substationName' in fault) && 
+      fault.repairDate && 
+      fault.restorationDate
+    );
+
+    // Calculate MTTR for each fault
+    op5Faults.forEach(fault => {
+      const mttr = calculateMTTR(fault.repairDate, fault.restorationDate);
+      fault.mttr = mttr;
+    });
+
+    // Calculate indices
+    op5Faults.forEach(fault => {
+      if (fault.affectedPopulation) {
+        const { rural, urban, metro } = fault.affectedPopulation;
+        if (rural > 0) {
           indices.rural.saidi += fault.mttr || 0;
           indices.rural.saifi += 1;
-          indices.rural.caidi += fault.mttr || 0 / (fault.reliabilityIndices?.saidi || 1);
         }
-      } else {
-        const district = districts.find(d => d.id === fault.districtId);
-        if (district) {
+        if (urban > 0) {
           indices.urban.saidi += fault.mttr || 0;
           indices.urban.saifi += 1;
-          indices.urban.caidi += fault.mttr || 0 / (fault.reliabilityIndices?.saidi || 1);
+        }
+        if (metro > 0) {
+          indices.metro.saidi += fault.mttr || 0;
+          indices.metro.saifi += 1;
         }
       }
+    });
+
+    // Calculate CAIDI
+    Object.keys(indices).forEach(key => {
+      const index = indices[key as keyof typeof indices];
+      index.caidi = index.saifi > 0 ? index.saidi / index.saifi : 0;
     });
 
     return indices;
@@ -637,18 +666,11 @@ export default function AnalyticsPage() {
 
       // Get all OP5 faults with materials used
       const faultsWithMaterials = filteredFaults.filter(fault => {
-        const isOP5Fault = 'faultLocation' in fault || fault.type === 'OP5';
+        const isOP5Fault = 'faultLocation' in fault || 'substationName' in fault || fault.type === 'OP5';
         const hasMaterials = Array.isArray(fault.materialsUsed) && fault.materialsUsed.length > 0;
-        
         if (isOP5Fault && hasMaterials) {
-          console.log('OP5 Fault with materials:', {
-            id: fault.id,
-            type: fault.type,
-            materialsCount: fault.materialsUsed.length,
-            materials: fault.materialsUsed
-          });
+          console.log('[MaterialsAnalysis] Fault with materials:', fault);
         }
-        
         return isOP5Fault && hasMaterials;
       });
 
@@ -766,7 +788,7 @@ export default function AnalyticsPage() {
     // Get all OP5 faults with materials used
     const op5Faults = filteredFaults.filter(fault => {
       // Check if it's an OP5 fault and has materials
-      const isOP5Fault = 'faultLocation' in fault || fault.type === 'OP5';
+      const isOP5Fault = 'faultLocation' in fault || 'substationName' in fault || fault.type === 'OP5';
       const hasMaterials = Array.isArray(fault.materialsUsed) && fault.materialsUsed.length > 0;
       
       if (isOP5Fault && hasMaterials) {
@@ -1083,6 +1105,13 @@ export default function AnalyticsPage() {
     document.body.removeChild(link);
     // Correct the toast call to pass a single options object
     toast({ title: "Export Successful", description: "Recent faults exported to CSV." }); 
+  };
+  
+  // Add a helper function to find user name by ID
+  const getUserNameById = (userId: string | undefined): string => {
+    if (!userId || userId === 'offline_user' || userId === 'unknown') return userId || 'N/A';
+    const foundUser = users.find(u => u.id === userId);
+    return foundUser ? foundUser.name || foundUser.email || userId : userId;
   };
   
   if (!isAuthenticated) {
@@ -1420,7 +1449,11 @@ export default function AnalyticsPage() {
                 <CardDescription className="text-xs sm:text-sm mt-1">Analysis of repair times for OP5 faults</CardDescription>
               </div>
               <Badge variant="outline" className="text-xs sm:text-sm">
-                {filteredFaults.filter(f => 'faultLocation' in f && f.mttr).length} Faults Analyzed
+                {filteredFaults.filter(f => 
+                  ('faultLocation' in f || 'substationName' in f) && 
+                  f.repairDate && 
+                  f.restorationDate
+                ).length} Faults Analyzed
               </Badge>
             </div>
           </CardHeader>
@@ -1433,8 +1466,17 @@ export default function AnalyticsPage() {
                 <CardContent>
                   <div className="text-xl sm:text-2xl font-bold text-yellow-900">
                     {(() => {
-                      const op5FaultsWithMTTR = filteredFaults.filter(f => 'faultLocation' in f && f.mttr);
-                      const totalMTTR = op5FaultsWithMTTR.reduce((sum, fault) => sum + (fault.mttr || 0), 0);
+                      const op5FaultsWithMTTR = filteredFaults.filter(f => 
+                        ('faultLocation' in f || 'substationName' in f) && 
+                        f.repairDate && 
+                        f.restorationDate
+                      );
+                      const totalMTTR = op5FaultsWithMTTR.reduce((sum, fault) => {
+                        const repairDate = new Date(fault.repairDate);
+                        const restorationDate = new Date(fault.restorationDate);
+                        const mttr = (restorationDate.getTime() - repairDate.getTime()) / (1000 * 60 * 60);
+                        return sum + mttr;
+                      }, 0);
                       const averageMTTR = op5FaultsWithMTTR.length > 0 ? totalMTTR / op5FaultsWithMTTR.length : 0;
                       return `${averageMTTR.toFixed(2)} hours`;
                     })()}
@@ -1452,8 +1494,17 @@ export default function AnalyticsPage() {
                 <CardContent>
                   <div className="text-xl sm:text-2xl font-bold text-orange-900">
                     {(() => {
-                      const op5FaultsWithMTTR = filteredFaults.filter(f => 'faultLocation' in f && f.mttr);
-                      const totalMTTR = op5FaultsWithMTTR.reduce((sum, fault) => sum + (fault.mttr || 0), 0);
+                      const op5FaultsWithMTTR = filteredFaults.filter(f => 
+                        ('faultLocation' in f || 'substationName' in f) && 
+                        f.repairDate && 
+                        f.restorationDate
+                      );
+                      const totalMTTR = op5FaultsWithMTTR.reduce((sum, fault) => {
+                        const repairDate = new Date(fault.repairDate);
+                        const restorationDate = new Date(fault.restorationDate);
+                        const mttr = (restorationDate.getTime() - repairDate.getTime()) / (1000 * 60 * 60);
+                        return sum + mttr;
+                      }, 0);
                       return `${totalMTTR.toFixed(2)} hours`;
                     })()}
                   </div>
@@ -1469,7 +1520,11 @@ export default function AnalyticsPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="text-xl sm:text-2xl font-bold text-gray-900">
-                    {filteredFaults.filter(f => 'faultLocation' in f && f.mttr).length}
+                    {filteredFaults.filter(f => 
+                      ('faultLocation' in f || 'substationName' in f) && 
+                      f.repairDate && 
+                      f.restorationDate
+                    ).length}
                   </div>
                   <p className="text-xs text-gray-700 mt-1">
                     Out of {filteredFaults.filter(f => 'faultLocation' in f).length} total OP5 faults
@@ -1486,45 +1541,22 @@ export default function AnalyticsPage() {
                 </Badge>
               </div>
               <div className="space-y-4">
-                {(user?.role === 'district_engineer' && user.regionId)
-                  ? regions.filter(region => region.id === user.regionId).map(region => {
-                      const regionFaults = filteredFaults.filter(f => 'faultLocation' in f && f.mttr && f.regionId === region.id);
-                      const regionMTTR = regionFaults.reduce((sum, fault) => sum + (fault.mttr || 0), 0);
+                {regions.map(region => {
+                  const regionFaults = filteredFaults.filter(f => 
+                    ('faultLocation' in f || 'substationName' in f) && 
+                    f.repairDate && 
+                    f.restorationDate && 
+                    f.regionId === region.id
+                  );
+                  const regionMTTR = regionFaults.reduce((sum, fault) => {
+                    const repairDate = new Date(fault.repairDate);
+                    const restorationDate = new Date(fault.restorationDate);
+                    const mttr = (restorationDate.getTime() - repairDate.getTime()) / (1000 * 60 * 60);
+                    return sum + mttr;
+                  }, 0);
                       const avgMTTR = regionFaults.length > 0 ? regionMTTR / regionFaults.length : 0;
                       const totalFaults = filteredFaults.filter(f => 'faultLocation' in f && f.regionId === region.id).length;
-                      return (
-                        <div key={region.id} className="space-y-2">
-                          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium text-sm sm:text-base">{region.name}</span>
-                              <Badge variant="secondary" className="text-xs">
-                                {regionFaults.length} faults
-                              </Badge>
-                            </div>
-                            <div className="flex items-center gap-2 w-full sm:w-auto">
-                              <span className="font-medium text-sm sm:text-base">{avgMTTR.toFixed(2)} hours</span>
-                              <div className="flex-1 sm:w-32 h-2 bg-muted rounded-full overflow-hidden">
-                                <div 
-                                  className="h-full bg-primary" 
-                                  style={{ 
-                                    width: `${(avgMTTR / 5) * 100}%`,  // Scale for 5 hours max
-                                    maxWidth: '100%'
-                                  }} 
-                                />
-                              </div>
-                            </div>
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {regionFaults.length} of {totalFaults} OP5 faults have MTTR data
-                          </div>
-                        </div>
-                      );
-                    })
-                  : regions.map(region => {
-                      const regionFaults = filteredFaults.filter(f => 'faultLocation' in f && f.mttr && f.regionId === region.id);
-                      const regionMTTR = regionFaults.reduce((sum, fault) => sum + (fault.mttr || 0), 0);
-                      const avgMTTR = regionFaults.length > 0 ? regionMTTR / regionFaults.length : 0;
-                      const totalFaults = filteredFaults.filter(f => 'faultLocation' in f && f.regionId === region.id).length;
+                  
                       return (
                         <div key={region.id} className="space-y-2">
                           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
@@ -1660,7 +1692,9 @@ export default function AnalyticsPage() {
                           paginatedFaults.map((fault: any) => (
                             <TableRow key={fault.id}>
                               <TableCell className="font-medium text-xs sm:text-sm py-2 px-2 sm:px-4">{fault.id.substring(0, 8)}...</TableCell>
-                              <TableCell className="text-xs sm:text-sm py-2 px-2 sm:px-4">{'faultLocation' in fault ? 'OP5' : 'Control'}</TableCell>
+                              <TableCell className="text-xs sm:text-sm py-2 px-2 sm:px-4">{
+                                op5Faults.some(f => f.id === fault.id) ? 'OP5' : 'Control'
+                              }</TableCell>
                               <TableCell className="text-xs sm:text-sm py-2 px-2 sm:px-4">{getRegionName(fault.regionId)}</TableCell>
                               <TableCell className="text-xs sm:text-sm py-2 px-2 sm:px-4">{getDistrictName(fault.districtId)}</TableCell>
                               <TableCell className="text-xs sm:text-sm py-2 px-2 sm:px-4">{formatSafeDate(fault.occurrenceDate)}</TableCell>
@@ -1854,7 +1888,7 @@ export default function AnalyticsPage() {
         
         {/* Fault Details Dialog - improved responsiveness */}
         <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
-          <DialogContent className="max-w-md sm:max-w-2xl">
+          <DialogContent className="max-w-md sm:max-w-2xl max-h-[80vh] overflow-y-auto">
             {selectedFault && (
               <>
                 <DialogHeader>
@@ -1975,6 +2009,119 @@ export default function AnalyticsPage() {
                   <Link to={`/dashboard?id=${selectedFault.id}`} className="text-primary hover:underline text-sm">
                     View on Dashboard
                   </Link>
+                </div>
+                {/* Show all fault data for debugging/inspection */}
+                <div className="mt-6">
+                  <h3 className="text-base sm:text-lg font-bold text-primary mb-4">All Fault Data</h3>
+                  {(() => {
+                    // Helper functions
+                    function formatValue(value) {
+                      if (value === null || value === undefined || value === '') return '—';
+                      // Firestore timestamp
+                      if (typeof value === 'object' && value.seconds && value.nanoseconds) {
+                        const date = new Date(value.seconds * 1000);
+                        return date.toLocaleString();
+                      }
+                      // ISO date string
+                      if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(value)) {
+                        return new Date(value).toLocaleString();
+                      }
+                      // Object (like affectedPopulation)
+                      if (typeof value === 'object' && !Array.isArray(value)) {
+                        return (
+                          <ul className="ml-2 list-none">
+                            {Object.entries(value).map(([k, v]) => (
+                              <li key={k}><span className="font-semibold text-gray-500">{formatKey(k)}:</span> {formatValue(v)}</li>
+                            ))}
+                          </ul>
+                        );
+                      }
+                      // Array
+                      if (Array.isArray(value)) {
+                        return value.length === 0 ? '—' : (
+                          <ul className="ml-2 list-disc">
+                            {value.map((v, i) => <li key={i}>{formatValue(v)}</li>)}
+                          </ul>
+                        );
+                      }
+                      return String(value);
+                    }
+                    function formatKey(key) {
+                      return key
+                        .replace(/([A-Z])/g, ' $1')
+                        .replace(/^./, str => str.toUpperCase())
+                        .replace(/_/g, ' ');
+                    }
+                    // Group fields
+                    const { regionId, districtId, ...rest } = selectedFault;
+                    const groups = [
+                      {
+                        title: 'General Info',
+                        fields: ['id', 'faultType', 'status', 'description', 'createdAt', 'updatedAt', 'mttr'],
+                      },
+                      {
+                        title: 'Location',
+                        fields: ['region', 'district', 'substationName', 'substationNo', 'faultLocation'],
+                      },
+                      {
+                        title: 'Timing',
+                        fields: ['occurrenceDate', 'repairDate', 'restorationDate'],
+                      },
+                      {
+                        title: 'Impact',
+                        fields: ['affectedPopulation', 'materialsUsed', 'loadMW', 'reason'],
+                      },
+                      // Add Audit Info group for createdBy and updatedBy
+                      {
+                        title: 'Audit Info',
+                        fields: ['createdBy', 'updatedBy'],
+                      },
+                    ];
+                    // Find any extra fields not in groups
+                    const groupedFields = groups.flatMap(g => g.fields);
+                    const exclude = [];
+                    const extraFields = Object.keys(rest)
+                      .filter(k => !groupedFields.includes(k) && !exclude.includes(k));
+                    if (extraFields.length > 0) {
+                      groups.push({ title: 'Other', fields: extraFields });
+                    }
+                    return (
+                      <div className="space-y-4">
+                        {groups.map(group => {
+                          const groupEntries = group.fields.filter(f => f in rest).map(f => [f, rest[f]]);
+                          if (groupEntries.length === 0) return null;
+                          return (
+                            <section
+                              key={group.title}
+                              className="bg-gray-50 rounded-lg shadow-sm p-4 sm:p-6"
+                            >
+                              <div className="flex items-center mb-3">
+                                <h4 className="text-base sm:text-lg font-bold text-blue-700 tracking-wide uppercase">
+                                  {group.title}
+                                </h4>
+                              </div>
+                              <dl className="divide-y divide-gray-200">
+                                {groupEntries.map(([key, value]) => (
+                                  <div key={key} className="py-2 flex flex-col sm:flex-row sm:items-center">
+                                    <dt className="text-xs sm:text-sm font-semibold text-gray-500 uppercase w-40 sm:w-56 flex-shrink-0">
+                                      {formatKey(key)}
+                                    </dt>
+                                    <dd className="ml-0 sm:ml-4 text-sm sm:text-base text-gray-900 break-words">
+                                      { /* Use helper function for createdBy and updatedBy */ }
+                                      { (key === 'createdBy' || key === 'updatedBy') 
+                                          ? getUserNameById(value as string) 
+                                          : formatValue(value)
+                                      }
+                                    </dd>
+                                  </div>
+                                ))}
+                              </dl>
+                            </section>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
                 </div>
               </>
             )}

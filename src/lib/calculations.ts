@@ -10,10 +10,10 @@ export interface ReliabilityIndices {
   caidi: number;
 }
 
-export function calculateMTTR(occurrenceDate: string, repairDate: string): number {
-  const occurrence = new Date(occurrenceDate);
+export function calculateMTTR(repairDate: string, restorationDate: string): number {
   const repair = new Date(repairDate);
-  const diffInHours = (repair.getTime() - occurrence.getTime()) / (1000 * 60 * 60);
+  const restoration = new Date(restorationDate);
+  const diffInHours = (restoration.getTime() - repair.getTime()) / (1000 * 60 * 60);
   return Number(diffInHours.toFixed(2));
 }
 

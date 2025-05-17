@@ -38,7 +38,9 @@ export default function SubstationInspectionPage() {
   const [formData, setFormData] = useState<SubstationInspection>({
     id: uuidv4(),
     region: "",
+    regionId: "",
     district: "",
+    districtId: "",
     substationName: "",
     substationNo: "",
     type: "indoor",
@@ -52,7 +54,10 @@ export default function SubstationInspectionPage() {
     remarks: "",
     createdBy: user?.name || "",
     createdAt: new Date().toISOString(),
-    inspectedBy: user?.name || ""
+    inspectedBy: user?.name || "",
+    location: "",
+    voltageLevel: "",
+    status: "Pending"
   });
   const [categories, setCategories] = useState<Category[]>([]);
 
@@ -340,80 +345,59 @@ export default function SubstationInspectionPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    const region = user?.region || formData.region || "";
-    const district = user?.district || formData.district || "";
-    
-    // Find the region and district IDs from the names
-    const regionFound = regions.find(r => r.name === region);
-    const districtFound = districts.find(d => d.name === district);
-    
-    const regionId = regionFound?.id || "";
-    const districtId = districtFound?.id || "";
-    
-    const selectedRegion = regionFound?.name || "";
-    const selectedDistrict = districtFound?.name || "";
+    setIsSubmitting(true);
 
-    // Get all items from categories
-    const generalBuildingItems = categories.find(c => c.name === "General Building")?.items.map(item => ({
-      id: item.id,
-      category: "general building",
-      name: item.name,
-      status: item.status,
-      remarks: item.remarks || ""
-    })) || [];
+    try {
+      // Get all items from categories
+      const inspectionItems = {
+        generalBuilding: categories[0]?.items || [],
+        controlEquipment: categories[1]?.items || [],
+        powerTransformer: categories[2]?.items || [],
+        outdoorEquipment: categories[3]?.items || []
+      };
 
-    const controlEquipmentItems = categories.find(c => c.name === "Control Equipment")?.items.map(item => ({
-      id: item.id,
-      category: "control equipment",
-      name: item.name,
-      status: item.status,
-      remarks: item.remarks || ""
-    })) || [];
-
-    const powerTransformerItems = categories.find(c => c.name === "Power Transformer")?.items.map(item => ({
-      id: item.id,
-      category: "power transformer",
-      name: item.name,
-      status: item.status,
-      remarks: item.remarks || ""
-    })) || [];
-
-    const outdoorEquipmentItems = categories.find(c => c.name === "Outdoor Equipment")?.items.map(item => ({
-      id: item.id,
-      category: "outdoor equipment",
-      name: item.name,
-      status: item.status,
-      remarks: item.remarks || ""
-    })) || [];
-    
-    const inspectionData: Omit<SubstationInspection, "id"> = {
-      region: selectedRegion,
-      district: selectedDistrict,
-      date: formData.date || new Date().toISOString().split('T')[0],
-      inspectionDate: formData.inspectionDate || new Date().toISOString().split('T')[0],
-      substationNo: formData.substationNo || "",
-      substationName: formData.substationName || "",
-      type: formData.type || "indoor",
-      items: [
-        ...generalBuildingItems,
-        ...controlEquipmentItems,
-        ...powerTransformerItems,
-        ...outdoorEquipmentItems
-      ],
-      generalBuilding: generalBuildingItems,
-      controlEquipment: controlEquipmentItems,
-      powerTransformer: powerTransformerItems,
-      outdoorEquipment: outdoorEquipmentItems,
-      remarks: "",
-      createdBy: user?.name || "Unknown",
-      createdAt: new Date().toISOString(),
-      inspectedBy: user?.name || "Unknown"
-    };
-    
-    const id = saveInspection(inspectionData);
-    toast.success("Inspection saved successfully");
-    navigate("/asset-management/inspection-management");
+      // Get selected region and district names
+      const selectedRegion = regions.find(r => r.id === regionId)?.name || "";
+      const selectedDistrict = districts.find(d => d.id === districtId)?.name || "";
+      
+      const inspectionData: Omit<SubstationInspection, "id"> = {
+        region: selectedRegion,
+        district: selectedDistrict,
+        regionId: regionId,
+        districtId: districtId,
+        date: formData.date || new Date().toISOString().split('T')[0],
+        inspectionDate: formData.inspectionDate || new Date().toISOString().split('T')[0],
+        substationNo: formData.substationNo || "",
+        substationName: formData.substationName || "",
+        type: formData.type || "indoor",
+        items: [
+          ...inspectionItems.generalBuilding,
+          ...inspectionItems.controlEquipment,
+          ...inspectionItems.powerTransformer,
+          ...inspectionItems.outdoorEquipment
+        ],
+        generalBuilding: inspectionItems.generalBuilding,
+        controlEquipment: inspectionItems.controlEquipment,
+        powerTransformer: inspectionItems.powerTransformer,
+        outdoorEquipment: inspectionItems.outdoorEquipment,
+        remarks: formData.remarks || "",
+        createdBy: user?.name || "Unknown",
+        createdAt: new Date().toISOString(),
+        inspectedBy: user?.name || "Unknown",
+        location: formData.location || "",
+        voltageLevel: formData.voltageLevel || "",
+        status: formData.status || "Pending"
+      };
+      
+      saveInspection(inspectionData);
+      toast.success("Inspection saved successfully");
+      navigate("/asset-management/inspection-management");
+    } catch (error) {
+      console.error("Error saving inspection:", error);
+      toast.error("Failed to save inspection");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const filteredInspections = useMemo(() => {

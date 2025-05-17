@@ -1225,7 +1225,28 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         ...data,
         id: uuidv4(),
         createdAt: now,
-        updatedAt: now
+        updatedAt: now,
+        // Ensure all required fields have valid values
+        region: data.region || "",
+        regionId: data.regionId || "",
+        district: data.district || "",
+        districtId: data.districtId || "",
+        substationNo: data.substationNo || "",
+        substationName: data.substationName || "",
+        type: data.type || "indoor",
+        date: data.date || now,
+        inspectionDate: data.inspectionDate || now,
+        items: data.items || [],
+        generalBuilding: data.generalBuilding || [],
+        controlEquipment: data.controlEquipment || [],
+        powerTransformer: data.powerTransformer || [],
+        outdoorEquipment: data.outdoorEquipment || [],
+        remarks: data.remarks || "",
+        createdBy: data.createdBy || "Unknown",
+        inspectedBy: data.inspectedBy || "Unknown",
+        location: data.location || "",
+        voltageLevel: data.voltageLevel || "",
+        status: data.status || "Pending"
       };
 
       if (navigator.onLine) {

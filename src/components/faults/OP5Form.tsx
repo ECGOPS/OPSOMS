@@ -43,6 +43,7 @@ import { formatDuration } from "@/utils/calculations";
 import { v4 as uuidv4 } from 'uuid';
 import { showNotification, showServiceWorkerNotification } from '@/utils/notifications';
 import { PermissionService } from "@/services/PermissionService";
+import OfflineStorageService from "@/services/OfflineStorageService";
 
 interface OP5FormProps {
   defaultRegionId?: string;
@@ -55,6 +56,7 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
   const { user } = useAuth();
   const navigate = useNavigate();
   const permissionService = PermissionService.getInstance();
+  const offlineStorage = OfflineStorageService.getInstance();
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [regionId, setRegionId] = useState<string>(defaultRegionId);
@@ -62,6 +64,7 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
   const [outageType, setOutageType] = useState<string>("");
   const [outageDescription, setOutageDescription] = useState<string>("");
   const [faultLocation, setFaultLocation] = useState<string>("");
+  const [substationNo, setSubstationNo] = useState<string>("");
   const [occurrenceDate, setOccurrenceDate] = useState<string>("");
   const [repairDate, setRepairDate] = useState<string>("");
   const [restorationDate, setRestorationDate] = useState<string>("");
@@ -85,6 +88,13 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
     urban: { saidi: 0, saifi: 0, caidi: 0 },
     metro: { saidi: 0, saifi: 0, caidi: 0 }
   });
+  
+  // Add new state for feeder/circuit and voltage level
+  const [feeder, setFeeder] = useState<string>("");
+  const [voltageLevel, setVoltageLevel] = useState<string>("");
+  
+  // Add new state for substation name
+  const [substationName, setSubstationName] = useState<string>("");
   
   // Check if user has permission to report faults
   useEffect(() => {
@@ -148,8 +158,8 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
       setOutageDuration(duration);
       
       // Calculate MTTR if repair date is available
-      if (repairDate) {
-        const mttr = calculateMTTR(occurrenceDate, repairDate);
+      if (repairDate && restorationDate) {
+        const mttr = calculateMTTR(repairDate, restorationDate);
         setMttr(mttr);
       }
       
@@ -163,32 +173,29 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
       
       const selectedDistrict = districts.find(d => d.id === districtId);
       if (selectedDistrict?.population) {
-        // Calculate indices for rural population
-        const ruralIndices = calculateReliabilityIndicesByType(
-          duration,
-          { rural: ruralAffected || 0, urban: 0, metro: 0 },
-          selectedDistrict.population.rural || 0
-        );
-
-        // Calculate indices for urban population
-        const urbanIndices = calculateReliabilityIndicesByType(
-          duration,
-          { rural: 0, urban: urbanAffected || 0, metro: 0 },
-          selectedDistrict.population.urban || 0
-        );
-
-        // Calculate indices for metro population
-        const metroIndices = calculateReliabilityIndicesByType(
-          duration,
-          { rural: 0, urban: 0, metro: metroAffected || 0 },
-          selectedDistrict.population.metro || 0
-        );
-
-        setReliabilityIndices({
-          rural: ruralIndices,
-          urban: urbanIndices,
-          metro: metroIndices
-        });
+        const totalPopulation = (selectedDistrict.population.rural || 0) + 
+                              (selectedDistrict.population.urban || 0) + 
+                              (selectedDistrict.population.metro || 0);
+        
+        if (totalPopulation > 0) {
+          setReliabilityIndices({
+            rural: calculateReliabilityIndicesByType(
+              duration,
+              { rural: ruralAffected || 0, urban: 0, metro: 0 },
+              totalPopulation
+            ),
+            urban: calculateReliabilityIndicesByType(
+              duration,
+              { rural: 0, urban: urbanAffected || 0, metro: 0 },
+              totalPopulation
+            ),
+            metro: calculateReliabilityIndicesByType(
+              duration,
+              { rural: 0, urban: 0, metro: metroAffected || 0 },
+              totalPopulation
+            ),
+          });
+        }
       }
     }
   }, [occurrenceDate, repairDate, restorationDate, ruralAffected, urbanAffected, metroAffected, districtId, districts]);
@@ -241,6 +248,33 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
     }
     
     return null;
+  };
+
+  const resetForm = () => {
+    setRegionId(defaultRegionId);
+    setDistrictId(defaultDistrictId);
+    setOutageType("");
+    setOutageDescription("");
+    setFaultLocation("");
+    setSubstationNo("");
+    setOccurrenceDate("");
+    setRepairDate("");
+    setRestorationDate("");
+    setRuralAffected(null);
+    setUrbanAffected(null);
+    setMetroAffected(null);
+    setSpecificFaultType(undefined);
+    setOutageDuration(null);
+    setMttr(null);
+    setCustomerLostHours(null);
+    setReliabilityIndices({
+      rural: { saidi: 0, saifi: 0, caidi: 0 },
+      urban: { saidi: 0, saifi: 0, caidi: 0 },
+      metro: { saidi: 0, saifi: 0, caidi: 0 }
+    });
+    setFeeder("");
+    setVoltageLevel("");
+    setSubstationName("");
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -308,37 +342,74 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
       const formattedRestorationDate = restorationDate ? new Date(restorationDate).toISOString() : null;
 
       const formDataToSubmit: Omit<OP5Fault, "id"> = {
-        regionId: regionId || "",
-        districtId: districtId || "",
-        region: regions.find(r => r.id === regionId)?.name || "",
-        district: districts.find(d => d.id === districtId)?.name || "",
-        occurrenceDate: formattedOccurrenceDate,
-        repairDate: formattedRepairDate,
-        restorationDate: formattedRestorationDate,
         faultType: outageType as FaultType,
-        specificFaultType: specificFaultType || "",
-        faultLocation: faultLocation || "",
+        substationName: substationName || "",
+        substationNo: substationNo || "",
+        feeder: feeder || "",
+        voltageLevel: voltageLevel || "",
+        occurrenceDate: formattedOccurrenceDate,
+        restorationDate: formattedRestorationDate,
+        repairDate: formattedRepairDate,
+        description: outageDescription || "",
+        status: restorationDate ? 'resolved' as const : 'active' as const,
+        ...(mttr !== null && { mttr }),
+        regionId,
+        region: regions.find(r => r.id === regionId)?.name || '',
+        districtId,
+        district: districts.find(d => d.id === districtId)?.name || '',
         affectedPopulation: {
           rural: ruralAffected || 0,
           urban: urbanAffected || 0,
           metro: metroAffected || 0
         },
-        mttr: mttr || 0,
-        reliabilityIndices: {
-          saidi: reliabilityIndices.rural.saidi,
-          saifi: reliabilityIndices.rural.saifi,
-          caidi: reliabilityIndices.rural.caidi
-        },
-        status: restorationDate ? "resolved" as const : "active" as const,
-        createdBy: user?.id || 'unknown',
+        materialsUsed: materialsUsed.map(material => ({
+          id: material.id,
+          type: material.type,
+          details: {
+            rating: material.rating,
+            type: material.conductorType,
+            description: material.description
+          }
+        })),
         createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        materialsUsed: [],
-        description: outageDescription || "",
-        date: formattedOccurrenceDate,
+        updatedAt: new Date().toISOString()
       };
 
-      await addOP5Fault(formDataToSubmit);
+      // Remove undefined fields recursively before saving
+      function removeUndefinedDeep(obj) {
+        if (Array.isArray(obj)) {
+          return obj.map(removeUndefinedDeep);
+        } else if (obj && typeof obj === 'object') {
+          return Object.entries(obj).reduce((acc, [key, value]) => {
+            if (value !== undefined) {
+              acc[key] = removeUndefinedDeep(value);
+            }
+            return acc;
+          }, {});
+        }
+        return obj;
+      }
+
+      const cleanData = removeUndefinedDeep(formDataToSubmit);
+
+      const isOnline = offlineStorage.isInternetAvailable();
+      console.log('[OP5Form] Internet available:', isOnline);
+
+      if (isOnline) {
+        console.log('[OP5Form] Submitting fault online...');
+        await addOP5Fault(cleanData);
+        toast.success("Fault report submitted successfully");
+      } else {
+        console.log('[OP5Form] Saving fault offline...');
+        try {
+          await offlineStorage.saveFaultOffline(cleanData, 'op5');
+          toast.success("Fault report saved offline. It will be synced when internet connection is restored.");
+        } catch (error) {
+          console.error('[OP5Form] Error saving fault offline:', error);
+          toast.error("Failed to save fault offline. Please try again when you have internet connection.");
+          return;
+        }
+      }
       
       // Show notification for successful fault creation
       const notificationTitle = 'OP5 Fault Created';
@@ -350,13 +421,18 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
         data: { url: window.location.href }
       });
       
-      showNotification(notificationTitle, { body: notificationBody });
+      showNotification(notificationTitle, {
+        body: notificationBody
+      });
       
-      toast.success("OP5 fault created successfully");
+      // Reset form
+      resetForm();
+      
+      // Navigate to dashboard
       navigate("/dashboard");
     } catch (error) {
-      console.error("Error creating OP5 fault:", error);
-      toast.error("Failed to create OP5 fault");
+      console.error("[OP5Form] Error submitting fault:", error);
+      toast.error("Failed to submit fault report. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -570,6 +646,52 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
             </div>
           </div>
           
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="space-y-3">
+              <Label htmlFor="substationName" className="text-base font-medium">Substation Name (S/S Name)</Label>
+              <Input
+                id="substationName"
+                value={substationName}
+                onChange={(e) => setSubstationName(e.target.value)}
+                placeholder="Enter substation name"
+                className="h-12 text-base bg-background/50 border-muted"
+              />
+            </div>
+            <div className="space-y-3">
+              <Label htmlFor="substationNo" className="text-base font-medium">Substation Number</Label>
+              <Input
+                id="substationNo"
+                value={substationNo}
+                onChange={(e) => setSubstationNo(e.target.value)}
+                placeholder="Enter substation number"
+                className="h-12 text-base bg-background/50 border-muted"
+              />
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="space-y-3">
+              <Label htmlFor="feeder" className="text-base font-medium">Feeder / Circuit</Label>
+              <Input
+                id="feeder"
+                value={feeder}
+                onChange={(e) => setFeeder(e.target.value)}
+                placeholder="Enter feeder or circuit name"
+                className="h-12 text-base bg-background/50 border-muted"
+              />
+            </div>
+            <div className="space-y-3">
+              <Label htmlFor="voltageLevel" className="text-base font-medium">Voltage Level (kV)</Label>
+              <Input
+                id="voltageLevel"
+                value={voltageLevel}
+                onChange={(e) => setVoltageLevel(e.target.value)}
+                placeholder="Enter voltage level (e.g., 33)"
+                className="h-12 text-base bg-background/50 border-muted"
+              />
+            </div>
+          </div>
+          
           {/* Show specific fault type dropdown when Unplanned or Emergency is selected */}
           {(outageType === "Unplanned" || outageType === "Emergency") && (
             <div className="space-y-3">
@@ -752,21 +874,39 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
           {/* --- End Material Use Section --- */}
           
           <Tabs defaultValue="affected" className="w-full">
-            <TabsList className="grid w-full grid-cols-3 gap-1">
-              <TabsTrigger value="affected" className="flex items-center gap-1 text-xs sm:text-sm">
-                <Users className="h-3 w-3 sm:h-4 sm:w-4" />
-                <span className="hidden sm:inline">Affected</span>
-                <span className="sm:hidden">Aff.</span>
+            <TabsList className="grid grid-cols-3 w-full max-w-lg mx-auto mb-8 gap-2 bg-transparent p-0">
+              <TabsTrigger
+                value="affected"
+                className="flex items-center justify-center gap-2 w-full min-h-[44px] px-2 py-2 rounded-full font-bold text-xs sm:text-sm shadow transition-all duration-200
+                  data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-blue-600
+                  data-[state=active]:text-white data-[state=active]:shadow-lg
+                  data-[state=inactive]:bg-white data-[state=inactive]:text-primary border border-primary/30
+                  focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                <Users className="h-4 w-4 sm:h-5 sm:w-5" />
+                <span className="truncate">Affected</span>
               </TabsTrigger>
-              <TabsTrigger value="details" className="flex items-center gap-1 text-xs sm:text-sm">
-                <FileText className="h-3 w-3 sm:h-4 sm:w-4" />
-                <span className="hidden sm:inline">Details</span>
-                <span className="sm:hidden">Det.</span>
+              <TabsTrigger
+                value="details"
+                className="flex items-center justify-center gap-2 w-full min-h-[44px] px-2 py-2 rounded-full font-bold text-xs sm:text-sm shadow transition-all duration-200
+                  data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-blue-600
+                  data-[state=active]:text-white data-[state=active]:shadow-lg
+                  data-[state=inactive]:bg-white data-[state=inactive]:text-primary border border-primary/30
+                  focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                <FileText className="h-4 w-4 sm:h-5 sm:w-5" />
+                <span className="truncate">Outage Details</span>
               </TabsTrigger>
-              <TabsTrigger value="calculations" className="flex items-center gap-1 text-xs sm:text-sm">
-                <Calculator className="h-3 w-3 sm:h-4 sm:w-4" />
-                <span className="hidden sm:inline">Calculations</span>
-                <span className="sm:hidden">Calc.</span>
+              <TabsTrigger
+                value="calculations"
+                className="flex items-center justify-center gap-2 w-full min-h-[44px] px-2 py-2 rounded-full font-bold text-xs sm:text-sm shadow transition-all duration-200
+                  data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-blue-600
+                  data-[state=active]:text-white data-[state=active]:shadow-lg
+                  data-[state=inactive]:bg-white data-[state=inactive]:text-primary border border-primary/30
+                  focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                <Calculator className="h-4 w-4 sm:h-5 sm:w-5" />
+                <span className="truncate">Calculations</span>
               </TabsTrigger>
             </TabsList>
             <TabsContent value="affected" className="space-y-6 pt-6">

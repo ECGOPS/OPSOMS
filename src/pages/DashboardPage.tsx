@@ -6,6 +6,7 @@ import { useData } from "@/contexts/DataContext";
 import { FilterBar } from "@/components/dashboard/FilterBar";
 import { StatsOverview } from "@/components/dashboard/StatsOverview";
 import { FaultCard } from "@/components/dashboard/FaultCard";
+import { PendingFaultsList } from "@/components/faults/PendingFaultsList";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { PlusCircle, AlertTriangle, ZapOff, RefreshCw, Filter } from "lucide-react";
@@ -348,30 +349,34 @@ export default function DashboardPage() {
           controlOutages={faults.controlOutages} 
         />
         
-        <FilterBar 
-          setFilterRegion={setFilterRegion}
-          setFilterDistrict={setFilterDistrict}
-          setFilterStatus={setFilterStatus}
-          filterStatus={filterStatus}
-          onRefresh={handleRefresh}
-          isRefreshing={isRefreshing}
-          // Pass advanced filter props
-          setFilterFaultType={setFilterFaultType}
-          setDateRange={setDateRange}
-          setSelectedDay={setSelectedDay}
-          setSelectedMonth={setSelectedMonth}
-          setSelectedMonthYear={setSelectedMonthYear}
-          setSelectedYear={setSelectedYear}
-          setDateFilterType={setDateFilterType}
-          // Pass current values
-          filterFaultType={filterFaultType}
-          dateRange={dateRange}
-          selectedDay={selectedDay}
-          selectedMonth={selectedMonth}
-          selectedMonthYear={selectedMonthYear}
-          selectedYear={selectedYear}
-          dateFilterType={dateFilterType}
-        />
+        <div className="mt-8">
+          <PendingFaultsList />
+        </div>
+        
+        <div className="mt-8">
+          <FilterBar
+            setFilterRegion={setFilterRegion}
+            setFilterDistrict={setFilterDistrict}
+            setFilterStatus={setFilterStatus}
+            filterStatus={filterStatus}
+            onRefresh={handleRefresh}
+            isRefreshing={isRefreshing}
+            setFilterFaultType={setFilterFaultType}
+            setDateRange={setDateRange}
+            setSelectedDay={setSelectedDay}
+            setSelectedMonth={setSelectedMonth}
+            setSelectedMonthYear={setSelectedMonthYear}
+            setSelectedYear={setSelectedYear}
+            setDateFilterType={setDateFilterType}
+            filterFaultType={filterFaultType}
+            dateRange={dateRange}
+            selectedDay={selectedDay}
+            selectedMonth={selectedMonth}
+            selectedMonthYear={selectedMonthYear}
+            selectedYear={selectedYear}
+            dateFilterType={dateFilterType}
+          />
+        </div>
         
         <Tabs defaultValue="all" className="mt-8" onValueChange={(value) => setActiveTab(value as "all" | "op5" | "control")}>
           <TabsList className="mb-6 grid w-full grid-cols-3 max-w-xs sm:max-w-sm md:max-w-md mx-auto bg-muted p-1 rounded-lg">

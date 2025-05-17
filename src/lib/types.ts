@@ -139,6 +139,8 @@ export interface OP5Fault extends BaseRecord {
   faultType: string;
   substationName: string;
   substationNo: string;
+  feeder?: string;
+  voltageLevel?: string;
   occurrenceDate: string;
   restorationDate?: string;
   repairDate?: string;
@@ -155,6 +157,15 @@ export interface OP5Fault extends BaseRecord {
     metro: number;
   };
   clientId?: string;
+  materialsUsed?: {
+    id: string;
+    type: string;
+    details: {
+      rating?: string;
+      type?: string;
+      description?: string;
+    };
+  }[];
 }
 
 export interface ControlSystemOutage extends BaseRecord {
@@ -176,6 +187,8 @@ export interface ControlSystemOutage extends BaseRecord {
   };
   status: 'active' | 'resolved';
   clientId?: string;
+  createdBy: string;
+  updatedBy: string;
 }
 
 // VIT Asset Types
@@ -256,7 +269,9 @@ export interface InspectionCategory {
 export interface SubstationInspection {
   id: string;
   region: string;
+  regionId: string;
   district: string;
+  districtId: string;
   date: string;
   substationNo: string;
   substationName?: string;

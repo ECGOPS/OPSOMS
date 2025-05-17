@@ -1,0 +1,188 @@
+import { SubstationInspection, OverheadLineInspection } from "@/lib/types";
+import { format } from "date-fns";
+import { CheckCircle2, AlertCircle, ChevronLeft, Pencil } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+
+interface InspectionDetailsViewProps {
+  inspection: SubstationInspection | OverheadLineInspection;
+  showHeader?: boolean;
+  showBackButton?: boolean;
+  onBack?: () => void;
+  onEdit?: () => void;
+}
+
+export function InspectionDetailsView({
+  inspection,
+  showHeader = true,
+  showBackButton = false,
+  onBack,
+  onEdit
+}: InspectionDetailsViewProps) {
+  const isSubstationInspection = (inspection: SubstationInspection | OverheadLineInspection): inspection is SubstationInspection => {
+    return 'substationNo' in inspection;
+  };
+
+  const getStatusSummary = () => {
+    if (!inspection) return { good: 0, requiresAttention: 0 };
+    
+    if (isSubstationInspection(inspection)) {
+      const allItems = [
+        ...(inspection.generalBuilding || []),
+        ...(inspection.controlEquipment || []),
+        ...(inspection.powerTransformer || []),
+        ...(inspection.outdoorEquipment || [])
+      ];
+      
+      return allItems.reduce((acc: { good: number; requiresAttention: number }, item) => {
+        if (item.status === 'good') {
+          acc.good++;
+        } else if (item.status === 'bad') {
+          acc.requiresAttention++;
+        }
+        return acc;
+      }, { good: 0, requiresAttention: 0 });
+    } else {
+      // For overhead line inspections, count items based on their status
+      return {
+        good: inspection.items?.filter(item => item.status === "good").length || 0,
+        requiresAttention: inspection.items?.filter(item => item.status === "bad").length || 0
+      };
+    }
+  };
+
+  const statusSummary = getStatusSummary();
+
+  return (
+    <div>
+      {showHeader && (
+        <div className="mb-6">
+          {showBackButton && onBack && (
+            <Button
+              variant="outline"
+              onClick={onBack}
+              className="mb-4"
+            >
+              <ChevronLeft className="mr-2 h-4 w-4" /> Back to Inspections
+            </Button>
+          )}
+          
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+            <h1 className="text-3xl font-bold tracking-tight">
+              Inspection: {isSubstationInspection(inspection) ? inspection.substationNo : inspection.feederName}
+            </h1>
+            
+            {onEdit && (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  onClick={onEdit}
+                  className="flex items-center gap-2"
+                >
+                  <Pencil size={16} />
+                  Edit Inspection
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      <Card className="mb-8 bg-blue-50">
+        <CardHeader className="border-b">
+          <div>
+            <CardTitle className="text-2xl">Inspection Details</CardTitle>
+            <CardDescription className="mt-2">
+              Detailed information about the inspection
+            </CardDescription>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-6 bg-gray-50">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="bg-muted/50 p-4 rounded-lg">
+              <p className="text-sm font-medium text-muted-foreground mb-1">Region</p>
+              <p className="text-lg font-semibold">{inspection.region}</p>
+            </div>
+            <div className="bg-muted/50 p-4 rounded-lg">
+              <p className="text-sm font-medium text-muted-foreground mb-1">District</p>
+              <p className="text-lg font-semibold">{inspection.district}</p>
+            </div>
+            {isSubstationInspection(inspection) ? (
+              <div className="bg-muted/50 p-4 rounded-lg">
+                <p className="text-sm font-medium text-muted-foreground mb-1">Substation Number</p>
+                <p className="text-lg font-semibold">{inspection.substationNo}</p>
+              </div>
+            ) : (
+              <>
+                <div className="bg-muted/50 p-4 rounded-lg">
+                  <p className="text-sm font-medium text-muted-foreground mb-1">Feeder Name</p>
+                  <p className="text-lg font-semibold">{inspection.feederName}</p>
+                </div>
+                <div className="bg-muted/50 p-4 rounded-lg">
+                  <p className="text-sm font-medium text-muted-foreground mb-1">Voltage Level</p>
+                  <p className="text-lg font-semibold">{inspection.voltageLevel}</p>
+                </div>
+                <div className="bg-muted/50 p-4 rounded-lg">
+                  <p className="text-sm font-medium text-muted-foreground mb-1">Reference Pole</p>
+                  <p className="text-lg font-semibold">{inspection.referencePole}</p>
+                </div>
+              </>
+            )}
+            <div className="bg-muted/50 p-4 rounded-lg">
+              <p className="text-sm font-medium text-muted-foreground mb-1">Date</p>
+              <p className="text-lg font-semibold">
+                {inspection.date && !isNaN(new Date(inspection.date).getTime()) 
+                  ? format(new Date(inspection.date), "PPP") 
+                  : "N/A"}
+              </p>
+            </div>
+            <div className="bg-muted/50 p-4 rounded-lg">
+              <p className="text-sm font-medium text-muted-foreground mb-1">Created By</p>
+              <p className="text-lg font-semibold">{isSubstationInspection(inspection) ? inspection.createdBy : inspection.inspector.name}</p>
+            </div>
+            <div className="bg-muted/50 p-4 rounded-lg">
+              <p className="text-sm font-medium text-muted-foreground mb-1">Created At</p>
+              <p className="text-lg font-semibold">
+                {inspection.createdAt && !isNaN(new Date(inspection.createdAt).getTime()) 
+                  ? format(new Date(inspection.createdAt), "PPP") 
+                  : "N/A"}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-8">
+            <h3 className="text-lg font-semibold mb-4">Inspection Status Summary</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-green-50/50 p-6 rounded-lg border border-green-100">
+                <div className="flex items-center gap-3">
+                  <div className="bg-green-100 p-2 rounded-full">
+                    <CheckCircle2 className="h-6 w-6 text-green-600" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-green-700">
+                      {statusSummary.good}
+                    </p>
+                    <p className="text-sm text-green-600">Good Items</p>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-red-50/50 p-6 rounded-lg border border-red-100">
+                <div className="flex items-center gap-3">
+                  <div className="bg-red-100 p-2 rounded-full">
+                    <AlertCircle className="h-6 w-6 text-red-600" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-red-700">
+                      {statusSummary.requiresAttention}
+                    </p>
+                    <p className="text-sm text-red-600">Items Requiring Attention</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+} 

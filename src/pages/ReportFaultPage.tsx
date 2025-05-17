@@ -45,7 +45,7 @@ export default function ReportFaultPage() {
 
   return (
     <Layout>
-      <div className="container max-w-5xl py-6 space-y-6">
+      <div className="container max-w-7xl py-6 space-y-6">
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <div>
@@ -69,13 +69,27 @@ export default function ReportFaultPage() {
         <Card className="border border-border/50 bg-card/50 shadow-sm">
           <CardContent className="p-6">
             <Tabs defaultValue="op5" className="w-full">
-              <TabsList className="mb-8 w-full grid grid-cols-2 bg-muted/50 p-1 rounded-md">
-                <TabsTrigger value="op5" className="flex items-center gap-1 text-[11px] leading-tight sm:text-sm data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 data-[state=active]:shadow-sm">
-                  <AlertTriangle className="h-3 w-3 sm:h-4 sm:w-4 text-destructive shrink-0" />
+              <TabsList className="grid grid-cols-2 w-full max-w-md mx-auto mb-8 gap-2 bg-transparent p-0">
+                <TabsTrigger
+                  value="op5"
+                  className="flex items-center justify-center gap-2 w-full min-h-[48px] px-2 py-2 rounded-full font-bold text-sm sm:text-base shadow transition-all duration-200
+                    data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-blue-600
+                    data-[state=active]:text-white data-[state=active]:shadow-lg
+                    data-[state=inactive]:bg-white data-[state=inactive]:text-primary border border-primary/30
+                    focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  <AlertTriangle className="h-5 w-5" />
                   <span className="truncate">OP5 Fault</span>
                 </TabsTrigger>
-                <TabsTrigger value="control" className="flex items-center gap-1 text-[11px] leading-tight sm:text-sm data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 data-[state=active]:shadow-sm">
-                  <ZapOff className="h-3 w-3 sm:h-4 sm:w-4 text-amber-500 shrink-0" />
+                <TabsTrigger
+                  value="control"
+                  className="flex items-center justify-center gap-2 w-full min-h-[48px] px-2 py-2 rounded-full font-bold text-sm sm:text-base shadow transition-all duration-200
+                    data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-blue-600
+                    data-[state=active]:text-white data-[state=active]:shadow-lg
+                    data-[state=inactive]:bg-white data-[state=inactive]:text-primary border border-primary/30
+                    focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  <ZapOff className="h-5 w-5" />
                   <span className="truncate">Control System Outage</span>
                 </TabsTrigger>
               </TabsList>

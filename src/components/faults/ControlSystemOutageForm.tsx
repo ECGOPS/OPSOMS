@@ -31,6 +31,7 @@ import {
 import { toast } from "@/components/ui/sonner";
 import { showNotification, showServiceWorkerNotification } from '@/utils/notifications';
 import { PermissionService } from "@/services/PermissionService";
+import OfflineStorageService from "@/services/OfflineStorageService";
 
 interface ControlSystemOutageFormProps {
   defaultRegionId?: string;
@@ -181,6 +182,24 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
   const getRegionName = (id: string) => regions.find(r => r.id === id)?.name || "Unknown";
   const getDistrictName = (id: string) => districts.find(d => d.id === id)?.name || "Unknown";
   
+  const resetForm = () => {
+    setRegionId(defaultRegionId);
+    setDistrictId(defaultDistrictId);
+    setOccurrenceDate("");
+    setFaultType("Unplanned");
+    setRuralAffected(null);
+    setUrbanAffected(null);
+    setMetroAffected(null);
+    setRestorationDate("");
+    setReason("");
+    setIndications("");
+    setAreaAffected("");
+    setLoadMW(0);
+    setDurationHours(null);
+    setUnservedEnergyMWh(null);
+    setSpecificFaultType(undefined);
+  };
+  
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -197,19 +216,7 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
     
     // Validate that at least one affected population field is filled
     if (ruralAffected === null && urbanAffected === null && metroAffected === null) {
-      toast.error("Please enter the number of affected customers for at least one population type");
-      return;
-    }
-    
-    // Require specific fault type for unplanned faults
-    if (faultType === "Unplanned" && !specificFaultType) {
-      toast.error("Please select the specific type of fault");
-      return;
-    }
-    
-    // Validate that restoration date is after occurrence date
-    if (restorationDate && new Date(restorationDate) <= new Date(occurrenceDate)) {
-      toast.error("Restoration date must be after occurrence date");
+      toast.error("Please fill at least one affected population field");
       return;
     }
     
@@ -220,7 +227,8 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
       const formattedOccurrenceDate = new Date(occurrenceDate).toISOString();
       const formattedRestorationDate = restorationDate ? new Date(restorationDate).toISOString() : null;
 
-      const formDataToSubmit: Omit<ControlSystemOutage, "id"> = {
+      // Construct the base data object without audit fields
+      const formDataToSubmit: Omit<ControlSystemOutage, "id" | "createdAt" | "updatedAt" | "createdBy" | "updatedBy" | "isOffline"> = {
         regionId: regionId || "",
         districtId: districtId || "",
         occurrenceDate: formattedOccurrenceDate,
@@ -229,8 +237,9 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
         status: restorationDate ? "resolved" as const : "active" as const,
         loadMW: loadMW || 0,
         unservedEnergyMWh: unservedEnergyMWh || 0,
-        description: reason || "",
-        system: areaAffected || "",
+        reason: reason || "",
+        controlPanelIndications: indications || "",
+        areaAffected: areaAffected || "",
         customersAffected: {
           rural: ruralAffected ?? 0,
           urban: urbanAffected ?? 0,
@@ -238,7 +247,37 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
         },
       };
 
-      await addControlSystemOutage(formDataToSubmit);
+      const offlineStorage = OfflineStorageService.getInstance();
+      const isOnline = offlineStorage.isInternetAvailable();
+      console.log('[ControlSystemOutageForm] Internet available:', isOnline);
+
+      if (isOnline) {
+        console.log('[ControlSystemOutageForm] Submitting outage online...');
+        // When online, rely on addControlSystemOutage or backend to set audit fields
+        // The DataContext's addControlSystemOutage currently adds serverTimestamp, 
+        // and should ideally also add createdBy/updatedBy from authenticated user context.
+        await addControlSystemOutage(formDataToSubmit as Omit<ControlSystemOutage, "id">);
+        toast.success("Outage report submitted successfully");
+      } else {
+        console.log('[ControlSystemOutageForm] Saving outage offline...');
+        try {
+          // When offline, explicitly add client-side timestamp and 'offline_user'
+          const offlineDataWithAudit = {
+             ...formDataToSubmit,
+             createdAt: new Date().toISOString(), // Client-side timestamp for offline record
+             updatedAt: new Date().toISOString(), // Client-side timestamp for offline record
+             createdBy: user?.id || 'offline_user', // Use user ID (from AuthContext) or fallback for offline
+             updatedBy: user?.id || 'offline_user', // Use user ID (from AuthContext) or fallback for offline
+             isOffline: true
+          };
+          await offlineStorage.saveFaultOffline(offlineDataWithAudit as Omit<ControlSystemOutage, "id">, 'control');
+          toast.success("Outage report saved offline. It will be synced when internet connection is restored.");
+        } catch (error) {
+          console.error('[ControlSystemOutageForm] Error saving outage offline:', error);
+          toast.error("Failed to save outage offline. Please try again when you have internet connection.");
+          return;
+        }
+      }
       
       // Show notification for successful outage creation
       const notificationTitle = 'Control System Outage Created';
@@ -252,11 +291,14 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
       
       showNotification(notificationTitle, { body: notificationBody });
       
-      toast.success("Control system outage created successfully");
+      // Reset form
+      resetForm();
+      
+      // Navigate to dashboard
       navigate("/dashboard");
     } catch (error) {
-      console.error("Error creating control system outage:", error);
-      toast.error("Failed to create control system outage");
+      console.error("[ControlSystemOutageForm] Error submitting outage:", error);
+      toast.error("Failed to submit outage report. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -418,17 +460,38 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
           )}
           
           <Tabs defaultValue="affected" className="w-full">
-            <TabsList className="mb-8 w-full grid grid-cols-3 bg-muted/50 p-1 rounded-md">
-              <TabsTrigger value="affected" className="flex items-center gap-1 text-[11px] leading-tight sm:text-sm data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 data-[state=active]:shadow-sm">
-                <Users className="h-3 w-3 sm:h-4 sm:w-4 text-primary shrink-0" />
+            <TabsList className="grid grid-cols-3 w-full max-w-lg mx-auto mb-8 gap-2 bg-transparent p-0">
+              <TabsTrigger
+                value="affected"
+                className="flex items-center justify-center gap-2 w-full min-h-[44px] px-2 py-2 rounded-full font-bold text-xs sm:text-sm shadow transition-all duration-200
+                  data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-blue-600
+                  data-[state=active]:text-white data-[state=active]:shadow-lg
+                  data-[state=inactive]:bg-white data-[state=inactive]:text-primary border border-primary/30
+                  focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                <Users className="h-4 w-4 sm:h-5 sm:w-5" />
                 <span className="truncate">Affected Customers</span>
               </TabsTrigger>
-              <TabsTrigger value="details" className="flex items-center gap-1 text-[11px] leading-tight sm:text-sm data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 data-[state=active]:shadow-sm">
-                <FileText className="h-3 w-3 sm:h-4 sm:w-4 text-primary shrink-0" />
+              <TabsTrigger
+                value="details"
+                className="flex items-center justify-center gap-2 w-full min-h-[44px] px-2 py-2 rounded-full font-bold text-xs sm:text-sm shadow transition-all duration-200
+                  data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-blue-600
+                  data-[state=active]:text-white data-[state=active]:shadow-lg
+                  data-[state=inactive]:bg-white data-[state=inactive]:text-primary border border-primary/30
+                  focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                <FileText className="h-4 w-4 sm:h-5 sm:w-5" />
                 <span className="truncate">Outage Details</span>
               </TabsTrigger>
-              <TabsTrigger value="calculations" className="flex items-center gap-1 text-[11px] leading-tight sm:text-sm data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 data-[state=active]:shadow-sm">
-                <Calculator className="h-3 w-3 sm:h-4 sm:w-4 text-primary shrink-0" />
+              <TabsTrigger
+                value="calculations"
+                className="flex items-center justify-center gap-2 w-full min-h-[44px] px-2 py-2 rounded-full font-bold text-xs sm:text-sm shadow transition-all duration-200
+                  data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-blue-600
+                  data-[state=active]:text-white data-[state=active]:shadow-lg
+                  data-[state=inactive]:bg-white data-[state=inactive]:text-primary border border-primary/30
+                  focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                <Calculator className="h-4 w-4 sm:h-5 sm:w-5" />
                 <span className="truncate">Calculations</span>
               </TabsTrigger>
             </TabsList>

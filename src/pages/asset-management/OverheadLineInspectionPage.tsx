@@ -23,6 +23,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationPrevious, PaginationNext } from "@/components/ui/pagination";
+import { InspectionDetailsView } from "@/components/inspection/InspectionDetailsView";
+import { useNavigate } from "react-router-dom";
 
 export default function OverheadLineInspectionPage() {
   const { user } = useAuth();
@@ -38,6 +40,7 @@ export default function OverheadLineInspectionPage() {
   const [selectedDistrict, setSelectedDistrict] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
+  const navigate = useNavigate();
 
   // Filter districts based on selected region
   const filteredDistricts = useMemo(() => {
@@ -341,7 +344,14 @@ export default function OverheadLineInspectionPage() {
                     : ""}
                 </DialogDescription>
               </DialogHeader>
-              {selectedInspection && <OverheadLineInspectionDetails inspection={selectedInspection} />}
+              {selectedInspection && (
+                <InspectionDetailsView
+                  inspection={selectedInspection}
+                  showHeader={false}
+                  showBackButton={false}
+                  onEdit={() => navigate(`/asset-management/overhead-line/edit/${selectedInspection.id}`)}
+                />
+              )}
             </DialogContent>
           </Dialog>
         </div>
