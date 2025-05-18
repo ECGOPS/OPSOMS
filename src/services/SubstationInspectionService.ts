@@ -78,22 +78,16 @@ export class SubstationInspectionService {
     window.addEventListener('online', this.handleOnline);
     window.addEventListener('offline', this.handleOffline);
 
-    // If we're already online, trigger sync and refresh
-    if (navigator.onLine) {
-      console.log('Already online, triggering initial sync and refresh...');
+    // If we're already online, trigger sync
+    if (navigator.onLine && !this.syncInProgress) {
+      console.log('Already online, triggering initial sync...');
       this.handleOnline();
     }
   }
 
   private handleOnline = async () => {
-    console.log('Device is back online, triggering sync and refresh...');
+    console.log('Device is back online, triggering sync...');
     this.isOnline = true;
-    
-    // Immediately dispatch online status
-    window.dispatchEvent(new CustomEvent('substationInspectionOnline'));
-    
-    // Immediately refresh data first
-    await this.refreshData();
     
     if (this.syncInProgress) {
       console.log('Sync already in progress, skipping...');
@@ -116,18 +110,21 @@ export class SubstationInspectionService {
       const pendingRecords = await this.getPendingSubstationInspectionRecords();
       console.log('Found pending records to sync:', pendingRecords.length);
       
-      if (pendingRecords.length > 0) {
-        const result = await this.syncSubstationInspectionRecords();
-        console.log('Sync completed:', result);
-        
-        // Dispatch event to notify UI of sync completion
-        window.dispatchEvent(new CustomEvent('substationInspectionSyncCompleted', {
-          detail: result
-        }));
-
-        // Refresh data again after sync
-        await this.refreshData();
+      if (pendingRecords.length === 0) {
+        console.log('No pending records to sync');
+        return;
       }
+
+      const result = await this.syncSubstationInspectionRecords();
+      console.log('Sync completed:', result);
+      
+      // Dispatch event to notify UI of sync completion
+      window.dispatchEvent(new CustomEvent('substationInspectionSyncCompleted', {
+        detail: result
+      }));
+
+      // After sync is complete, refresh the data
+      await this.refreshData();
     } catch (error) {
       console.error('Error during sync:', error);
       // Dispatch event to notify UI of sync failure
@@ -149,7 +146,7 @@ export class SubstationInspectionService {
   // Add a method to refresh data
   private async refreshData(): Promise<void> {
     try {
-      console.log('Refreshing data...');
+      console.log('Refreshing data after sync...');
       const allRecords = await this.getAllSubstationInspections();
       
       // Dispatch event with refreshed data

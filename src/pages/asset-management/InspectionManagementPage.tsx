@@ -42,7 +42,7 @@ import { PermissionService } from '@/services/PermissionService';
 
 export default function InspectionManagementPage() {
   const { user } = useAuth();
-  const { regions, districts, savedInspections, deleteInspection } = useData();
+  const { regions, districts, savedInspections, deleteInspection, refreshInspections } = useData();
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -581,6 +581,30 @@ export default function InspectionManagementPage() {
   const canDeleteInspection = (inspection: SubstationInspection) => {
     return permissionService.canDeleteFeature(user?.role || null, 'inspection_management');
   };
+
+  // Add online status listener
+  useEffect(() => {
+    const handleOnlineStatusChange = () => {
+      if (navigator.onLine) {
+        console.log('Device is back online, refreshing data...');
+        refreshInspections();
+      }
+    };
+
+    // Listen for sync completion event
+    const handleSyncCompleted = () => {
+      console.log('Sync completed, refreshing data...');
+      refreshInspections();
+    };
+
+    window.addEventListener('online', handleOnlineStatusChange);
+    window.addEventListener('substationInspectionSyncCompleted', handleSyncCompleted);
+
+    return () => {
+      window.removeEventListener('online', handleOnlineStatusChange);
+      window.removeEventListener('substationInspectionSyncCompleted', handleSyncCompleted);
+    };
+  }, [refreshInspections]);
 
   return (
     <Layout>

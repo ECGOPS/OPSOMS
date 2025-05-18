@@ -290,9 +290,69 @@ export interface DataContextType {
   deleteOverheadLineInspection: (id: string) => Promise<void>;
   canEditLoadMonitoring: boolean;
   canDeleteLoadMonitoring: boolean;
+  refreshInspections: () => Promise<void>;
 }
 
-const DataContext = createContext<DataContextType | undefined>(undefined);
+export const DataContext = createContext<DataContextType>({
+  regions: [],
+  districts: [],
+  regionsLoading: true,
+  districtsLoading: true,
+  regionsError: null,
+  districtsError: null,
+  retryRegionsAndDistricts: () => Promise.resolve(),
+  op5Faults: [],
+  controlSystemOutages: [],
+  addOP5Fault: async () => '',
+  updateOP5Fault: async () => {},
+  deleteOP5Fault: async () => {},
+  addControlSystemOutage: async () => '',
+  updateControlSystemOutage: async () => {},
+  deleteControlSystemOutage: async () => {},
+  canResolveFault: () => false,
+  getFilteredFaults: () => ({ op5Faults: [], controlOutages: [] }),
+  resolveFault: async () => {},
+  deleteFault: async () => {},
+  canEditFault: () => false,
+  loadMonitoringRecords: undefined,
+  setLoadMonitoringRecords: () => {},
+  saveLoadMonitoringRecord: async () => '',
+  getLoadMonitoringRecord: async () => undefined,
+  updateLoadMonitoringRecord: async () => {},
+  deleteLoadMonitoringRecord: async () => {},
+  initializeLoadMonitoring: async () => {},
+  vitAssets: [],
+  vitInspections: [],
+  addVITAsset: async () => '',
+  updateVITAsset: async () => {},
+  deleteVITAsset: async () => {},
+  addVITInspection: async () => '',
+  updateVITInspection: async () => {},
+  deleteVITInspection: async () => {},
+  savedInspections: [],
+  setSavedInspections: () => {},
+  saveInspection: async () => '',
+  updateSubstationInspection: async () => {},
+  deleteInspection: async () => {},
+  updateDistrict: async () => {},
+  canEditAsset: () => false,
+  canEditInspection: () => false,
+  canDeleteAsset: () => false,
+  canDeleteInspection: () => false,
+  setVITAssets: () => {},
+  setVITInspections: () => {},
+  getSavedInspection: () => undefined,
+  canAddAsset: () => false,
+  canAddInspection: () => false,
+  getOP5FaultById: () => undefined,
+  overheadLineInspections: [],
+  addOverheadLineInspection: async () => '',
+  updateOverheadLineInspection: async () => {},
+  deleteOverheadLineInspection: async () => {},
+  canEditLoadMonitoring: false,
+  canDeleteLoadMonitoring: false,
+  refreshInspections: async () => {},
+});
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000; // 1 second
@@ -1322,12 +1382,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const saveInspection = async (inspection: SubstationInspection): Promise<string> => {
     try {
-      // If offline, save to IndexedDB
-      if (!navigator.onLine) {
-        await inspectionService.saveSubstationInspectionOffline(inspection, 'create');
-        return inspection.id;
-      }
-
       // Check for existing inspection with same substationNo and date
       const inspectionsRef = collection(db, "substationInspections");
       const q = query(
@@ -1338,26 +1392,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const querySnapshot = await getDocs(q);
 
       if (!querySnapshot.empty) {
-        // Check if this is an update to an existing record
-        const existingDoc = querySnapshot.docs[0];
-        const existingData = existingDoc.data();
-        
-        // If the inspection is being updated (has the same ID or originalOfflineId)
-        if (inspection.id === existingDoc.id || 
-            (inspection as any).originalOfflineId === existingDoc.id ||
-            inspection.id === (existingData as any).originalOfflineId) {
-          // Update the existing record
-          await updateDoc(doc(db, "substationInspections", existingDoc.id), {
-            ...inspection,
-            updatedAt: serverTimestamp(),
-            syncStatus: 'synced'
-          });
-          return existingDoc.id;
-        } else {
-          // This is a true duplicate
-          toast.error("An inspection for this substation on this date already exists");
-          throw new Error("Duplicate inspection");
-        }
+        toast.error("An inspection for this substation on this date already exists");
+        throw new Error("Duplicate inspection");
       }
 
       // Create a sanitized version of the inspection with default values for undefined fields
@@ -1377,8 +1413,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         status: inspection.status || "Pending",
         remarks: inspection.remarks || "",
         createdBy: inspection.createdBy || "Unknown",
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         inspectedBy: inspection.inspectedBy || "Unknown",
         items: (inspection.items || []).map(item => ({
           id: item.id || uuidv4(),
@@ -1414,8 +1450,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           category: item.category || "outdoor equipment",
           status: item.status || "",
           remarks: item.remarks || ""
-        })),
-        syncStatus: 'synced'
+        }))
       };
 
       // Save to Firestore
@@ -2669,6 +2704,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('online', handleOnline);
   }, [initializeLoadMonitoring]);
 
+  const refreshInspections = async () => {
+    try {
+      const allInspections = await inspectionService.getAllSubstationInspections();
+      setSavedInspections(allInspections);
+    } catch (error) {
+      console.error('Error refreshing inspections:', error);
+      toast.error('Failed to refresh inspections');
+    }
+  };
+
   const contextValue: DataContextType = {
     regions,
     districts,
@@ -2726,7 +2771,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     updateOverheadLineInspection,
     deleteOverheadLineInspection,
     canEditLoadMonitoring,
-    canDeleteLoadMonitoring
+    canDeleteLoadMonitoring,
+    refreshInspections,
   };
 
   return (
