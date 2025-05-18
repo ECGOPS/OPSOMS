@@ -893,25 +893,79 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    // Load offline data immediately
+    const loadOfflineData = async () => {
       try {
-        // Get all documents and ensure no duplicates by using a Map
-        const inspectionsMap = new Map();
+        const offlineData = await inspectionService.getOfflineSubstationInspections();
+        setSavedInspections(offlineData);
+      } catch (error) {
+        console.error('Error loading offline data:', error);
+      }
+    };
+
+    // Load offline data on mount
+    loadOfflineData();
+
+    // Listen for offline record additions
+    const handleOfflineRecordAdded = (event: CustomEvent) => {
+      const { record, action, status } = event.detail;
+      if (status === 'pending') {
+        setSavedInspections(prev => {
+          if (action === 'create') {
+            return [...prev, record];
+          } else if (action === 'update') {
+            return prev.map(r => r.id === record.id ? record : r);
+          } else if (action === 'delete') {
+            return prev.filter(r => r.id !== record.id);
+          }
+          return prev;
+        });
+      }
+    };
+
+    window.addEventListener('substationInspectionRecordAdded', handleOfflineRecordAdded as EventListener);
+
+    const unsubscribe = onSnapshot(q, async (snapshot) => {
+      try {
+        // Get offline data
+        const offlineData = await inspectionService.getOfflineSubstationInspections();
         
-        snapshot.docs.forEach(doc => {
+        // Process Firestore data
+        const firestoreInspections = snapshot.docs.map(doc => {
           const data = doc.data();
-          // Use a combination of substationNo and date as a unique key
-          const uniqueKey = `${data.substationNo}_${data.date}`;
-          inspectionsMap.set(uniqueKey, {
+          return {
             id: doc.id,
-            ...data
-          });
+            ...data,
+            createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt,
+            updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : data.updatedAt,
+            syncStatus: 'synced'
+          } as SubstationInspection;
         });
 
-        // Convert Map to array
-        const inspections = Array.from(inspectionsMap.values());
-        console.log('Setting inspections:', inspections.length);
-        setSavedInspections(inspections);
+        // Create a map of all records by ID and originalOfflineId
+        const recordMap = new Map<string, SubstationInspection>();
+        
+        // Add Firestore records to map (by id and originalOfflineId if present)
+        firestoreInspections.forEach(inspection => {
+          recordMap.set(inspection.id, inspection);
+          if ((inspection as any).originalOfflineId) {
+            recordMap.set((inspection as any).originalOfflineId, inspection);
+          }
+        });
+
+        // Add offline records that aren't in Firestore (by id or originalOfflineId)
+        offlineData.forEach(item => {
+          if (!recordMap.has(item.id)) {
+            recordMap.set(item.id, item);
+          }
+        });
+
+        // Convert map to array and sort by updatedAt
+        const allInspections = Array.from(new Set(recordMap.values())).sort(
+          (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        );
+
+        setSavedInspections(allInspections);
       } catch (error) {
         console.error('[DataContext] Error updating substation inspections:', error);
         if (navigator.onLine) {
@@ -925,78 +979,105 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      window.removeEventListener('substationInspectionRecordAdded', handleOfflineRecordAdded as EventListener);
+    };
   }, [user, regions, districts]);
 
-  // Initialize load monitoring records
-  const initializeLoadMonitoring = async () => {
-    if (!user) return;
-
-    console.log("Initializing load monitoring records...");
-    try {
-      let q = query(collection(db, "loadMonitoring"));
-      const { regionId, districtId } = getUserRegionAndDistrict(user, regions, districts);
-
-      // Filter based on role
-      if (user.role === "district_engineer" || user.role === "technician") {
-        if (districtId) {
-          q = query(collection(db, "loadMonitoring"), where("districtId", "==", districtId));
-        }
-      } else if (user.role === "regional_engineer") {
-        if (regionId) {
-          q = query(collection(db, "loadMonitoring"), where("regionId", "==", regionId));
-        }
-      }
-
-      const snapshot = await getDocs(q);
-      const records = snapshot.docs.map(doc => {
-        const data = doc.data();
-        const now = new Date().toISOString();
-        return {
-          id: doc.id,
-          ...data,
-          createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt || now,
-          updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : data.updatedAt || now
-        } as LoadMonitoringData;
-      });
-
-      console.log("Initial load monitoring records:", records.length);
-      
-      // Clear existing records before adding new ones
-      await clearStore(STORE_NAMES.LOAD_MONITORING);
-      await clearStore(STORE_NAMES.LOAD_MONITORING_CACHE);
-      
-      // Store in local storage with error handling
-      for (const record of records) {
+  // Add offline data handling effect
+  useEffect(() => {
+    async function loadOfflineData() {
+      if (!navigator.onLine) {
         try {
-          await safeAddItem(STORE_NAMES.LOAD_MONITORING, record);
-          await safeAddItem(STORE_NAMES.LOAD_MONITORING_CACHE, record);
+          const offlineData = await inspectionService.getOfflineSubstationInspections();
+          setSavedInspections(offlineData);
         } catch (error) {
-          if (error.name === 'ConstraintError') {
-            console.log(`Record ${record.id} already exists, updating instead`);
-            await safeUpdateItem(STORE_NAMES.LOAD_MONITORING, record);
-            await safeUpdateItem(STORE_NAMES.LOAD_MONITORING_CACHE, record);
-          } else {
-            console.error(`Error storing record ${record.id}:`, error);
-          }
+          console.error('Error loading offline data:', error);
         }
-      }
-
-      setLoadMonitoringRecords(records);
-    } catch (error) {
-      console.error("Error initializing load monitoring records:", error);
-      // Try to recover by loading from cache
-      try {
-        const cachedRecords = await safeGetAllItems<LoadMonitoringData>(STORE_NAMES.LOAD_MONITORING_CACHE);
-        if (cachedRecords.length > 0) {
-          console.log("Recovered from cache:", cachedRecords.length, "records");
-          setLoadMonitoringRecords(cachedRecords);
-        }
-      } catch (cacheError) {
-        console.error("Failed to recover from cache:", cacheError);
       }
     }
-  };
+
+    // Load offline data when going offline
+    window.addEventListener('offline', loadOfflineData);
+    
+    // Initial load of offline data
+    loadOfflineData();
+
+    return () => {
+      window.removeEventListener('offline', loadOfflineData);
+    };
+  }, []);
+
+  // Initialize load monitoring records
+    const initializeLoadMonitoring = async () => {
+      if (!user) return;
+
+      console.log("Initializing load monitoring records...");
+      try {
+        let q = query(collection(db, "loadMonitoring"));
+        const { regionId, districtId } = getUserRegionAndDistrict(user, regions, districts);
+
+        // Filter based on role
+        if (user.role === "district_engineer" || user.role === "technician") {
+          if (districtId) {
+            q = query(collection(db, "loadMonitoring"), where("districtId", "==", districtId));
+          }
+        } else if (user.role === "regional_engineer") {
+          if (regionId) {
+            q = query(collection(db, "loadMonitoring"), where("regionId", "==", regionId));
+          }
+        }
+
+        const snapshot = await getDocs(q);
+        const records = snapshot.docs.map(doc => {
+          const data = doc.data();
+          const now = new Date().toISOString();
+          return {
+            id: doc.id,
+            ...data,
+            createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt || now,
+            updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : data.updatedAt || now
+          } as LoadMonitoringData;
+        });
+
+        console.log("Initial load monitoring records:", records.length);
+        
+        // Clear existing records before adding new ones
+        await clearStore(STORE_NAMES.LOAD_MONITORING);
+        await clearStore(STORE_NAMES.LOAD_MONITORING_CACHE);
+        
+        // Store in local storage with error handling
+        for (const record of records) {
+          try {
+            await safeAddItem(STORE_NAMES.LOAD_MONITORING, record);
+            await safeAddItem(STORE_NAMES.LOAD_MONITORING_CACHE, record);
+          } catch (error) {
+            if (error.name === 'ConstraintError') {
+              console.log(`Record ${record.id} already exists, updating instead`);
+              await safeUpdateItem(STORE_NAMES.LOAD_MONITORING, record);
+              await safeUpdateItem(STORE_NAMES.LOAD_MONITORING_CACHE, record);
+            } else {
+              console.error(`Error storing record ${record.id}:`, error);
+            }
+          }
+        }
+
+        setLoadMonitoringRecords(records);
+      } catch (error) {
+        console.error("Error initializing load monitoring records:", error);
+        // Try to recover by loading from cache
+        try {
+          const cachedRecords = await safeGetAllItems<LoadMonitoringData>(STORE_NAMES.LOAD_MONITORING_CACHE);
+          if (cachedRecords.length > 0) {
+            console.log("Recovered from cache:", cachedRecords.length, "records");
+            setLoadMonitoringRecords(cachedRecords);
+          }
+        } catch (cacheError) {
+          console.error("Failed to recover from cache:", cacheError);
+        }
+      }
+    };
 
   // Initialize load monitoring records on mount
   useEffect(() => {
@@ -1241,6 +1322,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const saveInspection = async (inspection: SubstationInspection): Promise<string> => {
     try {
+      // If offline, save to IndexedDB
+      if (!navigator.onLine) {
+        await inspectionService.saveSubstationInspectionOffline(inspection, 'create');
+        return inspection.id;
+      }
+
       // Check for existing inspection with same substationNo and date
       const inspectionsRef = collection(db, "substationInspections");
       const q = query(
@@ -1251,8 +1338,26 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const querySnapshot = await getDocs(q);
 
       if (!querySnapshot.empty) {
-        toast.error("An inspection for this substation on this date already exists");
-        throw new Error("Duplicate inspection");
+        // Check if this is an update to an existing record
+        const existingDoc = querySnapshot.docs[0];
+        const existingData = existingDoc.data();
+        
+        // If the inspection is being updated (has the same ID or originalOfflineId)
+        if (inspection.id === existingDoc.id || 
+            (inspection as any).originalOfflineId === existingDoc.id ||
+            inspection.id === (existingData as any).originalOfflineId) {
+          // Update the existing record
+          await updateDoc(doc(db, "substationInspections", existingDoc.id), {
+            ...inspection,
+            updatedAt: serverTimestamp(),
+            syncStatus: 'synced'
+          });
+          return existingDoc.id;
+        } else {
+          // This is a true duplicate
+          toast.error("An inspection for this substation on this date already exists");
+          throw new Error("Duplicate inspection");
+        }
       }
 
       // Create a sanitized version of the inspection with default values for undefined fields
@@ -1272,8 +1377,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         status: inspection.status || "Pending",
         remarks: inspection.remarks || "",
         createdBy: inspection.createdBy || "Unknown",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
         inspectedBy: inspection.inspectedBy || "Unknown",
         items: (inspection.items || []).map(item => ({
           id: item.id || uuidv4(),
@@ -1309,7 +1414,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           category: item.category || "outdoor equipment",
           status: item.status || "",
           remarks: item.remarks || ""
-        }))
+        })),
+        syncStatus: 'synced'
       };
 
       // Save to Firestore
@@ -1331,6 +1437,22 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      // If offline or the inspection is pending sync, update in IndexedDB
+      if (!navigator.onLine || inspection.syncStatus === 'pending') {
+        // Merge updates with the existing inspection
+        const updatedInspection = {
+          ...inspection,
+          ...updates,
+          updatedAt: new Date().toISOString(),
+          syncStatus: 'pending' as const,
+        };
+        // Save to IndexedDB and trigger event for UI update
+        await inspectionService.saveSubstationInspectionOffline(updatedInspection, 'update');
+        setSavedInspections(prev => prev.map(i => i.id === id ? updatedInspection : i));
+        toast.success("Inspection updated offline. It will be synced when you're back online.");
+        return;
+      }
+
       // Try to find the document in Firestore using the local ID first
       const docRef = doc(db, "substationInspections", id);
       const docSnap = await getDoc(docRef);
@@ -1338,13 +1460,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       // Prepare the update data, preserving existing checklist selections
       const updateData = {
         ...updates,
-        // Preserve existing items if not being updated
         items: updates.items || inspection.items,
         generalBuilding: updates.generalBuilding || inspection.generalBuilding,
         controlEquipment: updates.controlEquipment || inspection.controlEquipment,
         powerTransformer: updates.powerTransformer || inspection.powerTransformer,
         outdoorEquipment: updates.outdoorEquipment || inspection.outdoorEquipment,
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
+        syncStatus: 'synced' as const,
       };
 
       if (docSnap.exists()) {
@@ -1355,38 +1477,19 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         const inspectionsRef = collection(db, "substationInspections");
         const q = query(inspectionsRef, where("substationNo", "==", inspection.substationNo));
         const querySnapshot = await getDocs(q);
-        
         if (querySnapshot.empty) {
           console.log('No matching document found in Firestore');
           toast.error("Inspection not found in database");
           return;
         }
-
-        // Get the first matching document
         const docToUpdate = querySnapshot.docs[0];
         console.log('Found document to update:', docToUpdate.id);
-        
-        // Update in Firestore
         await updateDoc(doc(db, "substationInspections", docToUpdate.id), updateData);
-
-        // Update local state with the correct Firestore ID
-        setSavedInspections(prev => prev.map(inspection => 
-          inspection.id === id 
-            ? { ...inspection, ...updateData, id: docToUpdate.id }
-            : inspection
-        ));
-        
+        setSavedInspections(prev => prev.map(i => i.id === id ? { ...i, ...updateData, id: docToUpdate.id } : i));
         toast.success("Inspection updated successfully");
         return;
       }
-      
-      // Update local state
-      setSavedInspections(prev => prev.map(inspection => 
-        inspection.id === id 
-          ? { ...inspection, ...updateData }
-          : inspection
-      ));
-      
+      setSavedInspections(prev => prev.map(i => i.id === id ? { ...i, ...updateData } : i));
       toast.success("Inspection updated successfully");
     } catch (error) {
       console.error('[DataContext] Error updating inspection:', error);
@@ -2010,7 +2113,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     try {
       const timestamp = new Date().toISOString();
       const offlineId = 'offline_' + Date.now();
-      
+
       if (navigator.onLine) {
         const docRef = await addDoc(collection(db, "loadMonitoring"), {
           ...record,
@@ -2020,16 +2123,44 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         });
         
         const newRecord: LoadMonitoringData = {
-          ...record,
           id: docRef.id,
+          date: record.date,
+          time: record.time,
+          regionId: record.regionId,
+          districtId: record.districtId,
+          region: record.region,
+          district: record.district,
+          substationName: record.substationName,
+          substationNumber: record.substationNumber,
+          location: record.location,
+          rating: record.rating,
+          peakLoadStatus: record.peakLoadStatus,
+          feederLegs: record.feederLegs,
+          ratedLoad: record.ratedLoad,
+          redPhaseBulkLoad: record.redPhaseBulkLoad,
+          yellowPhaseBulkLoad: record.yellowPhaseBulkLoad,
+          bluePhaseBulkLoad: record.bluePhaseBulkLoad,
+          averageCurrent: record.averageCurrent,
+          percentageLoad: record.percentageLoad,
+          tenPercentFullLoadNeutral: record.tenPercentFullLoadNeutral,
+          calculatedNeutral: record.calculatedNeutral,
+          createdBy: record.createdBy,
           createdAt: timestamp,
           updatedAt: timestamp,
-          syncStatus: 'synced' as const
+          syncStatus: 'synced',
+          neutralWarningLevel: record.neutralWarningLevel,
+          neutralWarningMessage: record.neutralWarningMessage,
+          imbalancePercentage: record.imbalancePercentage,
+          imbalanceWarningLevel: record.imbalanceWarningLevel,
+          imbalanceWarningMessage: record.imbalanceWarningMessage,
+          maxPhaseCurrent: record.maxPhaseCurrent,
+          minPhaseCurrent: record.minPhaseCurrent,
+          avgPhaseCurrent: record.avgPhaseCurrent,
         };
         
         // Save to both stores
-        await safeAddItem(STORE_NAMES.LOAD_MONITORING_CACHE, newRecord);
-        await safeAddItem(STORE_NAMES.LOAD_MONITORING, newRecord);
+        await safeUpdateItem(STORE_NAMES.LOAD_MONITORING_CACHE, newRecord);
+        await safeUpdateItem(STORE_NAMES.LOAD_MONITORING, newRecord);
         
         setLoadMonitoringRecords(prev => [...prev, newRecord]);
         toast.success("Load monitoring record saved successfully");
@@ -2037,17 +2168,45 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       } else {
         // Save offline
         const offlineRecord: LoadMonitoringData = {
-          ...record,
           id: offlineId,
+          date: record.date,
+          time: record.time,
+          regionId: record.regionId,
+          districtId: record.districtId,
+          region: record.region,
+          district: record.district,
+          substationName: record.substationName,
+          substationNumber: record.substationNumber,
+          location: record.location,
+          rating: record.rating,
+          peakLoadStatus: record.peakLoadStatus,
+          feederLegs: record.feederLegs,
+          ratedLoad: record.ratedLoad,
+          redPhaseBulkLoad: record.redPhaseBulkLoad,
+          yellowPhaseBulkLoad: record.yellowPhaseBulkLoad,
+          bluePhaseBulkLoad: record.bluePhaseBulkLoad,
+          averageCurrent: record.averageCurrent,
+          percentageLoad: record.percentageLoad,
+          tenPercentFullLoadNeutral: record.tenPercentFullLoadNeutral,
+          calculatedNeutral: record.calculatedNeutral,
+          createdBy: record.createdBy,
           createdAt: timestamp,
           updatedAt: timestamp,
           originalOfflineId: offlineId,
-          syncStatus: 'pending' as const
+          syncStatus: 'pending',
+          neutralWarningLevel: record.neutralWarningLevel,
+          neutralWarningMessage: record.neutralWarningMessage,
+          imbalancePercentage: record.imbalancePercentage,
+          imbalanceWarningLevel: record.imbalanceWarningLevel,
+          imbalanceWarningMessage: record.imbalanceWarningMessage,
+          maxPhaseCurrent: record.maxPhaseCurrent,
+          minPhaseCurrent: record.minPhaseCurrent,
+          avgPhaseCurrent: record.avgPhaseCurrent,
         };
 
         // Save to both stores
-        await safeAddItem(STORE_NAMES.LOAD_MONITORING, offlineRecord);
-        await safeAddItem(STORE_NAMES.LOAD_MONITORING_CACHE, offlineRecord);
+        await safeUpdateItem(STORE_NAMES.LOAD_MONITORING, offlineRecord);
+        await safeUpdateItem(STORE_NAMES.LOAD_MONITORING_CACHE, offlineRecord);
         
         // Add to pending sync
         await addToPendingSync(STORE_NAMES.LOAD_MONITORING, "create", offlineRecord);
@@ -2079,16 +2238,44 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
       // Finally check Firestore if online
       if (navigator.onLine) {
-        const docRef = doc(db, "loadMonitoring", id);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
+      const docRef = doc(db, "loadMonitoring", id);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
           const data = docSnap.data();
           const record: LoadMonitoringData = {
             id: docSnap.id,
-            ...data,
+            date: data.date,
+            time: data.time,
+            regionId: data.regionId,
+            districtId: data.districtId,
+            region: data.region,
+            district: data.district,
+            substationName: data.substationName,
+            substationNumber: data.substationNumber,
+            location: data.location,
+            rating: data.rating,
+            peakLoadStatus: data.peakLoadStatus,
+            feederLegs: data.feederLegs,
+            ratedLoad: data.ratedLoad,
+            redPhaseBulkLoad: data.redPhaseBulkLoad,
+            yellowPhaseBulkLoad: data.yellowPhaseBulkLoad,
+            bluePhaseBulkLoad: data.bluePhaseBulkLoad,
+            averageCurrent: data.averageCurrent,
+            percentageLoad: data.percentageLoad,
+            tenPercentFullLoadNeutral: data.tenPercentFullLoadNeutral,
+            calculatedNeutral: data.calculatedNeutral,
+            createdBy: data.createdBy,
             createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt,
             updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : data.updatedAt,
-            syncStatus: 'synced' as const
+            syncStatus: 'synced',
+            neutralWarningLevel: data.neutralWarningLevel,
+            neutralWarningMessage: data.neutralWarningMessage,
+            imbalancePercentage: data.imbalancePercentage,
+            imbalanceWarningLevel: data.imbalanceWarningLevel,
+            imbalanceWarningMessage: data.imbalanceWarningMessage,
+            maxPhaseCurrent: data.maxPhaseCurrent,
+            minPhaseCurrent: data.minPhaseCurrent,
+            avgPhaseCurrent: data.avgPhaseCurrent,
           };
           
           // Cache the record
@@ -2186,18 +2373,46 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
       // Get the record from any store
       const existingRecord = await getLoadMonitoringRecord(id);
-      if (!existingRecord) {
+        if (!existingRecord) {
         console.error('Record not found in any store:', id);
         // If we're offline and the record doesn't exist, create it
         if (!navigator.onLine) {
           console.log('Creating new offline record');
           const newRecord: LoadMonitoringData = {
             id,
-            ...data,
+            date: data.date!,
+            time: data.time!,
+            regionId: data.regionId!,
+            districtId: data.districtId!,
+            region: data.region!,
+            district: data.district!,
+            substationName: data.substationName!,
+            substationNumber: data.substationNumber!,
+            location: data.location!,
+            rating: data.rating!,
+            peakLoadStatus: data.peakLoadStatus!,
+            feederLegs: data.feederLegs!,
+            ratedLoad: data.ratedLoad!,
+            redPhaseBulkLoad: data.redPhaseBulkLoad!,
+            yellowPhaseBulkLoad: data.yellowPhaseBulkLoad!,
+            bluePhaseBulkLoad: data.bluePhaseBulkLoad!,
+            averageCurrent: data.averageCurrent!,
+            percentageLoad: data.percentageLoad!,
+            tenPercentFullLoadNeutral: data.tenPercentFullLoadNeutral!,
+            calculatedNeutral: data.calculatedNeutral!,
+            createdBy: data.createdBy!,
             createdAt: timestamp,
             updatedAt: timestamp,
             originalOfflineId: id,
-            syncStatus: 'pending' as const
+            syncStatus: 'pending',
+            neutralWarningLevel: data.neutralWarningLevel,
+            neutralWarningMessage: data.neutralWarningMessage,
+            imbalancePercentage: data.imbalancePercentage,
+            imbalanceWarningLevel: data.imbalanceWarningLevel,
+            imbalanceWarningMessage: data.imbalanceWarningMessage,
+            maxPhaseCurrent: data.maxPhaseCurrent,
+            minPhaseCurrent: data.minPhaseCurrent,
+            avgPhaseCurrent: data.avgPhaseCurrent,
           };
           
           await safeAddItem(STORE_NAMES.LOAD_MONITORING, newRecord);
@@ -2206,8 +2421,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           toast.success("New load monitoring record created offline");
           return;
         }
-        throw new Error('Record not found');
-      }
+          throw new Error('Record not found');
+        }
 
       if (navigator.onLine) {
         // Online mode - check if this is an offline record that needs to be created first
@@ -2262,7 +2477,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             ));
 
             toast.success("Load monitoring record updated successfully");
-          } catch (error) {
+    } catch (error) {
             console.error("Error syncing offline record:", error);
             // If sync fails, keep the offline record and mark it for retry
             const failedRecord: LoadMonitoringData = {

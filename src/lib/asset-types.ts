@@ -100,7 +100,7 @@ export interface VITInspectionData {
   createdBy: string;
 }
 
-export type SubstationInspection = {
+export interface SubstationInspection {
   id: string;
   region: string;
   regionId: string;
@@ -109,38 +109,20 @@ export type SubstationInspection = {
   date: string;
   substationNo: string;
   substationName?: string;
-  type: 'indoor' | 'outdoor';
+  type: "indoor" | "outdoor";
   items: InspectionItem[];
-  createdAt: string;
-  updatedAt: string;
-  createdBy: string;
-  inspectionDate: string;
-  inspectedBy: string;
-  location?: string;
-  voltageLevel?: string;
-  status?: string;
-  cleanDustFree?: string;
-  protectionButtonEnabled?: string;
-  recloserButtonEnabled?: string;
-  groundEarthButtonEnabled?: string;
-  acPowerOn?: string;
-  batteryPowerLow?: string;
-  handleLockOn?: string;
-  remoteButtonEnabled?: string;
-  gasLevelLow?: string;
-  earthingArrangementAdequate?: string;
-  noFusesBlown?: string;
-  noDamageToBushings?: string;
-  noDamageToHVConnections?: string;
-  insulatorsClean?: string;
-  paintworkAdequate?: string;
-  ptFuseLinkIntact?: string;
-  noCorrosion?: string;
-  silicaGelCondition?: string;
-  correctLabelling?: string;
-  remarks?: string;
   generalBuilding: InspectionItem[];
   controlEquipment: InspectionItem[];
   powerTransformer: InspectionItem[];
   outdoorEquipment: InspectionItem[];
-} & BaseRecord;
+  location?: string;
+  voltageLevel?: string;
+  status?: string;
+  remarks?: string;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+  inspectedBy?: string;
+  syncStatus?: 'pending' | 'synced' | 'failed';
+  originalOfflineId?: string;
+}

@@ -702,6 +702,7 @@ export default function InspectionManagementPage() {
                 <TableHead>District</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Status Summary</TableHead>
+                <TableHead>Sync Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -716,6 +717,17 @@ export default function InspectionManagementPage() {
                       <span className="text-green-600 font-medium">{goodItems} good</span>
                       <span>/</span>
                       <span className="text-red-600 font-medium">{badItems} bad</span>
+                    </div>
+                  );
+
+                  const syncStatus = inspection.syncStatus === 'pending' ? (
+                    <div className="flex items-center gap-1">
+                      <span className="text-yellow-600 font-medium">Pending</span>
+                      <span className="text-xs text-muted-foreground">(Offline)</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1">
+                      <span className="text-green-600 font-medium">Synced</span>
                     </div>
                   );
                   
@@ -735,6 +747,7 @@ export default function InspectionManagementPage() {
                       <TableCell>{inspection.district}</TableCell>
                       <TableCell className="capitalize">{inspection.type}</TableCell>
                       <TableCell>{statusSummary}</TableCell>
+                      <TableCell>{syncStatus}</TableCell>
                       <TableCell className="text-right actions-cell">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
