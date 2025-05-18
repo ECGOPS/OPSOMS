@@ -1394,44 +1394,44 @@ export default function AnalyticsPage() {
         
         {/* Summary Cards Section - unchanged */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-          <Card className="bg-red-50 border border-red-200 hover:shadow-md transition-shadow duration-200">
+          <Card className="bg-red-50 dark:bg-[#2a2325] border border-red-200 dark:border-red-900 hover:shadow-md transition-shadow duration-200">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-base font-medium text-red-700">Total Faults</CardTitle>
-              <AlertTriangle className="h-4 w-4 text-red-600" />
+              <CardTitle className="text-base font-medium text-red-700 dark:text-red-200">Total Faults</CardTitle>
+              <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-300" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl sm:text-3xl font-bold text-red-900">{filteredFaults.length}</div>
-              <p className="text-xs text-red-700">
+              <div className="text-2xl sm:text-3xl font-bold text-red-900 dark:text-red-100">{filteredFaults.length}</div>
+              <p className="text-xs text-red-700 dark:text-red-200">
                 {filteredFaults.filter((f: any) => f.status === "active").length} active
               </p>
             </CardContent>
           </Card>
           
-          <Card className="bg-blue-50 border border-blue-200 hover:shadow-md transition-shadow duration-200">
+          <Card className="bg-blue-50 dark:bg-[#20232a] border border-blue-200 dark:border-blue-900 hover:shadow-md transition-shadow duration-200">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-base font-medium text-blue-700">OP5 Faults</CardTitle>
-              <Wrench className="h-4 w-4 text-blue-600" />
+              <CardTitle className="text-base font-medium text-blue-700 dark:text-blue-200">OP5 Faults</CardTitle>
+              <Wrench className="h-4 w-4 text-blue-600 dark:text-blue-300" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl sm:text-3xl font-bold text-blue-900">
+              <div className="text-2xl sm:text-3xl font-bold text-blue-900 dark:text-blue-100">
                 {filteredFaults.filter((f: any) => 'substationNo' in f).length}
               </div>
-              <p className="text-xs text-blue-700">
+              <p className="text-xs text-blue-700 dark:text-blue-200">
                 {filterRegion || filterDistrict ? `In selected area` : 'Across all regions'}
               </p>
             </CardContent>
           </Card>
           
-          <Card className="bg-purple-50 border border-purple-200 hover:shadow-md transition-shadow duration-200">
+          <Card className="bg-purple-50 dark:bg-[#241f2e] border border-purple-200 dark:border-purple-900 hover:shadow-md transition-shadow duration-200">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-base font-medium text-purple-700">Control Outages</CardTitle>
-              <Users className="h-4 w-4 text-purple-600" />
+              <CardTitle className="text-base font-medium text-purple-700 dark:text-purple-200">Control Outages</CardTitle>
+              <Users className="h-4 w-4 text-purple-600 dark:text-purple-300" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl sm:text-3xl font-bold text-purple-900">
+              <div className="text-2xl sm:text-3xl font-bold text-purple-900 dark:text-purple-100">
                 {filteredFaults.filter((f: any) => 'loadMW' in f).length}
               </div>
-              <p className="text-xs text-purple-700">
+              <p className="text-xs text-purple-700 dark:text-purple-200">
                 {filterRegion || filterDistrict ? `In selected area` : 'Across all regions'}
               </p>
             </CardContent>
@@ -1439,17 +1439,17 @@ export default function AnalyticsPage() {
         </div>
         
         {/* MTTR Report Card */}
-        <Card className="mb-4 sm:mb-8 border shadow-sm hover:shadow-md transition-shadow duration-200">
-          <CardHeader className="bg-muted/30 border-b p-4">
+        <Card className="mb-4 sm:mb-8 border shadow-sm hover:shadow-md transition-shadow duration-200 dark:bg-[#181a1b] dark:border-gray-800">
+          <CardHeader className="bg-muted/30 border-b p-4 dark:bg-[#23272e] dark:border-gray-700">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
               <div>
-                <CardTitle className="text-base sm:text-lg flex items-center gap-2">
-                  <Clock className="h-5 w-5 text-primary" />
+                <CardTitle className="text-base sm:text-lg flex items-center gap-2 dark:text-gray-100">
+                  <Clock className="h-5 w-5 text-primary dark:text-primary-200" />
                   Mean Time To Repair (MTTR) Report
                 </CardTitle>
-                <CardDescription className="text-xs sm:text-sm mt-1">Analysis of repair times for OP5 faults</CardDescription>
+                <CardDescription className="text-xs sm:text-sm mt-1 dark:text-gray-300">Analysis of repair times for OP5 faults</CardDescription>
               </div>
-              <Badge variant="outline" className="text-xs sm:text-sm">
+              <Badge variant="outline" className="text-xs sm:text-sm dark:text-gray-200 dark:border-gray-600">
                 {filteredFaults.filter(f => 
                   ('faultLocation' in f || 'substationName' in f) && 
                   f.repairDate && 
@@ -1460,12 +1460,12 @@ export default function AnalyticsPage() {
           </CardHeader>
           <CardContent className="p-4 sm:p-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-4 sm:mb-6">
-              <Card className="bg-yellow-50 border border-yellow-200">
+              <Card className="bg-yellow-50 dark:bg-[#2a281f] border border-yellow-200 dark:border-yellow-900">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-yellow-700">Average MTTR</CardTitle>
+                  <CardTitle className="text-sm font-medium text-yellow-700 dark:text-yellow-200">Average MTTR</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-xl sm:text-2xl font-bold text-yellow-900">
+                  <div className="text-xl sm:text-2xl font-bold text-yellow-900 dark:text-yellow-100">
                     {(() => {
                       const op5FaultsWithMTTR = filteredFaults.filter(f => 
                         ('faultLocation' in f || 'substationName' in f) && 
@@ -1482,18 +1482,18 @@ export default function AnalyticsPage() {
                       return `${averageMTTR.toFixed(2)} hours`;
                     })()}
                   </div>
-                  <p className="text-xs text-yellow-700 mt-1">
+                  <p className="text-xs text-yellow-700 dark:text-yellow-200 mt-1">
                     Across all regions
                   </p>
                 </CardContent>
               </Card>
 
-              <Card className="bg-orange-50 border border-orange-200">
+              <Card className="bg-orange-50 dark:bg-[#2a2820] border border-orange-200 dark:border-orange-900">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-orange-700">Total Repair Time</CardTitle>
+                  <CardTitle className="text-sm font-medium text-orange-700 dark:text-orange-200">Total Repair Time</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-xl sm:text-2xl font-bold text-orange-900">
+                  <div className="text-xl sm:text-2xl font-bold text-orange-900 dark:text-orange-100">
                     {(() => {
                       const op5FaultsWithMTTR = filteredFaults.filter(f => 
                         ('faultLocation' in f || 'substationName' in f) && 
@@ -1509,25 +1509,25 @@ export default function AnalyticsPage() {
                       return `${totalMTTR.toFixed(2)} hours`;
                     })()}
                   </div>
-                  <p className="text-xs text-orange-700 mt-1">
+                  <p className="text-xs text-orange-700 dark:text-orange-200 mt-1">
                     Combined repair time
                   </p>
                 </CardContent>
               </Card>
 
-              <Card className="bg-gray-50 border border-gray-200">
+              <Card className="bg-gray-50 dark:bg-[#23272e] border border-gray-200 dark:border-gray-800">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-gray-700">Faults with MTTR</CardTitle>
+                  <CardTitle className="text-sm font-medium text-gray-700 dark:text-gray-200">Faults with MTTR</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-xl sm:text-2xl font-bold text-gray-900">
+                  <div className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">
                     {filteredFaults.filter(f => 
                       ('faultLocation' in f || 'substationName' in f) && 
                       f.repairDate && 
                       f.restorationDate
                     ).length}
                   </div>
-                  <p className="text-xs text-gray-700 mt-1">
+                  <p className="text-xs text-gray-700 dark:text-gray-200 mt-1">
                     Out of {filteredFaults.filter(f => 'faultLocation' in f).length} total OP5 faults
                   </p>
                 </CardContent>
@@ -1787,90 +1787,90 @@ export default function AnalyticsPage() {
             <TabsContent value="reliability" className="p-4 sm:p-6 bg-background rounded-lg border shadow-sm space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {/* Updated Rural Reliability Card with color */}
-                <Card className="bg-green-50 border border-green-200 hover:shadow-lg transition-shadow duration-200">
+                <Card className="bg-green-50 dark:bg-[#202a23] border border-green-200 dark:border-green-900 hover:shadow-lg transition-shadow duration-200">
                   <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2 text-green-800">
-                      <TrendingUp className="h-5 w-5 text-green-600" />
+                    <CardTitle className="text-lg flex items-center gap-2 text-green-800 dark:text-green-200">
+                      <TrendingUp className="h-5 w-5 text-green-600 dark:text-green-300" />
                       Rural Reliability
                     </CardTitle>
-                    <CardDescription className="text-green-700">Indices for rural areas</CardDescription>
+                    <CardDescription className="text-green-700 dark:text-green-200">Indices for rural areas</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-4 text-green-900">
+                    <div className="space-y-4 text-green-900 dark:text-green-100">
                       <div>
-                        <Label className="text-sm text-green-700">SAIDI</Label>
+                        <Label className="text-sm text-green-700 dark:text-green-200">SAIDI</Label>
                         <p className="text-xl font-semibold">{reliabilityIndices?.rural?.saidi?.toFixed(3) || 'N/A'}</p>
-                        <p className="text-xs text-green-700">Avg. Interruption Duration</p>
+                        <p className="text-xs text-green-700 dark:text-green-200">Avg. Interruption Duration</p>
                       </div>
                       <div>
-                        <Label className="text-sm text-green-700">SAIFI</Label>
+                        <Label className="text-sm text-green-700 dark:text-green-200">SAIFI</Label>
                         <p className="text-xl font-semibold">{reliabilityIndices?.rural?.saifi?.toFixed(3) || 'N/A'}</p>
-                        <p className="text-xs text-green-700">Avg. Interruption Frequency</p>
+                        <p className="text-xs text-green-700 dark:text-green-200">Avg. Interruption Frequency</p>
                       </div>
                       <div>
-                        <Label className="text-sm text-green-700">CAIDI</Label>
+                        <Label className="text-sm text-green-700 dark:text-green-200">CAIDI</Label>
                         <p className="text-xl font-semibold">{reliabilityIndices?.rural?.caidi?.toFixed(3) || 'N/A'}</p>
-                        <p className="text-xs text-green-700">Avg. Customer Interruption Duration</p>
+                        <p className="text-xs text-green-700 dark:text-green-200">Avg. Customer Interruption Duration</p>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
 
                 {/* Updated Urban Reliability Card with color */}
-                <Card className="bg-blue-50 border border-blue-200 hover:shadow-lg transition-shadow duration-200">
+                <Card className="bg-blue-50 dark:bg-[#20232a] border border-blue-200 dark:border-blue-900 hover:shadow-lg transition-shadow duration-200">
                   <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2 text-blue-800">
-                      <TrendingUp className="h-5 w-5 text-blue-600" />
+                    <CardTitle className="text-lg flex items-center gap-2 text-blue-800 dark:text-blue-200">
+                      <TrendingUp className="h-5 w-5 text-blue-600 dark:text-blue-300" />
                       Urban Reliability
                     </CardTitle>
-                    <CardDescription className="text-blue-700">Indices for urban areas</CardDescription>
+                    <CardDescription className="text-blue-700 dark:text-blue-200">Indices for urban areas</CardDescription>
                   </CardHeader>
                   <CardContent>
-                     <div className="space-y-4 text-blue-900">
+                     <div className="space-y-4 text-blue-900 dark:text-blue-100">
                       <div>
-                        <Label className="text-sm text-blue-700">SAIDI</Label>
+                        <Label className="text-sm text-blue-700 dark:text-blue-200">SAIDI</Label>
                         <p className="text-xl font-semibold">{reliabilityIndices?.urban?.saidi?.toFixed(3) || 'N/A'}</p>
-                        <p className="text-xs text-blue-700">Avg. Interruption Duration</p>
+                        <p className="text-xs text-blue-700 dark:text-blue-200">Avg. Interruption Duration</p>
                       </div>
                       <div>
-                        <Label className="text-sm text-blue-700">SAIFI</Label>
+                        <Label className="text-sm text-blue-700 dark:text-blue-200">SAIFI</Label>
                         <p className="text-xl font-semibold">{reliabilityIndices?.urban?.saifi?.toFixed(3) || 'N/A'}</p>
-                        <p className="text-xs text-blue-700">Avg. Interruption Frequency</p>
+                        <p className="text-xs text-blue-700 dark:text-blue-200">Avg. Interruption Frequency</p>
                       </div>
                       <div>
-                        <Label className="text-sm text-blue-700">CAIDI</Label>
+                        <Label className="text-sm text-blue-700 dark:text-blue-200">CAIDI</Label>
                         <p className="text-xl font-semibold">{reliabilityIndices?.urban?.caidi?.toFixed(3) || 'N/A'}</p>
-                        <p className="text-xs text-blue-700">Avg. Customer Interruption Duration</p>
+                        <p className="text-xs text-blue-700 dark:text-blue-200">Avg. Customer Interruption Duration</p>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
 
                 {/* Updated Metro Reliability Card with color */}
-                <Card className="bg-purple-50 border border-purple-200 hover:shadow-lg transition-shadow duration-200">
+                <Card className="bg-purple-50 dark:bg-[#241f2e] border border-purple-200 dark:border-purple-900 hover:shadow-lg transition-shadow duration-200">
                   <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2 text-purple-800">
-                      <TrendingUp className="h-5 w-5 text-purple-600" />
+                    <CardTitle className="text-lg flex items-center gap-2 text-purple-800 dark:text-purple-200">
+                      <TrendingUp className="h-5 w-5 text-purple-600 dark:text-purple-300" />
                       Metro Reliability
                     </CardTitle>
-                    <CardDescription className="text-purple-700">Indices for metro areas</CardDescription>
+                    <CardDescription className="text-purple-700 dark:text-purple-200">Indices for metro areas</CardDescription>
                   </CardHeader>
                   <CardContent>
-                     <div className="space-y-4 text-purple-900">
+                     <div className="space-y-4 text-purple-900 dark:text-purple-100">
                       <div>
-                        <Label className="text-sm text-purple-700">SAIDI</Label>
+                        <Label className="text-sm text-purple-700 dark:text-purple-200">SAIDI</Label>
                         <p className="text-xl font-semibold">{reliabilityIndices?.metro?.saidi?.toFixed(3) || 'N/A'}</p>
-                        <p className="text-xs text-purple-700">Avg. Interruption Duration</p>
+                        <p className="text-xs text-purple-700 dark:text-purple-200">Avg. Interruption Duration</p>
                       </div>
                       <div>
-                        <Label className="text-sm text-purple-700">SAIFI</Label>
+                        <Label className="text-sm text-purple-700 dark:text-purple-200">SAIFI</Label>
                         <p className="text-xl font-semibold">{reliabilityIndices?.metro?.saifi?.toFixed(3) || 'N/A'}</p>
-                        <p className="text-xs text-purple-700">Avg. Interruption Frequency</p>
+                        <p className="text-xs text-purple-700 dark:text-purple-200">Avg. Interruption Frequency</p>
                       </div>
                       <div>
-                        <Label className="text-sm text-purple-700">CAIDI</Label>
+                        <Label className="text-sm text-purple-700 dark:text-purple-200">CAIDI</Label>
                         <p className="text-xl font-semibold">{reliabilityIndices?.metro?.caidi?.toFixed(3) || 'N/A'}</p>
-                        <p className="text-xs text-purple-700">Avg. Customer Interruption Duration</p>
+                        <p className="text-xs text-purple-700 dark:text-purple-200">Avg. Customer Interruption Duration</p>
                       </div>
                     </div>
                   </CardContent>

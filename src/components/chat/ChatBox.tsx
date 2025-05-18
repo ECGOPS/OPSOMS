@@ -37,35 +37,33 @@ export function ChatBox() {
     }
   }, []);
 
+  // IMPORTANT: Do NOT add 'messages' to the dependency array below!
+  // Including it will cause the subscription to re-initialize on every message update,
+  // breaking real-time updates and causing missed messages.
   useEffect(() => {
     const unsubscribe = chatService.subscribeToMessages((updatedMessages) => {
       const messagesFromOthers = updatedMessages.filter(m => m.senderId !== user?.id);
-
       setMessages(updatedMessages);
       setIsLoading(false);
-
       if (messagesFromOthers.length > 0) {
         if (notificationPermission === 'granted' && !document.hasFocus()) {
           const currentMessageIds = new Set(messages.map(m => m.id));
           const newlyArrivedMessages = updatedMessages.filter(m => 
             !currentMessageIds.has(m.id) && m.senderId !== user?.id
           );
-
           newlyArrivedMessages.forEach(message => {
             const notification = new Notification(`New Message from ${message.sender}`, {
               body: message.text || '[Attachment]',
             });
           });
         }
-
         if (isMinimized || !document.hasFocus()) {
           setUnreadCount(prevCount => prevCount + messagesFromOthers.length);
         }
       }
     });
-
     return () => unsubscribe();
-  }, [chatService, user?.id, notificationPermission, isMinimized, messages]);
+  }, [chatService, user?.id, notificationPermission, isMinimized]);
 
   useEffect(() => {
     const handleFocus = () => {

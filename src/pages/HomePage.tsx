@@ -77,21 +77,21 @@ export default function HomePage() {
       </section>
 
       {/* Features Section */}
-      <section className="py-16 bg-gray-50">
+      <section className="py-16 bg-gray-50 dark:bg-[#181a1b]">
         <div className="container mx-auto px-4">
           <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold mb-4">Key Features</h2>
-            <p className="text-lg text-gray-600 max-w-3xl mx-auto">
+            <h2 className="text-3xl font-bold mb-4 text-gray-900 dark:text-gray-100">Key Features</h2>
+            <p className="text-lg text-gray-600 dark:text-gray-300 max-w-3xl mx-auto">
               Our platform provides the tools you need to efficiently manage and resolve power distribution faults.
             </p>
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {features.map((feature, index) => (
-              <div key={index} className="feature-card">
+              <div key={index} className="feature-card bg-white dark:bg-[#23272e] border border-gray-200 dark:border-gray-800 text-gray-900 dark:text-gray-100">
                 <div className="mb-4">{feature.icon}</div>
                 <h3 className="text-xl font-semibold mb-2">{feature.title}</h3>
-                <p className="text-gray-600">{feature.description}</p>
+                <p className="text-gray-600 dark:text-gray-300">{feature.description}</p>
               </div>
             ))}
           </div>
@@ -99,23 +99,23 @@ export default function HomePage() {
       </section>
 
       {/* Stats Section */}
-      <section className="py-16 bg-white">
+      <section className="py-16 bg-white dark:bg-[#181a1b]">
         <div className="container mx-auto px-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div className="text-center p-6 border border-gray-200 rounded-lg">
+            <div className="text-center p-6 border border-gray-200 dark:border-gray-800 rounded-lg bg-white dark:bg-[#23272e]">
               <LightbulbOff className="h-12 w-12 text-ecg-gold mx-auto mb-4" />
-              <div className="text-4xl font-bold text-ecg-blue mb-2">98.5%</div>
-              <p className="text-gray-600">Power Uptime</p>
+              <div className="text-4xl font-bold text-ecg-blue dark:text-ecg-gold mb-2">98.5%</div>
+              <p className="text-gray-600 dark:text-gray-300">Power Uptime</p>
             </div>
-            <div className="text-center p-6 border border-gray-200 rounded-lg">
+            <div className="text-center p-6 border border-gray-200 dark:border-gray-800 rounded-lg bg-white dark:bg-[#23272e]">
               <Clock className="h-12 w-12 text-ecg-gold mx-auto mb-4" />
-              <div className="text-4xl font-bold text-ecg-blue mb-2">30 min</div>
-              <p className="text-gray-600">Average Response Time</p>
+              <div className="text-4xl font-bold text-ecg-blue dark:text-ecg-gold mb-2">30 min</div>
+              <p className="text-gray-600 dark:text-gray-300">Average Response Time</p>
             </div>
-            <div className="text-center p-6 border border-gray-200 rounded-lg">
+            <div className="text-center p-6 border border-gray-200 dark:border-gray-800 rounded-lg bg-white dark:bg-[#23272e]">
               <AlertTriangle className="h-12 w-12 text-ecg-gold mx-auto mb-4" />
-              <div className="text-4xl font-bold text-ecg-blue mb-2">15,000+</div>
-              <p className="text-gray-600">Faults Managed</p>
+              <div className="text-4xl font-bold text-ecg-blue dark:text-ecg-gold mb-2">15,000+</div>
+              <p className="text-gray-600 dark:text-gray-300">Faults Managed</p>
             </div>
           </div>
         </div>

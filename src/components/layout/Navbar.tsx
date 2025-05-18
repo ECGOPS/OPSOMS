@@ -17,16 +17,22 @@ import {
   navigationMenuTriggerStyle,
 } from "@/components/ui/navigation-menu";
 import { cn } from "@/lib/utils";
+import { useTheme } from "next-themes";
 
 export function Navbar() {
   const { user, logout, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { theme, setTheme } = useTheme();
 
   const handleLogout = () => {
     logout();
     navigate("/");
+  };
+
+  const toggleTheme = () => {
+    setTheme(theme === "dark" ? "light" : "dark");
   };
 
   // Check if the current path starts with a specific route
@@ -87,7 +93,7 @@ export function Navbar() {
                   <NavigationMenuItem>
                     <NavigationMenuTrigger className={cn(
                       "text-foreground hover:text-primary transition-colors",
-                      isActiveRoute("/asset-management") && "bg-accent text-primary"
+                      isActiveRoute("/asset-management") && "bg-accent text-primary dark:bg-blue-700 dark:text-white"
                     )}>
                       Asset Management
                     </NavigationMenuTrigger>
@@ -241,6 +247,10 @@ export function Navbar() {
                 </Button>
               </>
             )}
+            {/* Desktop Dark Mode Toggle Button */}
+            <Button variant="ghost" onClick={toggleTheme} className="ml-2">
+              {theme === "dark" ? "Light Mode" : "Dark Mode"}
+            </Button>
           </div>
         </div>
         
@@ -327,7 +337,9 @@ export function Navbar() {
                 )}
               </nav>
               <Separator className="my-4" />
-              {/* Remove duplicate Log Out button at the bottom */}
+              <Button variant="ghost" onClick={toggleTheme} className="w-full mb-2">
+                {theme === "dark" ? "Light Mode" : "Dark Mode"}
+              </Button>
               {!isAuthenticated && (
                 <div className="flex flex-col gap-2 mt-auto">
                   <Button variant="outline" className="w-full" asChild>

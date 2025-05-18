@@ -48,53 +48,53 @@ export function StatsOverview({ op5Faults, controlOutages }: StatsOverviewProps)
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-      <Card className="bg-red-50 border border-red-200 shadow-md animate-fade-up animate-duration-500 animate-delay-0">
+      <Card className="bg-red-50 dark:bg-[#2a2325] border border-red-200 dark:border-red-900 shadow-md animate-fade-up animate-duration-500 animate-delay-0">
         <CardHeader className="p-4 pb-2">
-          <CardTitle>Total Faults</CardTitle>
-          <CardDescription>Number of reported OP5 faults</CardDescription>
+          <CardTitle className="text-gray-900 dark:text-gray-100">Total Faults</CardTitle>
+          <CardDescription className="text-gray-600 dark:text-gray-300">Number of reported OP5 faults</CardDescription>
         </CardHeader>
         <CardContent className="p-4 flex items-center space-x-4">
           <Zap className={cn(iconClass, "text-red-500")} />
-          <div className="text-3xl font-bold">
+          <div className="text-3xl font-bold text-gray-900 dark:text-gray-100">
             <AnimatedNumber value={totalFaults} />
           </div>
         </CardContent>
       </Card>
 
-      <Card className="bg-orange-50 border border-orange-200 shadow-md animate-fade-up animate-duration-500 animate-delay-100">
+      <Card className="bg-orange-50 dark:bg-[#2a2820] border border-orange-200 dark:border-orange-900 shadow-md animate-fade-up animate-duration-500 animate-delay-100">
         <CardHeader className="p-4 pb-2">
-          <CardTitle>Total Outages</CardTitle>
-          <CardDescription>Number of control system outages</CardDescription>
+          <CardTitle className="text-gray-900 dark:text-gray-100">Total Outages</CardTitle>
+          <CardDescription className="text-gray-600 dark:text-gray-300">Number of control system outages</CardDescription>
         </CardHeader>
         <CardContent className="p-4 flex items-center space-x-4">
           <MonitorSmartphone className={cn(iconClass, "text-orange-500")} />
-          <div className="text-3xl font-bold">
+          <div className="text-3xl font-bold text-gray-900 dark:text-gray-100">
             <AnimatedNumber value={totalOutages} />
           </div>
         </CardContent>
       </Card>
 
-      <Card className="bg-blue-50 border border-blue-200 shadow-md animate-fade-up animate-duration-500 animate-delay-200">
+      <Card className="bg-blue-50 dark:bg-[#20232a] border border-blue-200 dark:border-blue-900 shadow-md animate-fade-up animate-duration-500 animate-delay-200">
         <CardHeader className="p-4 pb-2">
-          <CardTitle>Affected Population</CardTitle>
-          <CardDescription>Total population affected by faults</CardDescription>
+          <CardTitle className="text-gray-900 dark:text-gray-100">Affected Population</CardTitle>
+          <CardDescription className="text-gray-600 dark:text-gray-300">Total population affected by faults</CardDescription>
         </CardHeader>
         <CardContent className="p-4 flex items-center space-x-4">
           <Users className={cn(iconClass, "text-blue-500")} />
-          <div className="text-3xl font-bold">
+          <div className="text-3xl font-bold text-gray-900 dark:text-gray-100">
             <AnimatedNumber value={affectedPopulation} formatValue={(val) => val.toLocaleString()} />
           </div>
         </CardContent>
       </Card>
 
-      <Card className="bg-green-50 border border-green-200 shadow-md animate-fade-up animate-duration-500 animate-delay-300">
+      <Card className="bg-green-50 dark:bg-[#202a23] border border-green-200 dark:border-green-900 shadow-md animate-fade-up animate-duration-500 animate-delay-300">
         <CardHeader className="p-4 pb-2">
-          <CardTitle>Avg. Outage Time</CardTitle>
-          <CardDescription>Average time to resolve a fault (hours)</CardDescription>
+          <CardTitle className="text-gray-900 dark:text-gray-100">Avg. Outage Time</CardTitle>
+          <CardDescription className="text-gray-600 dark:text-gray-300">Average time to resolve a fault (hours)</CardDescription>
         </CardHeader>
         <CardContent className="p-4 flex items-center space-x-4">
           <Clock className={cn(iconClass, "text-green-500")} />
-          <div className="text-3xl font-bold">
+          <div className="text-3xl font-bold text-gray-900 dark:text-gray-100">
             <AnimatedNumber value={averageOutageTime} formatValue={(val) => val.toFixed(1)} />
           </div>
         </CardContent>
