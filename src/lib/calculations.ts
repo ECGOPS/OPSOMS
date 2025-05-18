@@ -36,16 +36,22 @@ export function calculateReliabilityIndicesByType(
 ): ReliabilityIndices {
   if (totalPopulation === 0) return { saidi: 0, saifi: 0, caidi: 0 };
 
+  // Calculate total affected customers
   const totalAffected = affectedPopulation.rural + affectedPopulation.urban + affectedPopulation.metro;
-  const customerHours = calculateCustomerLostHours(outageDuration, affectedPopulation);
+  
+  // Calculate customer hours lost (duration in hours × affected customers)
+  const customerHours = outageDuration * totalAffected;
   
   // SAIDI = Total Customer Hours Lost / Total Number of Customers
+  // Standard formula: Σ (ri × Ni) / Nt
   const saidi = Number((customerHours / totalPopulation).toFixed(3));
   
   // SAIFI = Total Customers Affected / Total Number of Customers
+  // Standard formula: Σ Ni / Nt
   const saifi = Number((totalAffected / totalPopulation).toFixed(3));
   
   // CAIDI = SAIDI / SAIFI
+  // Standard formula: Σ (ri × Ni) / Σ Ni
   const caidi = saifi === 0 ? 0 : Number((saidi / saifi).toFixed(3));
 
   return { saidi, saifi, caidi };

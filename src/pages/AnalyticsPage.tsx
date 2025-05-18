@@ -385,55 +385,246 @@ export default function AnalyticsPage() {
 
     setFilteredFaults(filteredByDate);
 
-    // Calculate reliability indices immediately after setting filtered faults
-    const reliabilityIndices = calculateReliabilityIndices(filteredByDate);
+    // Calculate reliability indices based on selected level
+    const reliabilityIndices = calculateReliabilityIndicesByLevel(
+      filteredByDate,
+      districts,
+      filterRegion,
+      filterDistrict
+    );
     setReliabilityIndices(reliabilityIndices);
   };
 
-  const calculateReliabilityIndices = (faults: any[]) => {
+  const calculateReliabilityIndicesByLevel = (
+    faults: any[],
+    districts: any[],
+    regionId: string | undefined,
+    districtId: string | undefined
+  ) => {
     const indices = {
-      rural: { saidi: 0, saifi: 0, caidi: 0 },
-      urban: { saidi: 0, saifi: 0, caidi: 0 },
-      metro: { saidi: 0, saifi: 0, caidi: 0 }
+      rural: { saidi: 0, saifi: 0, caidi: 0, caifi: 0, maifi: 0 },
+      urban: { saidi: 0, saifi: 0, caidi: 0, caifi: 0, maifi: 0 },
+      metro: { saidi: 0, saifi: 0, caidi: 0, caifi: 0, maifi: 0 },
+      total: { saidi: 0, saifi: 0, caidi: 0, caifi: 0, maifi: 0 }
     };
 
-    // Filter only OP5 faults with valid MTTR
+    // Filter only OP5 faults with valid dates
     const op5Faults = faults.filter(fault => 
       ('faultLocation' in fault || 'substationName' in fault) && 
-      fault.repairDate && 
+      fault.occurrenceDate && 
       fault.restorationDate
     );
 
-    // Calculate MTTR for each fault
-    op5Faults.forEach(fault => {
-      const mttr = calculateMTTR(fault.repairDate, fault.restorationDate);
-      fault.mttr = mttr;
-    });
+    // Get total population based on level
+    let totalPopulation = { rural: 0, urban: 0, metro: 0 };
+    if (districtId) {
+      // District level
+      const district = districts.find(d => d.id === districtId);
+      if (district?.population) {
+        totalPopulation = district.population;
+      }
+    } else if (regionId) {
+      // Regional level
+      const regionDistricts = districts.filter(d => d.regionId === regionId);
+      totalPopulation = regionDistricts.reduce((acc, district) => ({
+        rural: acc.rural + (district.population?.rural || 0),
+        urban: acc.urban + (district.population?.urban || 0),
+        metro: acc.metro + (district.population?.metro || 0)
+      }), { rural: 0, urban: 0, metro: 0 });
+    } else {
+      // Global level
+      totalPopulation = districts.reduce((acc, district) => ({
+        rural: acc.rural + (district.population?.rural || 0),
+        urban: acc.urban + (district.population?.urban || 0),
+        metro: acc.metro + (district.population?.metro || 0)
+      }), { rural: 0, urban: 0, metro: 0 });
+    }
 
-    // Calculate indices
-    op5Faults.forEach(fault => {
+    // Initialize tracking objects
+    let customerHoursLost = { rural: 0, urban: 0, metro: 0 };
+    let affectedCustomers = { rural: 0, urban: 0, metro: 0 };
+    let momentaryInterruptions = { rural: 0, urban: 0, metro: 0 };
+    let sustainedInterruptions = { rural: 0, urban: 0, metro: 0 };
+    let customerInterruptions = { rural: 0, urban: 0, metro: 0 };
+    // Track unique customers by district
+    let distinctCustomersByDistrict = new Map<string, Set<string>>();
+    let totalInterruptions = { rural: 0, urban: 0, metro: 0 };
+    let outageDetails: { id: string; affected: number; districtId: string }[] = [];
+
+    // Add debug logging
+    console.log('Starting CAIFI calculation with faults:', op5Faults.length);
+
+    // Process each fault
+    op5Faults.forEach((fault, index) => {
       if (fault.affectedPopulation) {
         const { rural, urban, metro } = fault.affectedPopulation;
-        if (rural > 0) {
-          indices.rural.saidi += fault.mttr || 0;
-          indices.rural.saifi += 1;
+        const duration = calculateOutageDuration(fault.occurrenceDate, fault.restorationDate);
+        const isMomentary = duration <= 5; // Consider interruptions ≤ 5 minutes as momentary
+
+        // Track total affected customers for this outage
+        const totalAffected = rural + urban + metro;
+        outageDetails.push({
+          id: fault.id,
+          affected: totalAffected,
+          districtId: fault.districtId
+        });
+
+        console.log(`Processing fault ${index + 1}:`, {
+          faultId: fault.id,
+          districtId: fault.districtId,
+          rural,
+          urban,
+          metro,
+          totalAffected,
+          duration,
+          isMomentary
+        });
+
+        // Update customer hours lost
+        customerHoursLost.rural += duration * rural;
+        customerHoursLost.urban += duration * urban;
+        customerHoursLost.metro += duration * metro;
+
+        // Update affected customers
+        affectedCustomers.rural += rural;
+        affectedCustomers.urban += urban;
+        affectedCustomers.metro += metro;
+
+        // Update total interruptions
+        totalInterruptions.rural += rural;
+        totalInterruptions.urban += urban;
+        totalInterruptions.metro += metro;
+
+        // Update momentary interruptions
+        if (isMomentary) {
+          momentaryInterruptions.rural += rural;
+          momentaryInterruptions.urban += urban;
+          momentaryInterruptions.metro += metro;
         }
-        if (urban > 0) {
-          indices.urban.saidi += fault.mttr || 0;
-          indices.urban.saifi += 1;
+
+        // Track distinct customers by district
+        if (!distinctCustomersByDistrict.has(fault.districtId)) {
+          distinctCustomersByDistrict.set(fault.districtId, new Set());
         }
-        if (metro > 0) {
-          indices.metro.saidi += fault.mttr || 0;
-          indices.metro.saifi += 1;
+        const districtCustomers = distinctCustomersByDistrict.get(fault.districtId)!;
+
+        // Add customers to the district's set
+        for (let i = 0; i < rural; i++) {
+          districtCustomers.add(`rural-${i}`);
+        }
+        for (let i = 0; i < urban; i++) {
+          districtCustomers.add(`urban-${i}`);
+        }
+        for (let i = 0; i < metro; i++) {
+          districtCustomers.add(`metro-${i}`);
         }
       }
     });
 
-    // Calculate CAIDI
-    Object.keys(indices).forEach(key => {
-      const index = indices[key as keyof typeof indices];
-      index.caidi = index.saifi > 0 ? index.saidi / index.saifi : 0;
+    // Calculate total distinct customers by type
+    let distinctCustomersByType = { rural: 0, urban: 0, metro: 0 };
+    distinctCustomersByDistrict.forEach((customers, districtId) => {
+      customers.forEach(customerId => {
+        if (customerId.startsWith('rural-')) distinctCustomersByType.rural++;
+        else if (customerId.startsWith('urban-')) distinctCustomersByType.urban++;
+        else if (customerId.startsWith('metro-')) distinctCustomersByType.metro++;
+      });
     });
+
+    // Detailed CAIFI analysis
+    console.log('=== Detailed CAIFI Analysis ===');
+    console.log('Outage Details:', outageDetails);
+    console.log('Total Interruptions:', {
+      rural: totalInterruptions.rural,
+      urban: totalInterruptions.urban,
+      metro: totalInterruptions.metro,
+      total: totalInterruptions.rural + totalInterruptions.urban + totalInterruptions.metro
+    });
+    console.log('Distinct Customers:', {
+      rural: distinctCustomersByType.rural,
+      urban: distinctCustomersByType.urban,
+      metro: distinctCustomersByType.metro,
+      total: distinctCustomersByType.rural + distinctCustomersByType.urban + distinctCustomersByType.metro
+    });
+    console.log('CAIFI Values:', {
+      rural: distinctCustomersByType.rural > 0 ? (totalInterruptions.rural / distinctCustomersByType.rural).toFixed(2) : '0.00',
+      urban: distinctCustomersByType.urban > 0 ? (totalInterruptions.urban / distinctCustomersByType.urban).toFixed(2) : '0.00',
+      metro: distinctCustomersByType.metro > 0 ? (totalInterruptions.metro / distinctCustomersByType.metro).toFixed(2) : '0.00',
+      total: ((totalInterruptions.rural + totalInterruptions.urban + totalInterruptions.metro) / 
+              (distinctCustomersByType.rural + distinctCustomersByType.urban + distinctCustomersByType.metro)).toFixed(2)
+    });
+    console.log('District-wise Analysis:', 
+      Array.from(distinctCustomersByDistrict.entries()).map(([districtId, customers]) => ({
+        districtId,
+        totalCustomers: customers.size,
+        customerTypes: {
+          rural: Array.from(customers).filter(id => id.startsWith('rural-')).length,
+          urban: Array.from(customers).filter(id => id.startsWith('urban-')).length,
+          metro: Array.from(customers).filter(id => id.startsWith('metro-')).length
+        }
+      }))
+    );
+    console.log('=============================');
+
+    // Log intermediate values
+    console.log('CAIFI calculation values:', {
+      totalInterruptions,
+      distinctCustomersByType,
+      districts: Array.from(distinctCustomersByDistrict.entries()).map(([districtId, customers]) => ({
+        districtId,
+        customerCount: customers.size
+      }))
+    });
+
+    // Calculate indices for each population type
+    ['rural', 'urban', 'metro'].forEach(type => {
+      const t = type as keyof typeof totalPopulation;
+      if (totalPopulation[t] > 0) {
+        // SAIDI = Total Customer Hours Lost / Total Number of Customers
+        indices[t].saidi = Number((customerHoursLost[t] / totalPopulation[t]).toFixed(2));
+        
+        // SAIFI = Total Customers Affected / Total Number of Customers
+        indices[t].saifi = Number((affectedCustomers[t] / totalPopulation[t]).toFixed(2));
+        
+        // CAIDI = SAIDI / SAIFI
+        indices[t].caidi = indices[t].saifi > 0 ? 
+          Number((indices[t].saidi / indices[t].saifi).toFixed(2)) : 0;
+
+        // CAIFI = Total Number of Customer Interruptions / Number of Distinct Customers Interrupted
+        const distinctCount = distinctCustomersByType[t];
+        const totalInterruptionCount = totalInterruptions[t];
+        
+        console.log(`CAIFI calculation for ${type}:`, {
+          totalInterruptions: totalInterruptionCount,
+          distinctCount,
+          caifi: distinctCount > 0 ? Number((totalInterruptionCount / distinctCount).toFixed(2)) : 0
+        });
+
+        indices[t].caifi = distinctCount > 0 ? 
+          Number((totalInterruptionCount / distinctCount).toFixed(2)) : 0;
+
+        // MAIFI = Number of customers with momentary interruptions / Total Number of Customers
+        indices[t].maifi = Number((momentaryInterruptions[t] / totalPopulation[t]).toFixed(2));
+      }
+    });
+
+    // Calculate total indices
+    const totalPopulationAll = totalPopulation.rural + totalPopulation.urban + totalPopulation.metro;
+    const totalCustomerHoursLost = customerHoursLost.rural + customerHoursLost.urban + customerHoursLost.metro;
+    const totalAffectedCustomers = affectedCustomers.rural + affectedCustomers.urban + affectedCustomers.metro;
+    const totalMomentaryInterruptions = momentaryInterruptions.rural + momentaryInterruptions.urban + momentaryInterruptions.metro;
+    const totalCustomerInterruptions = totalInterruptions.rural + totalInterruptions.urban + totalInterruptions.metro;
+    const totalDistinctCustomers = distinctCustomersByType.rural + distinctCustomersByType.urban + distinctCustomersByType.metro;
+
+    if (totalPopulationAll > 0) {
+      indices.total.saidi = Number((totalCustomerHoursLost / totalPopulationAll).toFixed(2));
+      indices.total.saifi = Number((totalAffectedCustomers / totalPopulationAll).toFixed(2));
+      indices.total.caidi = indices.total.saifi > 0 ? 
+        Number((indices.total.saidi / indices.total.saifi).toFixed(2)) : 0;
+      indices.total.caifi = totalDistinctCustomers > 0 ? 
+        Number((totalCustomerInterruptions / totalDistinctCustomers).toFixed(2)) : 0;
+      indices.total.maifi = Number((totalMomentaryInterruptions / totalPopulationAll).toFixed(2));
+    }
 
     return indices;
   };
@@ -2014,18 +2205,28 @@ export default function AnalyticsPage() {
                     <div className="space-y-4 text-green-900 dark:text-green-100">
                       <div>
                         <Label className="text-sm text-green-700 dark:text-green-200">SAIDI</Label>
-                        <p className="text-xl font-semibold">{reliabilityIndices?.rural?.saidi?.toFixed(3) || 'N/A'}</p>
+                        <p className="text-xl font-semibold">{reliabilityIndices?.rural?.saidi?.toFixed(2) || 'N/A'}</p>
                         <p className="text-xs text-green-700 dark:text-green-200">Avg. Interruption Duration</p>
                       </div>
                       <div>
                         <Label className="text-sm text-green-700 dark:text-green-200">SAIFI</Label>
-                        <p className="text-xl font-semibold">{reliabilityIndices?.rural?.saifi?.toFixed(3) || 'N/A'}</p>
+                        <p className="text-xl font-semibold">{reliabilityIndices?.rural?.saifi?.toFixed(2) || 'N/A'}</p>
                         <p className="text-xs text-green-700 dark:text-green-200">Avg. Interruption Frequency</p>
                       </div>
                       <div>
                         <Label className="text-sm text-green-700 dark:text-green-200">CAIDI</Label>
-                        <p className="text-xl font-semibold">{reliabilityIndices?.rural?.caidi?.toFixed(3) || 'N/A'}</p>
+                        <p className="text-xl font-semibold">{reliabilityIndices?.rural?.caidi?.toFixed(2) || 'N/A'}</p>
                         <p className="text-xs text-green-700 dark:text-green-200">Avg. Customer Interruption Duration</p>
+                      </div>
+                      <div>
+                        <Label className="text-sm text-green-700 dark:text-green-200">CAIFI</Label>
+                        <p className="text-xl font-semibold">{reliabilityIndices?.rural?.caifi?.toFixed(2) || 'N/A'}</p>
+                        <p className="text-xs text-green-700 dark:text-green-200">Customer Avg. Interruption Frequency</p>
+                      </div>
+                      <div>
+                        <Label className="text-sm text-green-700 dark:text-green-200">MAIFI</Label>
+                        <p className="text-xl font-semibold">{reliabilityIndices?.rural?.maifi?.toFixed(2) || 'N/A'}</p>
+                        <p className="text-xs text-green-700 dark:text-green-200">Momentary Avg. Interruption Frequency</p>
                       </div>
                     </div>
                   </CardContent>
@@ -2044,18 +2245,28 @@ export default function AnalyticsPage() {
                      <div className="space-y-4 text-blue-900 dark:text-blue-100">
                       <div>
                         <Label className="text-sm text-blue-700 dark:text-blue-200">SAIDI</Label>
-                        <p className="text-xl font-semibold">{reliabilityIndices?.urban?.saidi?.toFixed(3) || 'N/A'}</p>
+                        <p className="text-xl font-semibold">{reliabilityIndices?.urban?.saidi?.toFixed(2) || 'N/A'}</p>
                         <p className="text-xs text-blue-700 dark:text-blue-200">Avg. Interruption Duration</p>
                       </div>
                       <div>
                         <Label className="text-sm text-blue-700 dark:text-blue-200">SAIFI</Label>
-                        <p className="text-xl font-semibold">{reliabilityIndices?.urban?.saifi?.toFixed(3) || 'N/A'}</p>
+                        <p className="text-xl font-semibold">{reliabilityIndices?.urban?.saifi?.toFixed(2) || 'N/A'}</p>
                         <p className="text-xs text-blue-700 dark:text-blue-200">Avg. Interruption Frequency</p>
                       </div>
                       <div>
                         <Label className="text-sm text-blue-700 dark:text-blue-200">CAIDI</Label>
-                        <p className="text-xl font-semibold">{reliabilityIndices?.urban?.caidi?.toFixed(3) || 'N/A'}</p>
+                        <p className="text-xl font-semibold">{reliabilityIndices?.urban?.caidi?.toFixed(2) || 'N/A'}</p>
                         <p className="text-xs text-blue-700 dark:text-blue-200">Avg. Customer Interruption Duration</p>
+                      </div>
+                      <div>
+                        <Label className="text-sm text-blue-700 dark:text-blue-200">CAIFI</Label>
+                        <p className="text-xl font-semibold">{reliabilityIndices?.urban?.caifi?.toFixed(2) || 'N/A'}</p>
+                        <p className="text-xs text-blue-700 dark:text-blue-200">Customer Avg. Interruption Frequency</p>
+                      </div>
+                      <div>
+                        <Label className="text-sm text-blue-700 dark:text-blue-200">MAIFI</Label>
+                        <p className="text-xl font-semibold">{reliabilityIndices?.urban?.maifi?.toFixed(2) || 'N/A'}</p>
+                        <p className="text-xs text-blue-700 dark:text-blue-200">Momentary Avg. Interruption Frequency</p>
                       </div>
                     </div>
                   </CardContent>
@@ -2074,18 +2285,28 @@ export default function AnalyticsPage() {
                      <div className="space-y-4 text-purple-900 dark:text-purple-100">
                       <div>
                         <Label className="text-sm text-purple-700 dark:text-purple-200">SAIDI</Label>
-                        <p className="text-xl font-semibold">{reliabilityIndices?.metro?.saidi?.toFixed(3) || 'N/A'}</p>
+                        <p className="text-xl font-semibold">{reliabilityIndices?.metro?.saidi?.toFixed(2) || 'N/A'}</p>
                         <p className="text-xs text-purple-700 dark:text-purple-200">Avg. Interruption Duration</p>
                       </div>
                       <div>
                         <Label className="text-sm text-purple-700 dark:text-purple-200">SAIFI</Label>
-                        <p className="text-xl font-semibold">{reliabilityIndices?.metro?.saifi?.toFixed(3) || 'N/A'}</p>
+                        <p className="text-xl font-semibold">{reliabilityIndices?.metro?.saifi?.toFixed(2) || 'N/A'}</p>
                         <p className="text-xs text-purple-700 dark:text-purple-200">Avg. Interruption Frequency</p>
                       </div>
                       <div>
                         <Label className="text-sm text-purple-700 dark:text-purple-200">CAIDI</Label>
-                        <p className="text-xl font-semibold">{reliabilityIndices?.metro?.caidi?.toFixed(3) || 'N/A'}</p>
+                        <p className="text-xl font-semibold">{reliabilityIndices?.metro?.caidi?.toFixed(2) || 'N/A'}</p>
                         <p className="text-xs text-purple-700 dark:text-purple-200">Avg. Customer Interruption Duration</p>
+                      </div>
+                      <div>
+                        <Label className="text-sm text-purple-700 dark:text-purple-200">CAIFI</Label>
+                        <p className="text-xl font-semibold">{reliabilityIndices?.metro?.caifi?.toFixed(2) || 'N/A'}</p>
+                        <p className="text-xs text-purple-700 dark:text-purple-200">Customer Avg. Interruption Frequency</p>
+                      </div>
+                      <div>
+                        <Label className="text-sm text-purple-700 dark:text-purple-200">MAIFI</Label>
+                        <p className="text-xl font-semibold">{reliabilityIndices?.metro?.maifi?.toFixed(2) || 'N/A'}</p>
+                        <p className="text-xs text-purple-700 dark:text-purple-200">Momentary Avg. Interruption Frequency</p>
                       </div>
                     </div>
                   </CardContent>

@@ -15,12 +15,15 @@
   },
   "main": "src/index.js",
   "dependencies": {
+    "@types/cors": "^2.8.18",
+    "cors": "^2.8.5",
+    "express-rate-limit": "^7.5.0",
     "firebase-admin": "^11.11.1",
     "firebase-functions": "^4.5.0"
   },
   "devDependencies": {
-    "typescript": "^5.3.3",
-    "@types/node": "^20.11.19"
+    "@types/node": "^20.11.19",
+    "typescript": "^5.3.3"
   },
   "private": true
 }

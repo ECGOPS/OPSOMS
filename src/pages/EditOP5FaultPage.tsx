@@ -384,15 +384,26 @@ export default function EditOP5FaultPage() {
         occurrenceDate: formattedOccurrenceDate || fault.occurrenceDate,
         repairDate: formattedRepairDate || fault.repairDate,
         faultType: formData.faultType || fault.faultType,
-        specificFaultType: formData.specificFaultType || fault.specificFaultType,
-        faultLocation: formData.faultLocation || fault.faultLocation,
-        restorationDate: formattedRestorationDate,
-        affectedPopulation: formData.affectedPopulation || fault.affectedPopulation,
+        specificFaultType: formData.specificFaultType || fault.specificFaultType || null,
+        faultLocation: formData.faultLocation || fault.faultLocation || null,
+        restorationDate: formattedRestorationDate || null,
+        affectedPopulation: {
+          rural: formData.affectedPopulation?.rural ?? fault.affectedPopulation?.rural ?? 0,
+          urban: formData.affectedPopulation?.urban ?? fault.affectedPopulation?.urban ?? 0,
+          metro: formData.affectedPopulation?.metro ?? fault.affectedPopulation?.metro ?? 0
+        },
         mttr: mttrValue,
         reliabilityIndices: totalIndices,
         materialsUsed: formData.materialsUsed || [], // Ensure materials are included
         outageDescription: formData.outageDescription || null
       };
+
+      // Remove any undefined values before submitting
+      Object.keys(formDataToSubmit).forEach(key => {
+        if (formDataToSubmit[key as keyof typeof formDataToSubmit] === undefined) {
+          delete formDataToSubmit[key as keyof typeof formDataToSubmit];
+        }
+      });
 
       // Log the form data before submission
       console.log("[handleSubmit] Submitting form data:", formDataToSubmit);

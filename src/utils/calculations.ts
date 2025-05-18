@@ -205,3 +205,107 @@ export const calculateReliabilityIndicesByType = (
 
   return indices;
 };
+
+// Calculate reliability indices based on selected level (global, regional, or district)
+export const calculateReliabilityIndicesByLevel = (
+  faults: any[],
+  districts: any[],
+  selectedRegionId?: string,
+  selectedDistrictId?: string
+) => {
+  const indices = {
+    rural: { saidi: 0, saifi: 0, caidi: 0 },
+    urban: { saidi: 0, saifi: 0, caidi: 0 },
+    metro: { saidi: 0, saifi: 0, caidi: 0 },
+    total: { saidi: 0, saifi: 0, caidi: 0 }
+  };
+
+  // Filter faults based on selected level
+  let filteredFaults = faults;
+  let totalPopulation = { rural: 0, urban: 0, metro: 0 };
+
+  if (selectedDistrictId) {
+    // District level
+    filteredFaults = faults.filter(fault => fault.districtId === selectedDistrictId);
+    const district = districts.find(d => d.id === selectedDistrictId);
+    if (district?.population) {
+      totalPopulation = district.population;
+    }
+  } else if (selectedRegionId) {
+    // Regional level
+    filteredFaults = faults.filter(fault => fault.regionId === selectedRegionId);
+    const regionDistricts = districts.filter(d => d.regionId === selectedRegionId);
+    totalPopulation = regionDistricts.reduce((acc, district) => ({
+      rural: acc.rural + (district.population?.rural || 0),
+      urban: acc.urban + (district.population?.urban || 0),
+      metro: acc.metro + (district.population?.metro || 0)
+    }), { rural: 0, urban: 0, metro: 0 });
+  } else {
+    // Global level
+    totalPopulation = districts.reduce((acc, district) => ({
+      rural: acc.rural + (district.population?.rural || 0),
+      urban: acc.urban + (district.population?.urban || 0),
+      metro: acc.metro + (district.population?.metro || 0)
+    }), { rural: 0, urban: 0, metro: 0 });
+  }
+
+  // Calculate total affected customers and duration for each population type
+  let totalAffected = { rural: 0, urban: 0, metro: 0 };
+  let totalDuration = { rural: 0, urban: 0, metro: 0 };
+  let totalFaults = { rural: 0, urban: 0, metro: 0 };
+
+  filteredFaults.forEach(fault => {
+    if (fault.affectedPopulation) {
+      const { rural, urban, metro } = fault.affectedPopulation;
+      const duration = fault.occurrenceDate && fault.restorationDate ? 
+        calculateOutageDuration(fault.occurrenceDate, fault.restorationDate) : 0;
+
+      // Calculate for each population type separately
+      if (rural > 0) {
+        totalAffected.rural += rural;
+        totalDuration.rural += duration * rural;
+        totalFaults.rural++;
+      }
+      if (urban > 0) {
+        totalAffected.urban += urban;
+        totalDuration.urban += duration * urban;
+        totalFaults.urban++;
+      }
+      if (metro > 0) {
+        totalAffected.metro += metro;
+        totalDuration.metro += duration * metro;
+        totalFaults.metro++;
+      }
+    }
+  });
+
+  // Calculate indices for each population type
+  ['rural', 'urban', 'metro'].forEach(type => {
+    const t = type as keyof typeof totalPopulation;
+    if (totalPopulation[t] > 0) {
+      // SAIDI = Total Customer Hours Lost / Total Number of Customers
+      indices[t].saidi = Number((totalDuration[t] / totalPopulation[t]).toFixed(3));
+      
+      // SAIFI = Total Customers Affected / Total Number of Customers
+      indices[t].saifi = Number((totalAffected[t] / totalPopulation[t]).toFixed(3));
+      
+      // CAIDI = SAIDI / SAIFI
+      indices[t].caidi = indices[t].saifi > 0 ? 
+        Number((indices[t].saidi / indices[t].saifi).toFixed(3)) : 0;
+    }
+  });
+
+  // Calculate total indices
+  const totalAffectedAll = totalAffected.rural + totalAffected.urban + totalAffected.metro;
+  const totalDurationAll = totalDuration.rural + totalDuration.urban + totalDuration.metro;
+  const totalPopulationAll = totalPopulation.rural + totalPopulation.urban + totalPopulation.metro;
+
+  if (totalPopulationAll > 0) {
+    indices.total.saidi = Number((totalDurationAll / totalPopulationAll).toFixed(3));
+    indices.total.saifi = Number((totalAffectedAll / totalPopulationAll).toFixed(3));
+    indices.total.caidi = indices.total.saifi > 0 ? 
+      Number((indices.total.saidi / indices.total.saifi).toFixed(3)) : 0;
+  }
+
+  return indices;
+};
