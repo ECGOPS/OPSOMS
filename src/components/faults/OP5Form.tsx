@@ -884,7 +884,7 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
                   focus-visible:ring-2 focus-visible:ring-primary"
               >
                 <Users className="h-4 w-4 sm:h-5 sm:w-5" />
-                <span className="truncate">Affected</span>
+                <span className="truncate">Affected Customers</span>
               </TabsTrigger>
               <TabsTrigger
                 value="details"

@@ -37,6 +37,9 @@ import { LineChart, Line } from 'recharts';
 import { OP5Fault, ControlSystemOutage } from '@/lib/types';
 import MaterialsAnalysis from '@/components/analytics/MaterialsAnalysis';
 import { calculateOutageDuration, calculateMTTR } from "@/lib/calculations";
+import { collection, getDocs, query, where } from 'firebase/firestore';
+import { db } from '@/config/firebase';
+import { LoadMonitoringData } from '@/lib/asset-types';
 
 // Colors for charts
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
@@ -98,7 +101,16 @@ export default function AnalyticsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [activeTab, setActiveTab] = useState<'all' | 'op5' | 'control'>('all');
-
+  const [loadMonitoringRecords, setLoadMonitoringRecords] = useState<LoadMonitoringData[]>([]);
+  const [loadStats, setLoadStats] = useState({
+    total: 0,
+    overloaded: 0,
+    okay: 0,
+    avgLoad: 0,
+    urgent: 0,
+  });
+  const [showAllRegions, setShowAllRegions] = useState(false);
+  
   // Use the same logic as DashboardPage for paginatedFaults
   const paginatedFaults = useMemo(() => {
     // Get the latest filtered faults from context
@@ -1115,6 +1127,136 @@ export default function AnalyticsPage() {
     return foundUser ? foundUser.name || foundUser.email || userId : userId;
   };
   
+  // Fetch load monitoring data with role-based filtering
+  useEffect(() => {
+    if (!isAuthenticated || !user) return;
+    async function fetchLoadMonitoring() {
+      let qRef = collection(db, 'loadMonitoring');
+      let q = query(qRef);
+
+      // Apply region filter (use regionId)
+      if (selectedRegion && selectedRegion !== "all") {
+        q = query(q, where('regionId', '==', selectedRegion));
+      } else if (user.role === 'regional_engineer') {
+        q = query(q, where('regionId', '==', user.region));
+      }
+
+      // Apply district filter (use districtId)
+      if (selectedDistrict && selectedDistrict !== "all") {
+        q = query(q, where('districtId', '==', selectedDistrict));
+      } else if (user.role === 'district_engineer' || user.role === 'technician') {
+        q = query(q, where('districtId', '==', user.district));
+      }
+
+      const snapshot = await getDocs(q);
+      let records: LoadMonitoringData[] = snapshot.docs.map(doc => ({ id: doc.id, ...Object.assign({}, doc.data()) } as LoadMonitoringData));
+
+      // Date range filtering (client-side)
+      if (dateRange !== "all") {
+        let start: Date, end: Date;
+        const now = new Date();
+        switch (dateRange) {
+          case "week":
+            start = startOfDay(subDays(now, 6));
+            end = endOfDay(now);
+            break;
+          case "month":
+            start = startOfDay(subDays(now, 29));
+            end = endOfDay(now);
+            break;
+          case "year":
+            start = startOfDay(subDays(now, 364));
+            end = endOfDay(now);
+            break;
+          case "custom":
+            if (startDate && endDate) {
+              start = startOfDay(startDate);
+              end = endOfDay(endDate);
+            }
+            break;
+          case "custom-month":
+            if (startMonth && endMonth) {
+              start = startOfMonth(startMonth);
+              end = endOfMonth(endMonth);
+            }
+            break;
+          case "custom-year":
+            if (startYear && endYear) {
+              start = startOfYear(startYear);
+              end = endOfYear(endYear);
+            }
+            break;
+          case "custom-week":
+            if (startWeek && endWeek && selectedYear) {
+              start = startOfWeek(new Date(selectedYear.getFullYear(), 0, 1 + (startWeek - 1) * 7));
+              end = endOfWeek(new Date(selectedYear.getFullYear(), 0, 1 + (endWeek - 1) * 7));
+            }
+            break;
+          default:
+            start = startOfYear(now);
+            end = endOfDay(now);
+        }
+        if (start && end) {
+          records = records.filter(r => {
+            const recordDate = new Date(r.date);
+            return recordDate >= start && recordDate <= end;
+          });
+        }
+      }
+
+      setLoadMonitoringRecords(records);
+    }
+    fetchLoadMonitoring();
+  }, [
+    isAuthenticated,
+    user,
+    selectedRegion,
+    selectedDistrict,
+    dateRange,
+    startDate,
+    endDate,
+    startMonth,
+    endMonth,
+    startYear,
+    endYear,
+    startWeek,
+    endWeek,
+    selectedYear
+  ]);
+
+  // Compute statistics
+  useEffect(() => {
+    if (!loadMonitoringRecords.length) {
+      setLoadStats({ total: 0, overloaded: 0, okay: 0, avgLoad: 0, urgent: 0 });
+      return;
+    }
+    const total = loadMonitoringRecords.length;
+    const overloaded = loadMonitoringRecords.filter(r => r.percentageLoad > 100).length;
+    const okay = loadMonitoringRecords.filter(r => r.percentageLoad <= 100).length;
+    const avgLoad = total ? Number((loadMonitoringRecords.reduce((sum, r) => sum + (r.percentageLoad || 0), 0) / total).toFixed(2)) : 0;
+    const urgent = loadMonitoringRecords.filter(r => r.neutralWarningLevel === 'critical').length;
+    setLoadStats({ total, overloaded, okay, avgLoad, urgent });
+  }, [loadMonitoringRecords]);
+  
+  const handleClearFilters = () => {
+    setSelectedRegion("all");
+    setFilterRegion(undefined);
+    setSelectedDistrict("all");
+    setFilterDistrict(undefined);
+    setSelectedFaultType("all");
+    setFilterFaultType(undefined);
+    setDateRange("all");
+    setStartDate(null);
+    setEndDate(null);
+    setStartMonth(undefined);
+    setEndMonth(undefined);
+    setStartYear(undefined);
+    setEndYear(undefined);
+    setStartWeek(undefined);
+    setEndWeek(undefined);
+    setSelectedYear(undefined);
+  };
+  
   if (!isAuthenticated) {
     return null;
   }
@@ -1133,6 +1275,58 @@ export default function AnalyticsPage() {
               : "Analyze fault patterns and generate insights for better decision making"}
           </p>
         </div>
+
+        {/* Load Monitoring Overview Section - moved to top */}
+        <div className="mb-8">
+          <h2 className="text-2xl font-bold mb-4 text-primary">Load Monitoring Overview</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-6">
+            <Card className="bg-yellow-50 dark:bg-[#2a281f] border border-yellow-200 dark:border-yellow-900">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-yellow-700 dark:text-yellow-200">Load Monitoring Activities</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-xl sm:text-2xl font-bold text-yellow-900 dark:text-yellow-100">{loadStats.total}</div>
+                <p className="text-xs text-yellow-700 dark:text-yellow-200 mt-1">Total Activities</p>
+              </CardContent>
+            </Card>
+            <Card className="bg-red-50 dark:bg-[#2a2325] border border-red-200 dark:border-red-900">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-red-700 dark:text-red-200">Overloaded Transformers</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-xl sm:text-2xl font-bold text-red-900 dark:text-red-100">{loadStats.overloaded}</div>
+                <p className="text-xs text-red-700 dark:text-red-200 mt-1">Over 100% Load</p>
+              </CardContent>
+            </Card>
+            <Card className="bg-green-50 dark:bg-[#202a23] border border-green-200 dark:border-green-900">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-green-700 dark:text-green-200">Normal Condition</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-xl sm:text-2xl font-bold text-green-900 dark:text-green-100">{loadStats.okay}</div>
+                <p className="text-xs text-green-700 dark:text-green-200 mt-1">At or Below 100% Load</p>
+              </CardContent>
+            </Card>
+            <Card className="bg-blue-50 dark:bg-[#20232a] border border-blue-200 dark:border-blue-900">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-blue-700 dark:text-blue-200">Average Load (%)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-xl sm:text-2xl font-bold text-blue-900 dark:text-blue-100">{loadStats.avgLoad}</div>
+                <p className="text-xs text-blue-700 dark:text-blue-200 mt-1">Across All Records</p>
+              </CardContent>
+            </Card>
+            <Card className="bg-orange-50 dark:bg-[#2a2820] border border-orange-200 dark:border-orange-900">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-orange-700 dark:text-orange-200">Urgent Attention</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-xl sm:text-2xl font-bold text-orange-900 dark:text-orange-100">{loadStats.urgent}</div>
+                <p className="text-xs text-orange-700 dark:text-orange-200 mt-1">Critical Neutral Warning</p>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
         
         {/* Filters Section in a Card */}
         <Card className="p-4 sm:p-6 bg-muted/30 border shadow-sm">
@@ -1140,8 +1334,14 @@ export default function AnalyticsPage() {
             <h2 className="text-lg font-semibold flex items-center gap-2">
               <Filter className="h-5 w-5" /> Filters
             </h2>
-             {/* Optional: Add a Reset Filters button here */}
-             {/* <Button variant="ghost" size="sm" onClick={resetFilters}>Reset Filters</Button> */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleClearFilters}
+              className="ml-auto"
+            >
+              Clear Filters
+            </Button>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {/* Region Select */}
@@ -1542,7 +1742,12 @@ export default function AnalyticsPage() {
                 </Badge>
               </div>
               <div className="space-y-4">
-                {regions.map(region => {
+                {(showAllRegions
+                  ? regions
+                  : (selectedRegion && selectedRegion !== "all"
+                      ? regions.filter(r => r.id === selectedRegion)
+                      : regions.slice(0, 1))
+                ).map(region => {
                   const regionFaults = filteredFaults.filter(f => 
                     ('faultLocation' in f || 'substationName' in f) && 
                     f.repairDate && 
@@ -1555,37 +1760,47 @@ export default function AnalyticsPage() {
                     const mttr = (restorationDate.getTime() - repairDate.getTime()) / (1000 * 60 * 60);
                     return sum + mttr;
                   }, 0);
-                      const avgMTTR = regionFaults.length > 0 ? regionMTTR / regionFaults.length : 0;
-                      const totalFaults = filteredFaults.filter(f => 'faultLocation' in f && f.regionId === region.id).length;
-                  
-                      return (
-                        <div key={region.id} className="space-y-2">
-                          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium text-sm sm:text-base">{region.name}</span>
-                              <Badge variant="secondary" className="text-xs">
-                                {regionFaults.length} faults
-                              </Badge>
-                            </div>
-                            <div className="flex items-center gap-2 w-full sm:w-auto">
-                              <span className="font-medium text-sm sm:text-base">{avgMTTR.toFixed(2)} hours</span>
-                              <div className="flex-1 sm:w-32 h-2 bg-muted rounded-full overflow-hidden">
-                                <div 
-                                  className="h-full bg-primary" 
-                                  style={{ 
-                                    width: `${(avgMTTR / 5) * 100}%`,  // Scale for 5 hours max
-                                    maxWidth: '100%'
-                                  }} 
-                                />
-                              </div>
-                            </div>
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {regionFaults.length} of {totalFaults} OP5 faults have MTTR data
+                  const avgMTTR = regionFaults.length > 0 ? regionMTTR / regionFaults.length : 0;
+                  const totalFaults = filteredFaults.filter(f => 'faultLocation' in f && f.regionId === region.id).length;
+                  return (
+                    <div key={region.id} className="space-y-2">
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-sm sm:text-base">{region.name}</span>
+                          <Badge variant="secondary" className="text-xs">
+                            {regionFaults.length} faults
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-2 w-full sm:w-auto">
+                          <span className="font-medium text-sm sm:text-base">{avgMTTR.toFixed(2)} hours</span>
+                          <div className="flex-1 sm:w-32 h-2 bg-muted rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-primary" 
+                              style={{ 
+                                width: `${(avgMTTR / 5) * 100}%`,  // Scale for 5 hours max
+                                maxWidth: '100%'
+                              }}
+                            ></div>
                           </div>
                         </div>
-                      );
-                    })}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {regionFaults.length} of {totalFaults} OP5 faults have MTTR data
+                      </div>
+                    </div>
+                  );
+                })}
+                {regions.length > 1 && (
+                  <div className="flex justify-center mt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowAllRegions(v => !v)}
+                    >
+                      {showAllRegions ? "Collapse" : "Expand"}
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
           </CardContent>
