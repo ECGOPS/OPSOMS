@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Send, Minimize2, Maximize2, Edit, Trash2, Paperclip } from "lucide-react";
+import { Send, Minimize2, Maximize2, Edit, Trash2, Paperclip, Bell } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { ChatService, ChatMessage } from "@/services/ChatService";
 
@@ -15,6 +15,9 @@ export function ChatBox() {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingMessageText, setEditingMessageText] = useState('');
   const [isUploading, setIsUploading] = useState(false);
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default');
+  const [hasNewMessages, setHasNewMessages] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -22,18 +25,67 @@ export function ChatBox() {
   const chatService = ChatService.getInstance();
 
   useEffect(() => {
-    // Subscribe to messages
-    const unsubscribe = chatService.subscribeToMessages((updatedMessages) => {
-      setMessages(updatedMessages);
-      setIsLoading(false);
-    });
-
-    // Cleanup subscription
-    return () => unsubscribe();
+    if (!('Notification' in window)) {
+      console.warn('Browser does not support desktop notification');
+    } else {
+      setNotificationPermission(Notification.permission);
+      if (Notification.permission === 'default') {
+        Notification.requestPermission().then(permission => {
+          setNotificationPermission(permission);
+        });
+      }
+    }
   }, []);
 
   useEffect(() => {
-    // Scroll to bottom when new messages arrive, but only if not editing
+    const unsubscribe = chatService.subscribeToMessages((updatedMessages) => {
+      const messagesFromOthers = updatedMessages.filter(m => m.senderId !== user?.id);
+
+      setMessages(updatedMessages);
+      setIsLoading(false);
+
+      if (messagesFromOthers.length > 0) {
+        if (notificationPermission === 'granted' && !document.hasFocus()) {
+          const currentMessageIds = new Set(messages.map(m => m.id));
+          const newlyArrivedMessages = updatedMessages.filter(m => 
+            !currentMessageIds.has(m.id) && m.senderId !== user?.id
+          );
+
+          newlyArrivedMessages.forEach(message => {
+            const notification = new Notification(`New Message from ${message.sender}`, {
+              body: message.text || '[Attachment]',
+            });
+          });
+        }
+
+        if (isMinimized || !document.hasFocus()) {
+          setUnreadCount(prevCount => prevCount + messagesFromOthers.length);
+        }
+      }
+    });
+
+    return () => unsubscribe();
+  }, [chatService, user?.id, notificationPermission, isMinimized, messages]);
+
+  useEffect(() => {
+    const handleFocus = () => {
+      if (document.hasFocus()) {
+        setUnreadCount(0);
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    
+    if (!isMinimized && unreadCount > 0) {
+        setUnreadCount(0);
+    }
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [isMinimized, unreadCount]);
+
+  useEffect(() => {
     if (scrollRef.current && !editingMessageId) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
@@ -64,7 +116,6 @@ export function ChatBox() {
 
     } catch (error) {
       console.error('Error uploading file or sending message:', error);
-      // You might want to show an error toast here
     } finally {
       setIsUploading(false);
       if (event.target) {
@@ -90,7 +141,6 @@ export function ChatBox() {
       setNewMessage('');
     } catch (error) {
       console.error('Error sending message:', error);
-      // You might want to show an error toast here
     }
   };
 
@@ -132,7 +182,6 @@ export function ChatBox() {
       handleCancelEdit();
     } catch (error) {
       console.error('Error saving edit:', error);
-      // You might want to show an error toast here to the user
     }
   };
 
@@ -147,25 +196,48 @@ export function ChatBox() {
       console.log(`Message ${messageId} deleted successfully.`);
     } catch (error) {
       console.error('Error deleting message:', error);
-      // You might want to show an error toast to the user here
     }
   };
 
   return (
-    <Card className={`w-80 shadow-lg transition-all duration-300 ${isMinimized ? 'h-12 bg-blue-500' : 'h-96'}`}>
-      <CardHeader className={`flex flex-row items-center justify-between space-y-0 ${isMinimized ? 'py-2' : 'pb-2'} px-4`}>
-        <CardTitle className="text-base font-semibold truncate">Team Chat</CardTitle>
+    <Card className={`w-80 shadow-lg transition-all duration-300 ${isMinimized ? 'h-12 bg-blue-500 text-primary-foreground' : 'h-96'}`}>
+      <CardHeader className={`flex flex-row items-center justify-between space-y-0 ${isMinimized ? 'py-2' : 'pb-2'} px-4 relative`}>
+        <CardTitle className={`text-base font-semibold truncate ${isMinimized ? 'text-primary-foreground' : ''}`}>Team Chat</CardTitle>
+        
+        {isMinimized && (
+           <div className="flex items-center space-x-2">
+              {unreadCount > 0 && (
+                 <span className="relative flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                 </span>
+              )}
+              {unreadCount > 0 && (
+                <span className="ml-1 text-xs font-bold text-primary-foreground">{unreadCount}</span>
+              )}
+               <Bell className={`h-4 w-4 ${isMinimized ? 'text-primary-foreground' : ''}`} />
+           </div>
+        )}
+
         <Button
           variant="ghost"
           size="icon"
           onClick={() => setIsMinimized(!isMinimized)}
-          className="flex-shrink-0 w-8 h-8"
+          className={`flex-shrink-0 w-8 h-8 ${isMinimized ? 'text-primary-foreground hover:bg-blue-600' : ''}`}
         >
           {isMinimized ? <Maximize2 className="h-4 w-4" /> : <Minimize2 className="h-4 w-4" />}
         </Button>
       </CardHeader>
       {!isMinimized && (
-        <CardContent className="flex flex-col h-[calc(100%-3rem)] p-4">
+        <CardContent 
+          className="flex flex-col h-[calc(100%-3rem)] p-4"
+          style={{
+            backgroundImage: "url('/images/ops.png')",
+            backgroundSize: 'cover',
+            backgroundRepeat: 'no-repeat',
+            backgroundPosition: 'center',
+          }}
+        >
           <ScrollArea ref={scrollRef} className="flex-1 pr-4">
             <div className="space-y-4">
               {isLoading ? (
@@ -207,7 +279,17 @@ export function ChatBox() {
                         <div className={`text-xs opacity-80 mb-1 ${message.senderId === user?.id ? 'text-right' : 'text-left'}`}>
                           {message.sender}
                         </div>
-                        <p className="break-words">{message.text}</p>
+                        {message.text && <p className="break-words">{message.text}</p>}
+                        {message.fileUrl && message.fileName && (
+                          <a
+                            href={message.fileUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 underline break-words"
+                          >
+                            {message.fileName}
+                          </a>
+                        )}
                         <div className={`text-xs opacity-60 mt-1 ${message.senderId === user?.id ? 'text-right' : 'text-left'}`}>
                           {message.timestamp?.toDate().toLocaleTimeString()}
                         </div>
@@ -243,7 +325,7 @@ export function ChatBox() {
               disabled={isUploading}
             >
               {isUploading ? (
-                <span className="loading-spinner"></span>
+                <svg className="animate-spin h-4 w-4 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l2-2.647z"></path></svg>
               ) : (
                 <Paperclip className="h-4 w-4" />
               )}
