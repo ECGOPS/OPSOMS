@@ -7,6 +7,7 @@ import { FilterBar } from "@/components/dashboard/FilterBar";
 import { StatsOverview } from "@/components/dashboard/StatsOverview";
 import { FaultCard } from "@/components/dashboard/FaultCard";
 import { PendingFaultsList } from "@/components/faults/PendingFaultsList";
+import { ChatBox } from "@/components/chat/ChatBox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { PlusCircle, AlertTriangle, ZapOff, RefreshCw, Filter } from "lucide-react";
@@ -320,7 +321,7 @@ export default function DashboardPage() {
   
   return (
     <Layout>
-      <div className="container mx-auto py-6 px-4">
+      <div className="container mx-auto py-6 px-4 relative min-h-screen">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
           <div>
             <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
@@ -581,6 +582,10 @@ export default function DashboardPage() {
             )}
           </TabsContent>
         </Tabs>
+        
+        <div className="fixed bottom-4 right-4 z-50">
+          <ChatBox />
+        </div>
       </div>
     </Layout>
   );

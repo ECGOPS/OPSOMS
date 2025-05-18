@@ -143,5 +143,14 @@ service cloud.firestore {
     match /securityEvents/{eventId} {
       allow read, write: if isAuthenticated();
     }
+
+    // Chat Messages collection
+    match /chat_messages/{messageId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && 
+        request.resource.data.senderId == request.auth.uid;
+      allow update, delete: if isAuthenticated() && 
+        resource.data.senderId == request.auth.uid;
+    }
   }
 } 
