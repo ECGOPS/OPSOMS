@@ -266,7 +266,7 @@ export interface DataContextType {
   initializeLoadMonitoring: () => Promise<void>;
   vitAssets: VITAsset[];
   vitInspections: VITInspectionChecklist[];
-  addVITAsset: (asset: Omit<VITAsset, "id" | "createdAt" | "updatedAt">) => Promise<string>;
+  addVITAsset: (asset: Omit<VITAsset, "id">) => Promise<string>;
   updateVITAsset: (id: string, updates: Partial<VITAsset>) => Promise<void>;
   deleteVITAsset: (id: string) => Promise<void>;
   addVITInspection: (inspection: Omit<VITInspectionChecklist, "id">) => Promise<string>;
@@ -893,63 +893,89 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
     window.addEventListener('substationInspectionRecordAdded', handleOfflineRecordAdded as EventListener);
 
-    const unsubscribe = onSnapshot(q, async (snapshot) => {
-      try {
-        // Get offline data
-        const offlineData = await inspectionService.getOfflineSubstationInspections();
-        
-        // Process Firestore data
-        const firestoreInspections = snapshot.docs.map(doc => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            ...data,
-            createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt,
-            updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : data.updatedAt,
-            syncStatus: 'synced'
-          } as SubstationInspection;
-        });
+    // Only set up Firestore subscription if online
+    let unsubscribe: (() => void) | undefined;
+    if (navigator.onLine) {
+      unsubscribe = onSnapshot(q, async (snapshot) => {
+        try {
+          // Get offline data
+          const offlineData = await inspectionService.getOfflineSubstationInspections();
+          
+          // Process Firestore data
+          const firestoreInspections = snapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+              id: doc.id,
+              ...data,
+              createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt,
+              updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : data.updatedAt,
+              syncStatus: 'synced'
+            } as SubstationInspection;
+          });
 
-        // Create a map of all records by ID and originalOfflineId
-        const recordMap = new Map<string, SubstationInspection>();
-        
-        // Add Firestore records to map (by id and originalOfflineId if present)
-        firestoreInspections.forEach(inspection => {
-          recordMap.set(inspection.id, inspection);
-          if ((inspection as any).originalOfflineId) {
-            recordMap.set((inspection as any).originalOfflineId, inspection);
+          // Create a map of all records by ID and originalOfflineId
+          const recordMap = new Map<string, SubstationInspection>();
+          
+          // Add Firestore records to map (by id and originalOfflineId if present)
+          firestoreInspections.forEach(inspection => {
+            recordMap.set(inspection.id, inspection);
+            if (inspection.originalOfflineId) {
+              recordMap.set(inspection.originalOfflineId, inspection);
+            }
+          });
+
+          // Add offline records that aren't in Firestore (by id or originalOfflineId)
+          offlineData.forEach(item => {
+            if (!recordMap.has(item.id) && !recordMap.has(item.originalOfflineId || '')) {
+              recordMap.set(item.id, item);
+            }
+          });
+
+          // Convert map to array and sort by updatedAt
+          const allInspections = Array.from(recordMap.values()).sort(
+            (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+          );
+
+          setSavedInspections(allInspections);
+        } catch (error) {
+          console.error('[DataContext] Error updating substation inspections:', error);
+          if (navigator.onLine) {
+            toast.error("Error updating inspections list");
           }
-        });
-
-        // Add offline records that aren't in Firestore (by id or originalOfflineId)
-        offlineData.forEach(item => {
-          if (!recordMap.has(item.id)) {
-            recordMap.set(item.id, item);
-          }
-        });
-
-        // Convert map to array and sort by updatedAt
-        const allInspections = Array.from(new Set(recordMap.values())).sort(
-          (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-        );
-
-        setSavedInspections(allInspections);
-      } catch (error) {
-        console.error('[DataContext] Error updating substation inspections:', error);
-        if (navigator.onLine) {
-          toast.error("Error updating inspections list");
         }
-      }
-    }, (error) => {
-      console.error('[DataContext] Error in substation inspections subscription:', error);
+      }, (error) => {
+        console.error('[DataContext] Error in substation inspections subscription:', error);
+        if (navigator.onLine) {
+          toast.error("Error connecting to database");
+        }
+      });
+    }
+
+    // Listen for online/offline status changes
+    const handleOnlineStatusChange = async () => {
       if (navigator.onLine) {
-        toast.error("Error connecting to database");
+        // When coming back online, trigger a sync
+        try {
+          await inspectionService.triggerSyncAndRefresh();
+        } catch (error) {
+          console.error('Error during sync:', error);
+        }
+      } else {
+        // When going offline, load offline data
+        await loadOfflineData();
       }
-    });
+    };
+
+    window.addEventListener('online', handleOnlineStatusChange);
+    window.addEventListener('offline', handleOnlineStatusChange);
 
     return () => {
-      unsubscribe();
+      if (unsubscribe) {
+        unsubscribe();
+      }
       window.removeEventListener('substationInspectionRecordAdded', handleOfflineRecordAdded as EventListener);
+      window.removeEventListener('online', handleOnlineStatusChange);
+      window.removeEventListener('offline', handleOnlineStatusChange);
     };
   }, [user, regions, districts]);
 
@@ -1131,25 +1157,49 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   // Add VIT asset
   const addVITAsset = async (asset: Omit<VITAsset, "id">) => {
     try {
-      // Create new asset with Firestore ID
-      const docRef = await addDoc(collection(db, "vitAssets"), {
+      const timestamp = new Date().toISOString();
+      const assetWithTimestamps = {
         ...asset,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      });
-      
-      const newAsset: VITAsset = {
-        ...asset,
-        id: docRef.id,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        createdAt: timestamp,
+        updatedAt: timestamp
       };
-      
-      // Update local state
-      setVITAssets(prev => [...prev, newAsset]);
-      return docRef.id;
+
+      if (navigator.onLine) {
+        // Create new asset with Firestore ID
+        const docRef = await addDoc(collection(db, "vitAssets"), {
+          ...assetWithTimestamps,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+
+        const newAsset: VITAsset = {
+          ...assetWithTimestamps,
+          id: docRef.id,
+        };
+
+        // Update local state with synced asset
+        setVITAssets(prev => [...prev.filter(a => a.originalOfflineId !== newAsset.id), newAsset]);
+
+        toast.success("Asset added successfully");
+        return docRef.id;
+      } else {
+        // Handle offline creation
+        const id = uuidv4();
+        const offlineAsset = {
+          ...assetWithTimestamps,
+          id,
+          syncStatus: 'pending',
+          originalOfflineId: id // Store original offline ID
+        };
+        await safeAddItem(STORE_NAMES.VIT_ASSETS, offlineAsset);
+        await addToPendingSync(STORE_NAMES.VIT_ASSETS, "create", offlineAsset);
+        toast.success("Asset saved offline");
+        setVITAssets(prev => [...prev, offlineAsset]);
+        return id;
+      }
     } catch (error) {
       console.error("Error adding VIT asset:", error);
+      toast.error("Failed to add asset");
       throw error;
     }
   };
@@ -1163,16 +1213,40 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         updatedAt: now
       };
 
-      // Update Firestore
-      const docRef = doc(db, "vitAssets", id);
-      await updateDoc(docRef, updatedData);
+      if (navigator.onLine) {
+        // Update Firestore
+        const assetRef = doc(db, "vitAssets", id);
+        await updateDoc(assetRef, {
+          ...updatedData,
+          updatedAt: serverTimestamp()
+        });
 
-      // Update local state
-      setVITAssets(prev => 
-        prev.map(asset => asset.id === id ? { ...asset, ...updatedData } : asset)
-      );
+        // Update local state with synced asset
+        setVITAssets(prev => 
+          prev.map(asset => asset.id === id ? { ...asset, ...updatedData, syncStatus: 'synced' as const } : asset)
+        );
+        toast.success("Asset updated successfully");
+      } else {
+        // Handle offline update
+        const offlineAsset = {
+          ...updatedData,
+          id,
+          syncStatus: 'pending',
+          // Preserve originalOfflineId if it exists
+          originalOfflineId: (await safeGetItem<VITAsset>(STORE_NAMES.VIT_ASSETS, id))?.originalOfflineId || id
+        };
+        await updateItem(STORE_NAMES.VIT_ASSETS, offlineAsset);
+        await addToPendingSync(STORE_NAMES.VIT_ASSETS, "update", { id, updates: updatedData });
+
+        // Update local state with offline changes
+        setVITAssets(prev => 
+          prev.map(asset => asset.id === id ? { ...asset, ...updatedData, syncStatus: 'pending' as const } : asset)
+        );
+        toast.success("Asset updated offline");
+      }
     } catch (error) {
       console.error("Error updating VIT asset:", error);
+      toast.error("Failed to update asset");
       throw error;
     }
   };
@@ -1249,7 +1323,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         const id = uuidv4();
         const offlineInspection = {
           ...inspectionWithTimestamps,
-          id
+          id,
+          syncStatus: 'pending',
+          originalOfflineId: id
         };
         await safeAddItem(STORE_NAMES.VIT_INSPECTIONS, offlineInspection);
         await addToPendingSync(STORE_NAMES.VIT_INSPECTIONS, "create", offlineInspection);
@@ -1277,7 +1353,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         const offlineInspection = {
           ...updates,
           id,
-          updatedAt: new Date().toISOString()
+          updatedAt: new Date().toISOString(),
+          syncStatus: 'pending',
+          originalOfflineId: id
         };
         await updateItem("vitInspections", offlineInspection);
         await addToPendingSync("vitInspections", "update", offlineInspection);
@@ -1307,22 +1385,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const saveInspection = async (inspection: SubstationInspection): Promise<string> => {
     try {
-      // Check for existing inspection with same substationNo and date
-      const inspectionsRef = collection(db, "substationInspections");
-      const q = query(
-        inspectionsRef, 
-        where("substationNo", "==", inspection.substationNo),
-        where("date", "==", inspection.date)
-      );
-      const querySnapshot = await getDocs(q);
-
-      if (!querySnapshot.empty) {
-        toast.error("An inspection for this substation on this date already exists");
-        throw new Error("Duplicate inspection");
-      }
-
-      // Create a sanitized version of the inspection with default values for undefined fields
-      const sanitizedInspection = {
+      // Create a sanitized version of the inspection without default values for status fields
+      const sanitizedInspection: SubstationInspection = {
         ...inspection,
         region: inspection.region || "",
         regionId: inspection.regionId || "",
@@ -1335,7 +1399,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         type: inspection.type || "indoor",
         location: inspection.location || "",
         voltageLevel: inspection.voltageLevel || "",
-        status: inspection.status || "Pending",
         remarks: inspection.remarks || "",
         createdBy: inspection.createdBy || "Unknown",
         createdAt: new Date().toISOString(),
@@ -1345,42 +1408,69 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           id: item.id || uuidv4(),
           name: item.name || "",
           category: item.category || "",
-          status: item.status || "",
+          status: item.status,
           remarks: item.remarks || ""
         })),
         generalBuilding: (inspection.generalBuilding || []).map(item => ({
           id: item.id || uuidv4(),
           name: item.name || "",
           category: item.category || "general building",
-          status: item.status || "",
+          status: item.status,
           remarks: item.remarks || ""
         })),
         controlEquipment: (inspection.controlEquipment || []).map(item => ({
           id: item.id || uuidv4(),
           name: item.name || "",
           category: item.category || "control equipment",
-          status: item.status || "",
+          status: item.status,
           remarks: item.remarks || ""
         })),
         powerTransformer: (inspection.powerTransformer || []).map(item => ({
           id: item.id || uuidv4(),
           name: item.name || "",
           category: item.category || "power transformer",
-          status: item.status || "",
+          status: item.status,
           remarks: item.remarks || ""
         })),
         outdoorEquipment: (inspection.outdoorEquipment || []).map(item => ({
           id: item.id || uuidv4(),
           name: item.name || "",
           category: item.category || "outdoor equipment",
-          status: item.status || "",
+          status: item.status,
           remarks: item.remarks || ""
         }))
       };
 
-      // Save to Firestore
-      const docRef = await addDoc(collection(db, "substationInspections"), sanitizedInspection);
-      return docRef.id;
+      if (navigator.onLine) {
+        // Online mode - save to Firestore
+        const docRef = await addDoc(collection(db, "substationInspections"), sanitizedInspection);
+        const newInspection: SubstationInspection = {
+          ...sanitizedInspection,
+          id: docRef.id,
+          syncStatus: 'synced' as const
+        };
+        setSavedInspections(prev => [...prev, newInspection]);
+        return docRef.id;
+      } else {
+        // Offline mode - save to IndexedDB
+        const offlineId = uuidv4();
+        const offlineInspection: SubstationInspection = {
+          ...sanitizedInspection,
+          id: offlineId,
+          syncStatus: 'pending' as const,
+          originalOfflineId: offlineId
+        };
+        await inspectionService.saveSubstationInspectionOffline(offlineInspection, 'create');
+        setSavedInspections(prev => {
+          // Check if inspection already exists to prevent duplicates
+          const exists = prev.some(insp => 
+            insp.id === offlineId || insp.originalOfflineId === offlineId
+          );
+          if (exists) return prev;
+          return [...prev, offlineInspection];
+        });
+        return offlineId;
+      }
     } catch (error) {
       console.error("Error saving inspection:", error);
       throw error;
@@ -2638,6 +2728,31 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       toast.error('Failed to refresh inspections');
     }
   };
+
+  // Add effect to handle online/offline sync
+  useEffect(() => {
+    const handleOnlineStatusChange = async () => {
+      if (navigator.onLine) {
+        try {
+          const { successCount, failureCount } = await syncPendingChanges();
+          if (successCount > 0) {
+            toast.success(`Successfully synced ${successCount} items`);
+          }
+          if (failureCount > 0) {
+            toast.error(`Failed to sync ${failureCount} items`);
+          }
+        } catch (error) {
+          console.error('Error syncing pending changes:', error);
+          toast.error('Failed to sync pending changes');
+        }
+      }
+    };
+
+    window.addEventListener('online', handleOnlineStatusChange);
+    return () => {
+      window.removeEventListener('online', handleOnlineStatusChange);
+    };
+  }, []);
 
   const contextValue: DataContextType = {
     regions,
