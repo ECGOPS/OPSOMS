@@ -230,7 +230,7 @@ export function ChatBox() {
         <CardContent 
           className="flex flex-col h-[calc(100%-3rem)] p-4"
           style={{
-            backgroundImage: "url('/images/ops.png')",
+            backgroundImage: "url('/images/gina.png')",
             backgroundSize: 'cover',
             backgroundRepeat: 'no-repeat',
             backgroundPosition: 'center',

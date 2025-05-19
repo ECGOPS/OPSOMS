@@ -365,23 +365,23 @@ export default function PermissionManagementPage() {
         {/* Feature Categories */}
         <div className="grid gap-4 sm:gap-6 md:gap-8">
           {featureCategories.map((category) => (
-            <div key={category.name} className="bg-white rounded-lg shadow-sm border border-gray-200">
-              <div className="px-4 sm:px-6 py-4 border-b border-gray-200">
-                <h2 className="text-lg sm:text-xl font-semibold text-gray-800">{category.name}</h2>
+            <div key={category.name} className="bg-card rounded-lg shadow-sm border">
+              <div className="px-4 sm:px-6 py-4 border-b">
+                <h2 className="text-lg sm:text-xl font-semibold">{category.name}</h2>
               </div>
               <div className="p-4 sm:p-6">
                 <div className="grid gap-4">
                   {category.features.map((feature) => (
-                    <div key={feature.id} className="bg-gray-50 rounded-lg p-4 hover:bg-gray-100 transition-colors">
+                    <div key={feature.id} className="bg-muted/50 rounded-lg p-4 hover:bg-muted transition-colors">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div className="flex-1">
-                          <h3 className="text-base sm:text-lg font-medium text-gray-800">{feature.name}</h3>
-                          <p className="text-sm text-gray-600 mt-1">{feature.description}</p>
+                          <h3 className="text-base sm:text-lg font-medium">{feature.name}</h3>
+                          <p className="text-sm text-muted-foreground mt-1">{feature.description}</p>
                         </div>
                         <Button
                           variant="outline"
                           onClick={() => handleEditClick(feature.id)}
-                          className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 w-full sm:w-auto"
+                          className="text-primary hover:text-primary hover:bg-primary/10 w-full sm:w-auto"
                         >
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
                             <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
@@ -390,12 +390,12 @@ export default function PermissionManagementPage() {
                         </Button>
                       </div>
                       <div className="mt-3">
-                        <span className="text-sm font-medium text-gray-700">Allowed roles: </span>
+                        <span className="text-sm font-medium">Allowed roles: </span>
                         <div className="flex flex-wrap gap-2 mt-2">
                           {featurePermissions[feature.id]?.map((role) => (
                             <span 
                               key={role} 
-                              className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                              className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary"
                             >
                               {role.replace('_', ' ').toUpperCase()}
                             </span>
@@ -424,8 +424,8 @@ export default function PermissionManagementPage() {
             <div className="py-4">
               <div className="space-y-4">
                 {allRoles.map((role) => (
-                  <div key={role} className="flex flex-col xs:flex-row xs:items-center justify-between p-3 bg-gray-50 rounded-lg gap-2 xs:gap-0">
-                    <span className="font-medium text-gray-700 mb-2 xs:mb-0">
+                  <div key={role} className="flex flex-col xs:flex-row xs:items-center justify-between p-3 bg-muted/50 rounded-lg gap-2 xs:gap-0">
+                    <span className="font-medium mb-2 xs:mb-0">
                       {role.replace('_', ' ').toUpperCase()}
                     </span>
                     <div className="flex flex-wrap gap-3 xs:gap-4 w-full xs:w-auto">
