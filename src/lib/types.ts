@@ -210,7 +210,7 @@ export type YesNoOption = "Yes" | "No";
 
 export type GoodBadOption = "Good" | "Bad";
 
-export type ConditionStatus = "good" | "bad";
+export type ConditionStatus = "good" | "bad" | "";
 
 export type VITAsset = {
   id: string;
@@ -227,6 +227,7 @@ export type VITAsset = {
   createdAt: any; // Firestore Timestamp
   updatedAt: any; // Firestore Timestamp
   createdBy: string;
+  originalOfflineId?: string; // Added for offline tracking
 };
 
 export type VITInspectionChecklist = {

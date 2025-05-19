@@ -270,6 +270,7 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
   };
   
   const handleSubmit = async (e: React.FormEvent) => {
+    console.log("Entering handleSubmit for VITAssetForm");
     e.preventDefault();
     
     if (!regionId || !districtId || !serialNumber || !typeOfUnit || !location || !voltageLevel) {
@@ -309,12 +310,16 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
       if (asset) {
         // Update existing asset
         console.log("Updating asset:", asset.id);
+        console.log("Before updateVITAsset call");
         await updateVITAsset(asset.id, assetData);
+        console.log("After updateVITAsset call");
         toast.success("Asset updated successfully");
       } else {
         // Add new asset
         console.log("Adding new asset");
+        console.log("Before addVITAsset call");
         await addVITAsset(assetData);
+        console.log("After addVITAsset call");
         toast.success("Asset added successfully");
       }
       
@@ -337,6 +342,7 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
       toast.error("Failed to save asset. Please try again.");
     } finally {
       setIsSubmitting(false);
+      toast.info("Asset submission process finished.");
     }
   };
   
@@ -666,7 +672,7 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
         <Button variant="outline" onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="submit" disabled={isSubmitting} onClick={handleSubmit}>
+        <Button type="submit" disabled={isSubmitting} onClick={(e) => { console.log("Submit button clicked"); handleSubmit(e); }}>
           {isSubmitting ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />

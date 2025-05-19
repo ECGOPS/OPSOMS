@@ -1,5 +1,5 @@
 import { getPendingSyncItems, clearPendingSyncItem } from './db';
-import { doc, updateDoc, deleteDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { doc, updateDoc, deleteDoc, addDoc, collection, serverTimestamp, getDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { getFirestore, setDoc } from 'firebase/firestore';
 import { toast } from 'sonner';
@@ -26,35 +26,69 @@ export async function syncPendingChanges() {
 
     for (const item of pendingItems) {
       try {
-        const docRef = doc(firestore, item.type, item.data.id);
+        // Handle VIT inspections specially
+        if (item.type === 'vitInspections') {
+          const docRef = doc(firestore, item.type, item.data.id);
+          const docSnap = await getDoc(docRef);
 
-        switch (item.action) {
-          case 'create':
-            await setDoc(docRef, {
-              ...item.data,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-              syncStatus: 'synced'
-            });
-            break;
+          switch (item.action) {
+            case 'create':
+              if (!docSnap.exists()) {
+                await setDoc(docRef, {
+                  ...item.data,
+                  createdAt: serverTimestamp(),
+                  updatedAt: serverTimestamp(),
+                  syncStatus: 'synced'
+                });
+              }
+              break;
 
-          case 'update':
-            // If this was an offline record, use the originalOfflineId
-            const docId = item.data.originalOfflineId || item.data.id;
-            const updateRef = doc(firestore, item.type, docId);
-            await updateDoc(updateRef, {
-              ...item.data,
-              updatedAt: new Date().toISOString(),
-              syncStatus: 'synced'
-            });
-            break;
+            case 'update':
+              if (docSnap.exists()) {
+                await updateDoc(docRef, {
+                  ...item.data,
+                  updatedAt: serverTimestamp(),
+                  syncStatus: 'synced'
+                });
+              }
+              break;
 
-          case 'delete':
-            // If this was an offline record, use the originalOfflineId
-            const deleteId = item.data.originalOfflineId || item.data.id;
-            const deleteRef = doc(firestore, item.type, deleteId);
-            await deleteDoc(deleteRef);
-            break;
+            case 'delete':
+              if (docSnap.exists()) {
+                await deleteDoc(docRef);
+              }
+              break;
+          }
+        } else {
+          // Handle other types as before
+          const docRef = doc(firestore, item.type, item.data.id);
+
+          switch (item.action) {
+            case 'create':
+              await setDoc(docRef, {
+                ...item.data,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                syncStatus: 'synced'
+              });
+              break;
+
+            case 'update':
+              const docId = item.data.originalOfflineId || item.data.id;
+              const updateRef = doc(firestore, item.type, docId);
+              await updateDoc(updateRef, {
+                ...item.data,
+                updatedAt: new Date().toISOString(),
+                syncStatus: 'synced'
+              });
+              break;
+
+            case 'delete':
+              const deleteId = item.data.originalOfflineId || item.data.id;
+              const deleteRef = doc(firestore, item.type, deleteId);
+              await deleteDoc(deleteRef);
+              break;
+          }
         }
 
         // Remove from pending sync after successful sync

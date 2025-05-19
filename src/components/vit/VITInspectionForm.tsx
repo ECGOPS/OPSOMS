@@ -180,35 +180,7 @@ export function VITInspectionForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Current state:", {
-      selectedAsset,
-      inspectionDate,
-      inspectedBy,
-      remarks,
-      checklist: {
-        rodentTermiteEncroachment,
-        cleanDustFree,
-        protectionButtonEnabled,
-        recloserButtonEnabled,
-        groundEarthButtonEnabled,
-        acPowerOn,
-        batteryPowerLow,
-        handleLockOn,
-        remoteButtonEnabled,
-        gasLevelLow,
-        earthingArrangementAdequate,
-        noFusesBlown,
-        noDamageToBushings,
-        noDamageToHVConnections,
-        insulatorsClean,
-        paintworkAdequate,
-        ptFuseLinkIntact,
-        noCorrosion,
-        silicaGelCondition,
-        correctLabelling
-      }
-    });
-
+    
     if (!selectedAsset) {
       toast.error("Please select an asset");
       return;
@@ -219,10 +191,18 @@ export function VITInspectionForm({
       return;
     }
 
+    if (isSubmitting) {
+      return; // Prevent duplicate submissions
+    }
+
+    setIsSubmitting(true);
+
     try {
       const timestamp = new Date().toISOString();
       const newInspectionData = {
         vitAssetId: selectedAsset.id,
+        region: selectedAsset.region,
+        district: selectedAsset.district,
         inspectionDate,
         inspectedBy,
         remarks,
@@ -261,37 +241,14 @@ export function VITInspectionForm({
         toast.success("Inspection saved successfully");
       }
 
-      // Reset form state
-      setSelectedAsset(null);
-      setInspectionDate("");
-      setInspectedBy("");
-      setRemarks("");
-      setRodentTermiteEncroachment(undefined);
-      setCleanDustFree(undefined);
-      setProtectionButtonEnabled(undefined);
-      setRecloserButtonEnabled(undefined);
-      setGroundEarthButtonEnabled(undefined);
-      setAcPowerOn(undefined);
-      setBatteryPowerLow(undefined);
-      setHandleLockOn(undefined);
-      setRemoteButtonEnabled(undefined);
-      setGasLevelLow(undefined);
-      setEarthingArrangementAdequate(undefined);
-      setNoFusesBlown(undefined);
-      setNoDamageToBushings(undefined);
-      setNoDamageToHVConnections(undefined);
-      setInsulatorsClean(undefined);
-      setPaintworkAdequate(undefined);
-      setPtFuseLinkIntact(undefined);
-      setNoCorrosion(undefined);
-      setSilicaGelCondition(undefined);
-      setCorrectLabelling(undefined);
-
       // Call onSubmit to close the form
-      onSubmit();
+      onSubmit(newInspectionData);
     } catch (error) {
       console.error("Error saving inspection:", error);
       toast.error("Failed to save inspection. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+      toast.info("Submission process finished.");
     }
   };
 

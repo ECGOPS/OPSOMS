@@ -499,39 +499,16 @@ export default function SubstationInspectionPage() {
         location: formData.location || "",
         voltageLevel: formData.voltageLevel || "",
         status: formData.status || "Pending",
-        cleanDustFree: formData.cleanDustFree || "",
-        protectionButtonEnabled: formData.protectionButtonEnabled || "",
-        recloserButtonEnabled: formData.recloserButtonEnabled || "",
-        groundEarthButtonEnabled: formData.groundEarthButtonEnabled || "",
-        acPowerOn: formData.acPowerOn || "",
-        batteryPowerLow: formData.batteryPowerLow || "",
-        handleLockOn: formData.handleLockOn || "",
-        remoteButtonEnabled: formData.remoteButtonEnabled || "",
-        gasLevelLow: formData.gasLevelLow || "",
-        earthingArrangementAdequate: formData.earthingArrangementAdequate || "",
-        noFusesBlown: formData.noFusesBlown || "",
-        noDamageToBushings: formData.noDamageToBushings || "",
-        noDamageToHVConnections: formData.noDamageToHVConnections || "",
-        insulatorsClean: formData.insulatorsClean || "",
-        paintworkAdequate: formData.paintworkAdequate || "",
-        ptFuseLinkIntact: formData.ptFuseLinkIntact || "",
-        noCorrosion: formData.noCorrosion || "",
-        silicaGelCondition: formData.silicaGelCondition || "",
-        correctLabelling: formData.correctLabelling || ""
       };
 
       // Log the inspection data before saving
       console.log('Inspection data before saving:', inspectionData);
 
-      if (isOnline) {
-        // If online, save directly to Firestore
-        await saveInspection(inspectionData);
-        toast.success("Inspection saved successfully");
-      } else {
-        // If offline, save to IndexedDB
-        await inspectionService.saveSubstationInspectionOffline(inspectionData, 'create');
-        toast.success("Inspection saved offline. It will be synced when you're back online.");
-      }
+      // Use the saveInspection function from DataContext which handles online/offline logic
+      await saveInspection(inspectionData);
+      
+      // The saveInspection function in DataContext will show appropriate toast messages
+      // No need for separate online/offline toast messages here
 
       navigate("/asset-management/inspection-management");
     } catch (error) {

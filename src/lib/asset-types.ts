@@ -107,6 +107,7 @@ export interface SubstationInspection {
   district: string;
   districtId: string;
   date: string;
+  inspectionDate?: string;
   substationNo: string;
   substationName?: string;
   type: "indoor" | "outdoor";

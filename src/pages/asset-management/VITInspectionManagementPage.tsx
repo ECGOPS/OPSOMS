@@ -75,7 +75,6 @@ export default function VITInspectionManagementPage() {
   const [selectedAssetId, setSelectedAssetId] = useState<string>("");
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
   const [selectedInspection, setSelectedInspection] = useState<VITInspectionChecklist | null>(null);
-  const [isEditInspectionOpen, setIsEditInspectionOpen] = useState(false);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -312,6 +311,7 @@ export default function VITInspectionManagementPage() {
 
   const handleAddInspection = (assetId: string) => {
     setSelectedAssetId(assetId);
+    setSelectedInspection(null);
     setIsInspectionFormOpen(true);
   };
 
@@ -322,10 +322,14 @@ export default function VITInspectionManagementPage() {
 
   const handleCloseInspectionForm = () => {
     setIsInspectionFormOpen(false);
-    setIsEditInspectionOpen(false);
-    setSelectedAssetId(null);
     setSelectedInspection(null);
-    // Refresh the data after form closure
+    setSelectedAssetId("");
+  };
+
+  const handleInspectionSubmit = (data: Partial<VITInspectionChecklist>) => {
+    // Close the form first
+    handleCloseInspectionForm();
+    // Then refresh the data
     loadData(true);
   };
 
@@ -337,7 +341,7 @@ export default function VITInspectionManagementPage() {
   const handleEditInspection = (inspection: VITInspectionChecklist) => {
     setSelectedInspection(inspection);
     setSelectedAssetId(inspection.vitAssetId);
-    setIsEditInspectionOpen(true);
+    setIsInspectionFormOpen(true);
   };
   
   const handleViewAsset = (assetId: string) => {
@@ -403,13 +407,14 @@ export default function VITInspectionManagementPage() {
         </Sheet>
 
         {/* Inspection Form Sheet - Used for both Add and Edit */}
-        <Sheet open={isInspectionFormOpen || isEditInspectionOpen} onOpenChange={(open) => {
-          if (!open) {
-            setIsInspectionFormOpen(false);
-            setIsEditInspectionOpen(false);
-            handleCloseInspectionForm();
-          }
-        }}>
+        <Sheet 
+          open={isInspectionFormOpen} 
+          onOpenChange={(open) => {
+            if (!open) {
+              handleCloseInspectionForm();
+            }
+          }}
+        >
           <SheetContent className="sm:max-w-xl overflow-y-auto">
             <SheetHeader>
               <SheetTitle>{selectedInspection ? "Edit VIT Inspection" : "Add VIT Inspection"}</SheetTitle>
@@ -418,7 +423,7 @@ export default function VITInspectionManagementPage() {
               <VITInspectionForm
                 assetId={selectedAssetId}
                 inspectionData={selectedInspection}
-                onSubmit={handleCloseInspectionForm}
+                onSubmit={handleInspectionSubmit}
                 onCancel={handleCloseInspectionForm}
               />
             </div>

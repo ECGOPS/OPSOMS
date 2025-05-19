@@ -209,6 +209,7 @@ export class SubstationInspectionService {
   }
 
   public async saveSubstationInspectionOffline(record: SubstationInspection, action: 'create' | 'update' | 'delete'): Promise<void> {
+    console.log('SubstationInspectionService: Entering saveSubstationInspectionOffline', { recordId: record.id, action });
     if (!this.db) {
       console.error('Database not initialized');
       throw new Error('Database not initialized');
@@ -238,7 +239,7 @@ export class SubstationInspectionService {
       };
 
       await this.db.put('substationInspections', pendingRecord);
-      console.log('Record saved offline successfully');
+      console.log('SubstationInspectionService: Record saved offline successfully', { recordId: record.id });
 
       // Dispatch event for UI update
       window.dispatchEvent(new CustomEvent('substationInspectionRecordAdded', {
@@ -463,13 +464,17 @@ export class SubstationInspectionService {
   }
 
   public async getOfflineSubstationInspections(): Promise<SubstationInspection[]> {
+    console.log('SubstationInspectionService: Entering getOfflineSubstationInspections');
     if (!this.db) {
+      console.error('Database not initialized');
       throw new Error('Database not initialized');
     }
 
     try {
-      const pendingRecords = await this.db.getAll('substationInspections');
-      return pendingRecords.map(record => ({
+      const records = await this.db.getAll('substationInspections');
+      console.log('SubstationInspectionService: Retrieved pending records:', records.length, records);
+      // Map PendingSubstationInspection to SubstationInspection
+      return records.map(record => ({
         ...record.record,
         syncStatus: 'pending',
         createdAt: record.record.createdAt || new Date().toISOString(),
