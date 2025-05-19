@@ -110,6 +110,7 @@ export default function AnalyticsPage() {
     urgent: 0,
   });
   const [showAllRegions, setShowAllRegions] = useState(false);
+  const [filterStatus, setFilterStatus] = useState<string | undefined>(undefined);
   
   // Use the same logic as DashboardPage for paginatedFaults
   const paginatedFaults = useMemo(() => {
@@ -132,13 +133,19 @@ export default function AnalyticsPage() {
         return true;
       });
     }
+
+    // Apply status filter if needed
+    if (filterStatus) {
+      faultsToDisplay = faultsToDisplay.filter(fault => fault.status === filterStatus);
+    }
+
     // Sort by occurrenceDate descending
     faultsToDisplay.sort((a, b) => new Date(b.occurrenceDate).getTime() - new Date(a.occurrenceDate).getTime());
     // Pagination
     const startIndex = (currentPage - 1) * pageSize;
     const endIndex = startIndex + pageSize;
     return faultsToDisplay.slice(startIndex, endIndex);
-  }, [getFilteredFaults, selectedRegion, filterRegion, selectedDistrict, filterDistrict, overviewRecentFaultsTab, currentPage, pageSize]);
+  }, [getFilteredFaults, selectedRegion, filterRegion, selectedDistrict, filterDistrict, overviewRecentFaultsTab, currentPage, pageSize, filterStatus]);
 
   // Calculate total pages
   const totalPages = useMemo(() => {
@@ -218,6 +225,7 @@ export default function AnalyticsPage() {
       filterRegion,
       filterDistrict,
       filterFaultType,
+      filterStatus,
       dateRange,
       startDate,
       endDate,
@@ -245,6 +253,11 @@ export default function AnalyticsPage() {
         }
         return false;
       });
+    }
+
+    // Apply status filter if needed
+    if (filterStatus) {
+      filteredByDate = filteredByDate.filter(fault => fault.status === filterStatus);
     }
 
     // Apply date range filter if needed
@@ -738,6 +751,10 @@ export default function AnalyticsPage() {
       setFilterFaultType(value);
     }
     setSelectedFaultType(value);
+  };
+  
+  const handleStatusChange = (value: string) => {
+    setFilterStatus(value === "all" ? undefined : value);
   };
   
   // Add useEffect to watch for date range changes
@@ -1261,7 +1278,7 @@ export default function AnalyticsPage() {
     }
 
     const headers = [
-      'ID', 'Type', 'Region', 'District', 'Occurrence Date', 'Status', 'Outage Duration', 'Customers Affected', 'Fault Description'
+      'ID', 'Type', 'Region', 'District', 'Occurrence Date', 'Status', 'Outage Duration', 'Estimated Resolution', 'Resolution Status', 'Customers Affected', 'Fault Description'
     ];
 
     const dataRows = paginatedFaults.map((fault: any) => {
@@ -1273,6 +1290,14 @@ export default function AnalyticsPage() {
       const outageDuration = fault.occurrenceDate && fault.restorationDate
         ? `${((new Date(fault.restorationDate).getTime() - new Date(fault.occurrenceDate).getTime()) / (1000 * 60 * 60)).toFixed(2)} hr`
         : 'N/A';
+      const estimatedResolution = fault.estimatedResolutionTime
+        ? `${((new Date(fault.estimatedResolutionTime).getTime() - new Date(fault.occurrenceDate).getTime()) / (1000 * 60 * 60)).toFixed(2)} hr`
+        : 'N/A';
+      const resolutionStatus = fault.occurrenceDate && fault.restorationDate && fault.estimatedResolutionTime
+        ? (new Date(fault.restorationDate).getTime() - new Date(fault.occurrenceDate).getTime()) <= (new Date(fault.estimatedResolutionTime).getTime() - new Date(fault.occurrenceDate).getTime())
+          ? 'Within Estimate'
+          : 'Exceeded Estimate'
+        : 'N/A';
       const faultDescription = fault.outageDescription || fault.description || 'N/A';
       return [
         fault.id,
@@ -1282,6 +1307,8 @@ export default function AnalyticsPage() {
         date,
         status,
         outageDuration,
+        estimatedResolution,
+        resolutionStatus,
         fault.affectedPopulation
           ? (fault.affectedPopulation.rural + fault.affectedPopulation.urban + fault.affectedPopulation.metro)
           : fault.customersAffected
@@ -1436,6 +1463,7 @@ export default function AnalyticsPage() {
     setFilterDistrict(undefined);
     setSelectedFaultType("all");
     setFilterFaultType(undefined);
+    setFilterStatus(undefined);
     setDateRange("all");
     setStartDate(null);
     setEndDate(null);
@@ -1534,7 +1562,7 @@ export default function AnalyticsPage() {
               Clear Filters
             </Button>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Region Select */}
             <div>
               <Label htmlFor="region-select" className="text-xs text-muted-foreground">Region</Label>
@@ -1599,6 +1627,23 @@ export default function AnalyticsPage() {
                 </SelectContent>
               </Select>
             </div>
+            {/* Status Select */}
+            <div>
+              <Label htmlFor="status-select" className="text-xs text-muted-foreground">Status</Label>
+              <Select
+                value={filterStatus || "all"}
+                onValueChange={handleStatusChange}
+              >
+                <SelectTrigger id="status-select" className="mt-1">
+                  <SelectValue placeholder="Select Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="resolved">Resolved</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           
           {/* Date Range Filters */}
@@ -1633,9 +1678,9 @@ export default function AnalyticsPage() {
               </Select>
 
               {dateRange === "custom-week" && (
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                   <Select value={selectedYear?.getFullYear()?.toString()} onValueChange={(value) => handleYearSelect(new Date(parseInt(value), 0))}>
-                    <SelectTrigger className="w-[120px]">
+                    <SelectTrigger className="w-[100px] sm:w-[120px]">
                       <SelectValue placeholder="Year" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1646,7 +1691,7 @@ export default function AnalyticsPage() {
                   </Select>
 
                   <Select value={startWeek?.toString()} onValueChange={(value) => handleStartWeekSelect(parseInt(value))}>
-                    <SelectTrigger className="w-[120px]">
+                    <SelectTrigger className="w-[100px] sm:w-[120px]">
                       <SelectValue placeholder="Start Week" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1656,10 +1701,10 @@ export default function AnalyticsPage() {
                     </SelectContent>
                   </Select>
 
-                  <span>to</span>
+                  <span className="hidden sm:inline">to</span>
 
                   <Select value={endWeek?.toString()} onValueChange={(value) => handleEndWeekSelect(parseInt(value))}>
-                    <SelectTrigger className="w-[120px]">
+                    <SelectTrigger className="w-[100px] sm:w-[120px]">
                       <SelectValue placeholder="End Week" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1672,10 +1717,10 @@ export default function AnalyticsPage() {
               )}
 
               {dateRange === "custom-month" && (
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                   <Popover open={isStartMonthPickerOpen} onOpenChange={setIsStartMonthPickerOpen}>
                     <PopoverTrigger asChild>
-                      <Button variant="outline" className="w-[200px] justify-start text-left font-normal">
+                      <Button variant="outline" className="w-[140px] sm:w-[200px] justify-start text-left font-normal">
                         {startMonth ? format(startMonth, "MMMM yyyy") : "Start Month"}
                       </Button>
                     </PopoverTrigger>
@@ -1690,11 +1735,11 @@ export default function AnalyticsPage() {
                     </PopoverContent>
                   </Popover>
 
-                  <span>to</span>
+                  <span className="hidden sm:inline">to</span>
 
                   <Popover open={isEndMonthPickerOpen} onOpenChange={setIsEndMonthPickerOpen}>
                     <PopoverTrigger asChild>
-                      <Button variant="outline" className="w-[200px] justify-start text-left font-normal">
+                      <Button variant="outline" className="w-[140px] sm:w-[200px] justify-start text-left font-normal">
                         {endMonth ? format(endMonth, "MMMM yyyy") : "End Month"}
                       </Button>
                     </PopoverTrigger>
@@ -1712,9 +1757,9 @@ export default function AnalyticsPage() {
               )}
 
               {dateRange === "custom-year" && (
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                   <Select value={startYear?.getFullYear()?.toString()} onValueChange={(value) => handleStartYearSelect(new Date(parseInt(value), 0))}>
-                    <SelectTrigger className="w-[120px]">
+                    <SelectTrigger className="w-[100px] sm:w-[120px]">
                       <SelectValue placeholder="Start Year" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1724,10 +1769,10 @@ export default function AnalyticsPage() {
                     </SelectContent>
                   </Select>
 
-                  <span>to</span>
+                  <span className="hidden sm:inline">to</span>
 
                   <Select value={endYear?.getFullYear()?.toString()} onValueChange={(value) => handleEndYearSelect(new Date(parseInt(value), 0))}>
-                    <SelectTrigger className="w-[120px]">
+                    <SelectTrigger className="w-[100px] sm:w-[120px]">
                       <SelectValue placeholder="End Year" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1793,7 +1838,7 @@ export default function AnalyticsPage() {
             <CardContent>
               <div className="text-2xl sm:text-3xl font-bold text-red-900 dark:text-red-100">{filteredFaults.length}</div>
               <p className="text-xs text-red-700 dark:text-red-200">
-                {filteredFaults.filter((f: any) => f.status === "active").length} active
+                {filteredFaults.filter((f: any) => f.status === "pending").length} pending
               </p>
             </CardContent>
           </Card>
@@ -1837,6 +1882,11 @@ export default function AnalyticsPage() {
                 <CardTitle className="text-base sm:text-lg flex items-center gap-2 dark:text-gray-100">
                   <Clock className="h-5 w-5 text-primary dark:text-primary-200" />
                   Mean Time To Repair (MTTR) Report
+                  {user?.role === "district_engineer" && user.district && (
+                    <span className="text-sm font-normal text-muted-foreground">
+                      - {districts.find(d => d.id === user.district)?.name || user.district}
+                    </span>
+                  )}
                 </CardTitle>
                 <CardDescription className="text-xs sm:text-sm mt-1 dark:text-gray-300">Analysis of repair times for OP5 faults</CardDescription>
               </div>
@@ -1927,61 +1977,86 @@ export default function AnalyticsPage() {
 
             <div className="space-y-4">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                <h3 className="text-base font-semibold">MTTR by Region</h3>
+                <h3 className="text-base font-semibold">
+                  {selectedDistrict && selectedDistrict !== "all"
+                    ? `MTTR for ${districts.find(d => d.id === selectedDistrict)?.name || selectedDistrict}`
+                    : selectedRegion && selectedRegion !== "all"
+                      ? `MTTR by District in ${regions.find(r => r.id === selectedRegion)?.name || selectedRegion}`
+                      : "MTTR by Region"}
+                </h3>
                 <Badge variant="secondary" className="text-xs">
                   Average Repair Time (Lower is Better)
                 </Badge>
               </div>
               <div className="space-y-4">
-                {(showAllRegions
-                  ? regions
-                  : (selectedRegion && selectedRegion !== "all"
-                      ? regions.filter(r => r.id === selectedRegion)
-                      : regions.slice(0, 1))
-                ).map(region => {
-                  const regionFaults = filteredFaults.filter(f => 
-                    ('faultLocation' in f || 'substationName' in f) && 
-                    f.repairDate && 
-                    f.restorationDate && 
-                    f.regionId === region.id
-                  );
-                  const regionMTTR = regionFaults.reduce((sum, fault) => {
-                    const repairDate = new Date(fault.repairDate);
-                    const restorationDate = new Date(fault.restorationDate);
-                    const mttr = (restorationDate.getTime() - repairDate.getTime()) / (1000 * 60 * 60);
-                    return sum + mttr;
-                  }, 0);
-                  const avgMTTR = regionFaults.length > 0 ? regionMTTR / regionFaults.length : 0;
-                  const totalFaults = filteredFaults.filter(f => 'faultLocation' in f && f.regionId === region.id).length;
-                  return (
-                    <div key={region.id} className="space-y-2">
-                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-sm sm:text-base">{region.name}</span>
-                          <Badge variant="secondary" className="text-xs">
-                            {regionFaults.length} faults
-                          </Badge>
-                        </div>
-                        <div className="flex items-center gap-2 w-full sm:w-auto">
-                          <span className="font-medium text-sm sm:text-base">{avgMTTR.toFixed(2)} hours</span>
-                          <div className="flex-1 sm:w-32 h-2 bg-muted rounded-full overflow-hidden">
-                            <div 
-                              className="h-full bg-primary" 
-                              style={{ 
-                                width: `${(avgMTTR / 5) * 100}%`,  // Scale for 5 hours max
-                                maxWidth: '100%'
-                              }}
-                            ></div>
+                {(() => {
+                  let itemsToDisplay: any[] = [];
+                  let isDisplayingDistricts = false;
+
+                  if (selectedDistrict && selectedDistrict !== "all") {
+                    // Case 1: Specific district selected (by DE or RE)
+                    itemsToDisplay = districts.filter(d => d.id === selectedDistrict);
+                    isDisplayingDistricts = true;
+                  } else if (selectedRegion && selectedRegion !== "all") {
+                    // Case 2: Specific region selected, show districts within
+                    itemsToDisplay = districts.filter(d => d.regionId === selectedRegion);
+                    isDisplayingDistricts = true;
+                  } else {
+                    // Case 3: No specific region/district, show regions
+                    itemsToDisplay = showAllRegions ? regions : regions.slice(0, 1);
+                    isDisplayingDistricts = false;
+                  }
+
+                  // Filter faults based on the current item (region or district)
+                  return itemsToDisplay.map(item => {
+                    const itemFaults = filteredFaults.filter(f => 
+                      ('faultLocation' in f || 'substationName' in f) && 
+                      f.repairDate && 
+                      f.restorationDate && 
+                      (isDisplayingDistricts ? f.districtId === item.id : f.regionId === item.id)
+                    );
+                    const itemMTTR = itemFaults.reduce((sum, fault) => {
+                      const repairDate = new Date(fault.repairDate);
+                      const restorationDate = new Date(fault.restorationDate);
+                      const mttr = (restorationDate.getTime() - repairDate.getTime()) / (1000 * 60 * 60);
+                      return sum + mttr;
+                    }, 0);
+                    const avgMTTR = itemFaults.length > 0 ? itemMTTR / itemFaults.length : 0;
+                    const totalFaultsInArea = filteredFaults.filter(f => 
+                       ('faultLocation' in f) && (isDisplayingDistricts ? f.districtId === item.id : f.regionId === item.id)
+                    ).length;
+                    return (
+                      <div key={item.id} className="space-y-2">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                          <div className="flex items-center gap-2">
+                            {/* Display item name (region or district) */}
+                            <span className="font-medium text-sm sm:text-base">{item.name}</span>
+                            <Badge variant="secondary" className="text-xs">
+                              {itemFaults.length} faults
+                            </Badge>
+                          </div>
+                          <div className="flex items-center gap-2 w-full sm:w-auto">
+                            <span className="font-medium text-sm sm:text-base">{avgMTTR.toFixed(2)} hours</span>
+                            <div className="flex-1 sm:w-32 h-2 bg-muted rounded-full overflow-hidden">
+                              <div 
+                                className="h-full bg-primary" 
+                                style={{ 
+                                  width: `${(avgMTTR / 5) * 100}%`,  // Scale for 5 hours max
+                                  maxWidth: '100%'
+                                }}
+                              ></div>
+                            </div>
                           </div>
                         </div>
+                        <div className="text-xs text-muted-foreground">
+                          {itemFaults.length} of {totalFaultsInArea} OP5 faults have MTTR data
+                        </div>
                       </div>
-                      <div className="text-xs text-muted-foreground">
-                        {regionFaults.length} of {totalFaults} OP5 faults have MTTR data
-                      </div>
-                    </div>
-                  );
-                })}
-                {regions.length > 1 && (
+                    );
+                  });
+                })()}
+                {/* Only show Expand/Collapse button for the default 'MTTR by Region' view */}
+                {regions.length > 1 && !(selectedDistrict && selectedDistrict !== "all") && !(selectedRegion && selectedRegion !== "all") && (
                   <div className="flex justify-center mt-2">
                     <Button
                       variant="outline"
@@ -2082,13 +2157,14 @@ export default function AnalyticsPage() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>ID</TableHead>
-                          <TableHead>Type</TableHead>
                           <TableHead>Region</TableHead>
                           <TableHead>District</TableHead>
                           <TableHead>Date</TableHead>
+                          <TableHead>Type</TableHead>
                           <TableHead>Status</TableHead>
                           <TableHead>Outage Duration</TableHead>
+                          <TableHead>Estimated Resolution</TableHead>
+                          <TableHead>Resolution Status</TableHead>
                           <TableHead>Customers Affected</TableHead>
                           <TableHead>Fault Description</TableHead>
                           <TableHead>Details</TableHead>
@@ -2098,15 +2174,14 @@ export default function AnalyticsPage() {
                         {paginatedFaults.length > 0 ? (
                           paginatedFaults.map((fault: any) => (
                             <TableRow key={fault.id}>
-                              <TableCell className="font-medium text-xs sm:text-sm py-2 px-2 sm:px-4">{fault.id.substring(0, 8)}...</TableCell>
-                              <TableCell className="text-xs sm:text-sm py-2 px-2 sm:px-4">{
-                                op5Faults.some(f => f.id === fault.id) ? 'OP5' : 'Control'
-                              }</TableCell>
                               <TableCell className="text-xs sm:text-sm py-2 px-2 sm:px-4">{getRegionName(fault.regionId)}</TableCell>
                               <TableCell className="text-xs sm:text-sm py-2 px-2 sm:px-4">{getDistrictName(fault.districtId)}</TableCell>
                               <TableCell className="text-xs sm:text-sm py-2 px-2 sm:px-4">{formatSafeDate(fault.occurrenceDate)}</TableCell>
+                              <TableCell className="text-xs sm:text-sm py-2 px-2 sm:px-4">{
+                                op5Faults.some(f => f.id === fault.id) ? 'OP5' : 'Control'
+                              }</TableCell>
                               <TableCell className="py-2 px-2 sm:px-4">
-                                <span className={`px-2 py-1 rounded-full text-xs ${fault.status === 'active' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
+                                <span className={`px-2 py-1 rounded-full text-xs ${fault.status === 'pending' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
                                   {fault.status}
                                 </span>
                               </TableCell>
@@ -2115,6 +2190,26 @@ export default function AnalyticsPage() {
                                   ? `${((new Date(fault.restorationDate).getTime() - new Date(fault.occurrenceDate).getTime()) / (1000 * 60 * 60)).toFixed(2)} hr`
                                   : 'N/A'
                               }</TableCell>
+                              <TableCell className="text-xs sm:text-sm py-2 px-2 sm:px-4">{
+                                fault.occurrenceDate && fault.estimatedResolutionTime
+                                  ? `${((new Date(fault.estimatedResolutionTime).getTime() - new Date(fault.occurrenceDate).getTime()) / (1000 * 60 * 60)).toFixed(2)} hr`
+                                  : 'N/A'
+                              }</TableCell>
+                              <TableCell className="py-2 px-2 sm:px-4">
+                                {(() => {
+                                  if (!fault.occurrenceDate || !fault.restorationDate || !fault.estimatedResolutionTime) {
+                                    return <span className="px-2 py-1 rounded-full text-xs bg-gray-100 text-gray-800">N/A</span>;
+                                  }
+                                  const outageDuration = (new Date(fault.restorationDate).getTime() - new Date(fault.occurrenceDate).getTime()) / (1000 * 60 * 60);
+                                  const estimatedDuration = (new Date(fault.estimatedResolutionTime).getTime() - new Date(fault.occurrenceDate).getTime()) / (1000 * 60 * 60);
+                                  
+                                  if (outageDuration <= estimatedDuration) {
+                                    return <span className="px-2 py-1 rounded-full text-xs bg-green-100 text-green-800">Within Estimate</span>;
+                                  } else {
+                                    return <span className="px-2 py-1 rounded-full text-xs bg-red-100 text-red-800">Exceeded Estimate</span>;
+                                  }
+                                })()}
+                              </TableCell>
                               <TableCell className="text-xs sm:text-sm py-2 px-2 sm:px-4">{
                                 fault.affectedPopulation
                                   ? (fault.affectedPopulation.rural + fault.affectedPopulation.urban + fault.affectedPopulation.metro)
@@ -2135,7 +2230,7 @@ export default function AnalyticsPage() {
                           ))
                         ) : (
                           <TableRow>
-                            <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">
+                            <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
                               No recent faults found for the selected type.
                             </TableCell>
                           </TableRow>
@@ -2365,9 +2460,9 @@ export default function AnalyticsPage() {
                         <span className="text-xs text-muted-foreground">Status</span>
                         <p className="text-sm">
                           <Badge className={`mt-1 ${
-                            selectedFault.status === 'active' 
-                              ? 'bg-red-100 text-red-800 hover:bg-red-100' 
-                              : 'bg-green-100 text-green-800 hover:bg-green-100'
+                            selectedFault.status === 'pending' 
+                              ? 'bg-red-100 text-red-800 hover:bg-red-100 dark:bg-red-900 dark:text-red-200 dark:hover:bg-red-900' 
+                              : 'bg-green-100 text-green-800 hover:bg-green-100 dark:bg-green-900 dark:text-green-200 dark:hover:bg-green-900'
                           }`}>
                             {selectedFault.status.toUpperCase()}
                           </Badge>
@@ -2553,20 +2648,20 @@ export default function AnalyticsPage() {
                           return (
                             <section
                               key={group.title}
-                              className="bg-gray-50 rounded-lg shadow-sm p-4 sm:p-6"
+                              className="bg-gray-50 rounded-lg shadow-sm p-4 sm:p-6 dark:bg-gray-700 dark:shadow-md"
                             >
                               <div className="flex items-center mb-3">
-                                <h4 className="text-base sm:text-lg font-bold text-blue-700 tracking-wide uppercase">
+                                <h4 className="text-base sm:text-lg font-bold text-blue-700 tracking-wide uppercase dark:text-blue-300">
                                   {group.title}
                                 </h4>
                               </div>
-                              <dl className="divide-y divide-gray-200">
+                              <dl className="divide-y divide-gray-200 dark:divide-gray-600">
                                 {groupEntries.map(([key, value]) => (
                                   <div key={key} className="py-2 flex flex-col sm:flex-row sm:items-center">
-                                    <dt className="text-xs sm:text-sm font-semibold text-gray-500 uppercase w-40 sm:w-56 flex-shrink-0">
+                                    <dt className="text-xs sm:text-sm font-semibold text-gray-500 uppercase w-40 sm:w-56 flex-shrink-0 dark:text-gray-400">
                                       {formatKey(key)}
                                     </dt>
-                                    <dd className="ml-0 sm:ml-4 text-sm sm:text-base text-gray-900 break-words">
+                                    <dd className="ml-0 sm:ml-4 text-sm sm:text-base text-gray-900 break-words dark:text-gray-200">
                                       { /* Use helper function for createdBy and updatedBy */ }
                                       { (key === 'createdBy' || key === 'updatedBy') 
                                           ? getUserNameById(value as string) 
