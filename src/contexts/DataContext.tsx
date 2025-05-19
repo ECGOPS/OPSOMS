@@ -40,7 +40,10 @@ import {
   setDoc,
   Timestamp,
   DocumentData,
-  QueryDocumentSnapshot
+  QueryDocumentSnapshot,
+  limit,
+  startAfter,
+  getCountFromServer
 } from "firebase/firestore";
 import { getUserRegionAndDistrict } from "@/utils/user-utils";
 import { resetFirestoreConnection } from "@/config/firebase";
@@ -66,9 +69,10 @@ import { FaultService } from '@/services/FaultService';
 import { LoadMonitoringService } from '@/services/LoadMonitoringService';
 import { SubstationInspectionService } from '@/services/SubstationInspectionService';
 import { syncPendingChanges } from '@/utils/sync';
+import { getAllItems } from "@/lib/indexedDB";
 
 const DB_NAME = 'ecg-oms-db';
-const DB_VERSION = 3;
+const DB_VERSION = 4;  // Update from 3 to 4
 
 // Define store name constants
 const STORE_NAMES = {
@@ -639,125 +643,29 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    console.log("Setting up VIT assets subscription...");
-
-    const unsubscribe = onSnapshot(q, async (snapshot) => {
+    const unsubscribe = onSnapshot(q, (snapshot) => {
       try {
-        console.log("Received VIT assets snapshot:", snapshot.docs.length, "documents");
+        // Use a Map to ensure unique assets by ID
+        const assetMap = new Map<string, VITAsset>();
         
-        // Get offline data regardless of online status
-        const offlineData = await safeGetAllItems<VITAsset & BaseRecord>(STORE_NAMES.VIT_ASSETS);
-        const pendingDeletes = (await getPendingSyncItems())
-          .filter(item => item.type === STORE_NAMES.VIT_ASSETS && item.action === "delete")
-          .map(item => item.data.id);
-
-        if (navigator.onLine) {
-          // Online mode - merge with Firestore data
-      const assets = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as VITAsset[];
-
-          console.log("Processing online data:", assets.length, "assets");
-
-          // Create a map of online records
-          const onlineMap = new Map(assets.map(r => [r.id, r]));
-          
-          // Only include offline records that:
-          // 1. Are not in the online data
-          // 2. Are not pending deletion
-          // 3. Have a newer timestamp than their online counterpart (if they exist)
-          const mergedAssets = [
-            ...assets,
-            ...offlineData.filter(item => {
-              const onlineRecord = onlineMap.get(item.id);
-              if (!onlineRecord) {
-                return !pendingDeletes.includes(item.id);
-              }
-              return item.updatedAt > onlineRecord.updatedAt && !pendingDeletes.includes(item.id);
-            })
-          ];
-
-          // Ensure no duplicates
-          const uniqueAssets = Array.from(
-            new Map(
-              mergedAssets.map(asset => [
-                asset.id,
-                {
-                  ...asset,
-                  updatedAt: asset.updatedAt || new Date().toISOString()
-                }
-              ])
-            ).values()
-          ).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-
-          console.log("Setting VIT assets state with:", uniqueAssets.length, "assets");
-          setVITAssets(uniqueAssets);
-
-          // Update cache with all current data
-          await clearStore(STORE_NAMES.VIT_ASSETS);
-          for (const asset of uniqueAssets) {
-            try {
-              await safeAddItem(STORE_NAMES.VIT_ASSETS, asset);
-            } catch (e) {
-              console.error("Error caching VIT asset:", e);
-            }
-          }
-        } else {
-          // Offline mode - use cached and unsynced data
-          const cache = await safeGetAllItems<VITAsset & BaseRecord>(STORE_NAMES.VIT_ASSETS_CACHE);
-          
-          // Create a map of cached items
-          const cacheMap = new Map(cache.map(item => [item.id, item]));
-          
-          // Only include unsynced records that:
-          // 1. Are not in the cache
-          // 2. Are not pending deletion
-          // 3. Have a newer timestamp than their cached counterpart (if they exist)
-          const mergedAssets = [
-            ...cache,
-            ...offlineData.filter(item => {
-              const cachedRecord = cacheMap.get(item.id);
-              if (!cachedRecord) {
-                return !pendingDeletes.includes(item.id);
-              }
-              return item.updatedAt > cachedRecord.updatedAt && !pendingDeletes.includes(item.id);
-            })
-          ];
-
-          // Ensure no duplicates
-          const uniqueAssets = Array.from(
-            new Map(
-              mergedAssets.map(asset => [
-                asset.id,
-                {
-                  ...asset,
-                  updatedAt: asset.updatedAt || new Date().toISOString()
-                }
-              ])
-            ).values()
-          ).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-
-          console.log("Setting VIT assets state with:", uniqueAssets.length, "assets (offline)");
-          setVITAssets(uniqueAssets);
-        }
+        snapshot.docs.forEach(doc => {
+          const asset = {
+            id: doc.id,
+            ...doc.data()
+          } as VITAsset;
+          assetMap.set(doc.id, asset);
+        });
+        
+        // Convert Map back to array
+        const assets = Array.from(assetMap.values());
+        setVITAssets(assets);
       } catch (error) {
         console.error("Error updating VIT assets:", error);
-        if (navigator.onLine) {
-          toast.error("Error updating assets list");
-        }
-      }
-    }, (error) => {
-      console.error("Error in VIT assets subscription:", error);
-      if (navigator.onLine) {
-        toast.error("Error connecting to database");
+        toast.error("Error updating assets list");
       }
     });
 
-    return () => {
-      console.log("Cleaning up VIT assets subscription");
-      unsubscribe();
-    };
+    return () => unsubscribe();
   }, [user]);
 
   // Subscribe to OP5 faults
@@ -1223,27 +1131,24 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   // Add VIT asset
   const addVITAsset = async (asset: Omit<VITAsset, "id">) => {
     try {
-      const now = new Date().toISOString();
+      // Create new asset with Firestore ID
+      const docRef = await addDoc(collection(db, "vitAssets"), {
+        ...asset,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+      
       const newAsset: VITAsset = {
-      ...asset,
-        id: uuidv4(),
-        createdAt: now,
-        updatedAt: now
+        ...asset,
+        id: docRef.id,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
       };
-
-      if (navigator.onLine) {
-        // Online mode - save to Firestore
-        const docRef = await addDoc(collection(db, "vitAssets"), newAsset);
-        newAsset.id = docRef.id;
-      } else {
-        // Offline mode - save to IndexedDB
-        await safeAddItem(STORE_NAMES.VIT_ASSETS, newAsset);
-        await addToPendingSync(STORE_NAMES.VIT_ASSETS, "create", newAsset);
-      }
-
+      
+      // Update local state
       setVITAssets(prev => [...prev, newAsset]);
-      return newAsset.id;
-      } catch (error) {
+      return docRef.id;
+    } catch (error) {
       console.error("Error adding VIT asset:", error);
       throw error;
     }
@@ -1258,23 +1163,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         updatedAt: now
       };
 
-      if (navigator.onLine) {
-        // Online mode - update Firestore
-        const docRef = doc(db, "vitAssets", id);
-        await updateDoc(docRef, updatedData);
-      } else {
-        // Offline mode - update IndexedDB
-        const existingAsset = await safeGetItem<VITAsset>(STORE_NAMES.VIT_ASSETS, id);
-        if (existingAsset) {
-          const updatedAsset = {
-            ...existingAsset,
-            ...updatedData
-          };
-          await safeUpdateItem(STORE_NAMES.VIT_ASSETS, updatedAsset);
-          await addToPendingSync(STORE_NAMES.VIT_ASSETS, "update", updatedAsset);
-        }
-      }
+      // Update Firestore
+      const docRef = doc(db, "vitAssets", id);
+      await updateDoc(docRef, updatedData);
 
+      // Update local state
       setVITAssets(prev => 
         prev.map(asset => asset.id === id ? { ...asset, ...updatedData } : asset)
       );
@@ -1288,17 +1181,49 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const deleteVITAsset = async (id: string) => {
     try {
       if (navigator.onLine) {
-        // Online mode - delete from Firestore
-      await deleteDoc(doc(db, "vitAssets", id));
+        // Delete from Firestore
+        await deleteDoc(doc(db, "vitAssets", id));
+        
+        // Delete associated inspections
+        const inspectionsRef = collection(db, "vitInspections");
+        const q = query(inspectionsRef, where("vitAssetId", "==", id));
+        const querySnapshot = await getDocs(q);
+        
+        // Delete each inspection
+        const deletePromises = querySnapshot.docs.map(doc => 
+          deleteDoc(doc.ref)
+        );
+        await Promise.all(deletePromises);
+        
+        // Update local state
+        setVITAssets(prev => prev.filter(asset => asset.id !== id));
+        setVITInspections(prev => prev.filter(inspection => inspection.vitAssetId !== id));
+        
+        toast.success("Asset and associated inspections deleted successfully");
       } else {
-        // Offline mode - delete from IndexedDB
-        await safeDeleteItem(STORE_NAMES.VIT_ASSETS, id);
-        await addToPendingSync(STORE_NAMES.VIT_ASSETS, "delete", { id });
+        // Handle offline deletion
+        await deleteItem("vitAssets", id);
+        await addToPendingSync("vitAssets", "delete", { id });
+        
+        // Delete associated inspections from IndexedDB
+        const inspections = await getAllItems("vitInspections");
+        const assetInspections = inspections.filter((inspection: any) => inspection.vitAssetId === id);
+        
+        // Delete each inspection
+        for (const inspection of assetInspections) {
+          await deleteItem("vitInspections", inspection.id);
+          await addToPendingSync("vitInspections", "delete", { id: inspection.id });
+        }
+        
+        // Update local state
+        setVITAssets(prev => prev.filter(asset => asset.id !== id));
+        setVITInspections(prev => prev.filter(inspection => inspection.vitAssetId !== id));
+        
+        toast.success("Asset and associated inspections marked for deletion");
       }
-
-      setVITAssets(prev => prev.filter(asset => asset.id !== id));
     } catch (error) {
       console.error("Error deleting VIT asset:", error);
+      toast.error("Failed to delete asset");
       throw error;
     }
   };

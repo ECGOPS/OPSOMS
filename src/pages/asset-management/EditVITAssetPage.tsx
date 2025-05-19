@@ -76,7 +76,7 @@ export default function EditVITAssetPage() {
           </p>
         </div>
         
-        <div className="bg-white rounded-lg border shadow-sm p-6">
+        <div className="rounded-lg border shadow-sm p-6">
           <VITAssetForm
             asset={asset}
             onSubmit={handleSubmit}

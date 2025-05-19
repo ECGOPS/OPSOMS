@@ -474,9 +474,9 @@ export function UsersList() {
                           </div>
                         </TableCell>
                         <TableCell className="p-0 sticky right-0 bg-background">
-                          <div className="flex justify-end items-center gap-2 px-4 py-2 bg-background">
+                          <div className="flex justify-end items-center gap-1 px-2 py-1 bg-background">
                             {canManageUsers && (
-                              <div className="flex items-center gap-1 sm:gap-2">
+                              <div className="flex items-center gap-0.5">
                                 <Button
                                   variant="ghost"
                                   size="icon"
@@ -484,10 +484,10 @@ export function UsersList() {
                                     e.stopPropagation();
                                     openEditDialog(user);
                                   }}
-                                  className="h-8 w-8 hover:bg-muted"
+                                  className="h-7 w-7 hover:bg-muted"
                                   title="Edit user"
                                 >
-                                  <EditIcon className="h-4 w-4" />
+                                  <EditIcon className="h-3.5 w-3.5" />
                                 </Button>
                                 <Button
                                   variant="ghost"
@@ -496,10 +496,10 @@ export function UsersList() {
                                     e.stopPropagation();
                                     handleResetPassword(user.id);
                                   }}
-                                  className="h-8 w-8 hover:bg-muted"
+                                  className="h-7 w-7 hover:bg-muted"
                                   title="Reset password"
                                 >
-                                  <KeyRound className="h-4 w-4" />
+                                  <KeyRound className="h-3.5 w-3.5" />
                                 </Button>
                                 {isSystemAdmin && (
                                   <Button
@@ -509,10 +509,10 @@ export function UsersList() {
                                       e.stopPropagation();
                                       openDeleteDialog(user);
                                     }}
-                                    className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                    className="h-7 w-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
                                     title="Delete user"
                                   >
-                                    <Trash2 className="h-4 w-4" />
+                                    <Trash2 className="h-3.5 w-3.5" />
                                   </Button>
                                 )}
                               </div>
@@ -525,7 +525,7 @@ export function UsersList() {
                                   e.stopPropagation();
                                   handleDisableUser(user);
                                 }}
-                                className={`h-8 px-2 sm:px-3 text-sm min-w-[60px] sm:min-w-[70px] ${
+                                className={`h-7 px-2 text-xs min-w-[50px] ${
                                   user.disabled ? 'hover:bg-primary/10 hover:text-primary' : 'hover:bg-destructive/10 hover:text-destructive'
                                 }`}
                               >
@@ -853,21 +853,29 @@ export function UsersList() {
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <DialogContent className="w-[95vw] sm:max-w-[600px]">
           <DialogHeader>
-            <DialogTitle>Delete User</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete this user? This action cannot be undone.
+            <DialogTitle className="text-destructive">Delete User</DialogTitle>
+            <DialogDescription className="text-destructive/90">
+              Warning: This action cannot be undone. Deleting a user will permanently remove their account and all associated data.
             </DialogDescription>
           </DialogHeader>
           
           {selectedUser && (
-            <div className="py-2">
-              <p><strong>Name:</strong> {selectedUser.name}</p>
-              <p><strong>Email:</strong> {selectedUser.email}</p>
-              <p><strong>Role:</strong> {getRoleLabel(selectedUser.role)}</p>
+            <div className="py-4 space-y-3 border rounded-lg bg-destructive/5 p-4">
+              <div className="flex items-center gap-2 text-destructive">
+                <Trash2 className="h-5 w-5" />
+                <h4 className="font-semibold">User Details to be Deleted</h4>
+              </div>
+              <div className="space-y-2 text-sm">
+                <p><span className="font-medium">Name:</span> {selectedUser.name}</p>
+                <p><span className="font-medium">Email:</span> {selectedUser.email}</p>
+                <p><span className="font-medium">Role:</span> {getRoleLabel(selectedUser.role)}</p>
+                {selectedUser.region && <p><span className="font-medium">Region:</span> {selectedUser.region}</p>}
+                {selectedUser.district && <p><span className="font-medium">District:</span> {selectedUser.district}</p>}
+              </div>
             </div>
           )}
           
-          <div className="flex flex-col sm:flex-row justify-end gap-2">
+          <div className="flex flex-col sm:flex-row justify-end gap-2 mt-6">
             <Button 
               variant="outline" 
               onClick={() => {

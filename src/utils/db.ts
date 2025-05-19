@@ -16,7 +16,7 @@ export type StoreName =
   | 'substationInspections'
   | 'overheadLineInspections'
   | 'overheadLineInspections-cache'
-  | 'pending-sync'
+  | 'pendingSync'
   | 'districts'
   | 'districts-cache'
   | 'regions'
@@ -47,8 +47,8 @@ export async function initDB() {
       try {
         console.log('Starting database initialization...');
         
-        // Create new database with version 3
-        db = await openDB('ecg-oms-db', 3, {
+        // Create new database with version 4
+        db = await openDB('ecg-oms-db', 4, {
           upgrade(db, oldVersion, newVersion) {
             console.log(`Upgrading database from version ${oldVersion} to ${newVersion}...`);
             
@@ -67,7 +67,7 @@ export async function initDB() {
               'substationInspections',
               'overheadLineInspections',
               'overheadLineInspections-cache',
-              'pending-sync',
+              'pendingSync',
               'districts',
               'districts-cache',
               'regions',
@@ -84,47 +84,51 @@ export async function initDB() {
               'users-cache'
             ];
 
+            // Delete existing stores to ensure clean state
+            Array.from(db.objectStoreNames).forEach(storeName => {
+              db.deleteObjectStore(storeName);
+            });
+
+            // Create all stores fresh
             stores.forEach(storeName => {
-              if (!db.objectStoreNames.contains(storeName)) {
-                console.log(`Creating store: ${storeName}`);
-                const store = db.createObjectStore(storeName, { keyPath: 'id' });
-                
-                // Add appropriate indexes based on store type
-                switch (storeName) {
-                  case 'op5Faults':
-                  case 'op5Faults-cache':
-                  case 'controlOutages':
-                  case 'controlOutages-cache':
-                    store.createIndex('by-date', 'occurrenceDate');
-                    break;
-                  case 'vitAssets':
-                  case 'vitAssets-cache':
-                    store.createIndex('by-region', 'regionId');
-                    break;
-                  case 'vitInspections':
-                  case 'vitInspections-cache':
-                    store.createIndex('by-asset', 'assetId');
-                    store.createIndex('by-date', 'inspectionDate');
-                    break;
-                  case 'substationInspections':
-                    store.createIndex('by-date', 'inspectionDate');
-                    break;
-                  case 'loadMonitoring':
-                  case 'loadMonitoring-cache':
-                    store.createIndex('by-date', 'timestamp');
-                    break;
-                  case 'overheadLineInspections':
-                  case 'overheadLineInspections-cache':
-                    store.createIndex('by-date', 'inspectionDate');
-                    break;
-                  case 'pending-sync':
-                    store.createIndex('by-timestamp', 'timestamp');
-                    break;
-                  case 'districts':
-                  case 'districts-cache':
-                    store.createIndex('by-region', 'regionId');
-                    break;
-                }
+              console.log(`Creating store: ${storeName}`);
+              const store = db.createObjectStore(storeName, { keyPath: 'id' });
+              
+              // Add appropriate indexes based on store type
+              switch (storeName) {
+                case 'op5Faults':
+                case 'op5Faults-cache':
+                case 'controlOutages':
+                case 'controlOutages-cache':
+                  store.createIndex('by-date', 'occurrenceDate');
+                  break;
+                case 'vitAssets':
+                case 'vitAssets-cache':
+                  store.createIndex('by-region', 'regionId');
+                  break;
+                case 'vitInspections':
+                case 'vitInspections-cache':
+                  store.createIndex('by-asset', 'assetId');
+                  store.createIndex('by-date', 'inspectionDate');
+                  break;
+                case 'substationInspections':
+                  store.createIndex('by-date', 'inspectionDate');
+                  break;
+                case 'loadMonitoring':
+                case 'loadMonitoring-cache':
+                  store.createIndex('by-date', 'timestamp');
+                  break;
+                case 'overheadLineInspections':
+                case 'overheadLineInspections-cache':
+                  store.createIndex('by-date', 'inspectionDate');
+                  break;
+                case 'pendingSync':
+                  store.createIndex('by-timestamp', 'timestamp');
+                  break;
+                case 'districts':
+                case 'districts-cache':
+                  store.createIndex('by-region', 'regionId');
+                  break;
               }
             });
           },
@@ -225,17 +229,17 @@ export async function addToPendingSync(storeName: StoreName, action: 'create' | 
     data,
     timestamp: Date.now()
   };
-  await db.add('pending-sync', pendingSyncItem);
+  await db.add('pendingSync', pendingSyncItem);
 }
 
 export async function getPendingSyncItems(): Promise<PendingSyncItem[]> {
   const db = await initDB();
-  return db.getAll('pending-sync');
+  return db.getAll('pendingSync');
 }
 
 export async function clearPendingSyncItem(item: PendingSyncItem): Promise<void> {
   const db = await initDB();
-  await db.delete('pending-sync', item.id);
+  await db.delete('pendingSync', item.id);
 }
 
 // Generic CRUD operations for each store

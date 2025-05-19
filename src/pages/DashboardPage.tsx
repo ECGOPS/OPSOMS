@@ -17,6 +17,29 @@ import { PermissionService } from "@/services/PermissionService";
 import { DateRange } from "react-day-picker";
 import { format, isWithinInterval, isSameDay, isSameMonth, isSameYear } from "date-fns";
 
+interface FilterBarProps {
+  setFilterRegion: (region: string | undefined) => void;
+  setFilterDistrict: (district: string | undefined) => void;
+  setFilterStatus: (status: "all" | "pending" | "resolved") => void;
+  filterStatus: "all" | "pending" | "resolved";
+  onRefresh: () => void;
+  isRefreshing: boolean;
+  setFilterFaultType: (type: string) => void;
+  setDateRange: (range: DateRange) => void;
+  setSelectedDay: (day: Date | undefined) => void;
+  setSelectedMonth: (month: number | undefined) => void;
+  setSelectedMonthYear: (year: number | undefined) => void;
+  setSelectedYear: (year: number | undefined) => void;
+  setDateFilterType: (type: "range" | "day" | "month" | "year") => void;
+  filterFaultType: string;
+  dateRange: DateRange;
+  selectedDay: Date | undefined;
+  selectedMonth: number | undefined;
+  selectedMonthYear: number | undefined;
+  selectedYear: number | undefined;
+  dateFilterType: "range" | "day" | "month" | "year";
+}
+
 export default function DashboardPage() {
   const { isAuthenticated, user } = useAuth();
   const { getFilteredFaults, regions, districts, op5Faults, controlSystemOutages } = useData();
@@ -27,7 +50,7 @@ export default function DashboardPage() {
   
   const [filterRegion, setFilterRegion] = useState<string | undefined>(undefined);
   const [filterDistrict, setFilterDistrict] = useState<string | undefined>(undefined);
-  const [filterStatus, setFilterStatus] = useState<"all" | "active" | "resolved">("all");
+  const [filterStatus, setFilterStatus] = useState<"all" | "pending" | "resolved">("all");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [faults, setFaults] = useState<{op5Faults: OP5Fault[], controlOutages: ControlSystemOutage[]}>({
     op5Faults: [],

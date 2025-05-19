@@ -118,8 +118,8 @@ export type StatsOverviewProps = {
 export interface FilterBarProps {
   setFilterRegion: (region: string | undefined) => void;
   setFilterDistrict: (district: string | undefined) => void;
-  setFilterStatus: (status: "all" | "active" | "resolved") => void;
-  filterStatus: "all" | "active" | "resolved";
+  setFilterStatus: (status: "all" | "pending" | "resolved") => void;
+  filterStatus: "all" | "pending" | "resolved";
   onRefresh: () => void;
   isRefreshing: boolean;
   // Advanced filter props
@@ -146,39 +146,35 @@ export interface BaseAsset {
   createdBy: string;
 }
 
-export interface OP5Fault extends BaseRecord {
-  faultType: string;
+export interface OP5Fault {
+  id: string;
+  faultType: FaultType;
+  specificFaultType: UnplannedFaultType | EmergencyFaultType | string; // Allow string for custom fault types
   substationName: string;
   substationNo: string;
-  feeder?: string;
-  voltageLevel?: string;
+  feeder: string;
+  voltageLevel: string;
   occurrenceDate: string;
-  restorationDate?: string;
-  repairDate?: string;
+  restorationDate: string | null;
+  repairDate: string | null;
+  estimatedResolutionTime: string | null;
   description: string;
-  status: 'active' | 'resolved';
+  status: 'pending' | 'resolved';
   mttr?: number;
   regionId: string;
   region: string;
   districtId: string;
   district: string;
-  affectedPopulation?: {
-    rural: number;
-    urban: number;
-    metro: number;
-  };
-  clientId?: string;
-  materialsUsed?: {
-    id: string;
-    type: string;
-    details: {
-      rating?: string;
-      type?: string;
-      description?: string;
-    };
-  }[];
+  areasAffected: string;
+  affectedPopulation: AffectedPopulation;
+  materialsUsed: MaterialUsed[];
+  createdAt: string;
+  updatedAt: string;
   createdBy: string;
   updatedBy: string;
+  fuseCircuit?: string; // Add optional field for fuse circuit
+  fusePhase?: string; // Add optional field for fuse phase
+  otherFaultType?: string; // Add optional field for other fault type
 }
 
 export interface ControlSystemOutage extends BaseRecord {
@@ -186,6 +182,7 @@ export interface ControlSystemOutage extends BaseRecord {
   districtId: string;
   occurrenceDate: string;
   restorationDate?: string;
+  estimatedResolutionTime: string | null;
   faultType: FaultType;
   specificFaultType?: UnplannedFaultType | EmergencyFaultType;
   reason?: string;
@@ -198,7 +195,7 @@ export interface ControlSystemOutage extends BaseRecord {
     urban: number;
     metro: number;
   };
-  status: 'active' | 'resolved';
+  status: 'pending' | 'resolved';
   clientId?: string;
   createdBy: string;
   updatedBy: string;

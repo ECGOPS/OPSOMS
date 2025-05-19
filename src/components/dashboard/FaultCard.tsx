@@ -22,10 +22,18 @@ interface EnhancedControlSystemOutage extends ControlSystemOutage {
   unservedEnergyMWh?: number;
 }
 
-type FaultCardProps = {
-  fault: OP5Fault | ControlSystemOutage;
+interface FaultCardProps {
+  fault: {
+    id: string;
+    status: "pending" | "resolved";
+    faultType: string;
+    occurrenceDate: string;
+    restorationDate?: string;
+    regionId: string;
+    districtId: string;
+  };
   type: "op5" | "control";
-};
+}
 
 export function FaultCard({ fault, type }: FaultCardProps) {
   const { regions, districts, resolveFault, deleteFault, canEditFault } = useData();
@@ -87,7 +95,7 @@ export function FaultCard({ fault, type }: FaultCardProps) {
     }
   };
   
-  const statusClass = fault.status === "active" 
+  const statusClass = fault.status === "pending" 
     ? "bg-red-100 text-red-800 border border-red-200" 
     : "bg-green-100 text-green-800 border border-green-200";
   
@@ -202,7 +210,7 @@ export function FaultCard({ fault, type }: FaultCardProps) {
             {isOP5 ? "OP5 Fault" : "Control System Outage"}
           </CardTitle>
           <Badge className={`${statusClass} shadow-sm`}>
-            {fault.status === "active" ? "Active" : "Resolved"}
+            {fault.status === "pending" ? "Pending" : "Resolved"}
           </Badge>
         </div>
         <CardDescription className="flex items-center gap-1">

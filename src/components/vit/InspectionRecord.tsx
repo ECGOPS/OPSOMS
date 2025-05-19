@@ -229,7 +229,7 @@ export const InspectionRecord = ({
       {inspection.remarks && (
         <div className="mt-4">
           <h4 className="text-sm font-medium mb-2">Remarks</h4>
-          <p className="text-sm bg-gray-50 p-3 rounded-md">{inspection.remarks}</p>
+          <p className="text-sm bg-muted/50 p-3 rounded-md">{inspection.remarks}</p>
         </div>
       )}
     </div>

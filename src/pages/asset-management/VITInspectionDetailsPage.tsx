@@ -110,7 +110,7 @@ export default function VITInspectionDetailsPage() {
           
           {/* Inspection History */}
           <div className="lg:col-span-2">
-            <div className="bg-white rounded-lg border shadow-sm">
+            <div className="rounded-lg border shadow-sm">
               <div className="p-6">
                 <h2 className="text-xl font-semibold mb-4">Inspection History</h2>
                 

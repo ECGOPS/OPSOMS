@@ -4,7 +4,14 @@ import { calculateOutageDuration } from "@/lib/calculations";
 import { formatDuration } from "@/utils/calculations";
 
 interface OP5FaultCardProps {
-  fault: OP5Fault;
+  fault: {
+    id: string;
+    status: "pending" | "resolved";
+    faultType: string;
+    occurrenceDate: string;
+    restorationDate?: string;
+    faultLocation: string;
+  };
 }
 
 export function OP5FaultCard({ fault }: OP5FaultCardProps) {
@@ -16,7 +23,7 @@ export function OP5FaultCard({ fault }: OP5FaultCardProps) {
       <div className="flex items-center justify-between">
         <h3 className="font-medium">{fault.faultType}</h3>
         <span className={`px-2 py-1 rounded-full text-xs ${
-          fault.status === "active" ? "bg-yellow-100 text-yellow-800" : "bg-green-100 text-green-800"
+          fault.status === "pending" ? "bg-yellow-100 text-yellow-800" : "bg-green-100 text-green-800"
         }`}>
           {fault.status}
         </span>

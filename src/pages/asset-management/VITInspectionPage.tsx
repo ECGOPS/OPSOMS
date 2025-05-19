@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { Layout } from "@/components/layout/Layout";
@@ -10,6 +10,10 @@ import { VITInspectionForm } from "@/components/vit/VITInspectionForm";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { VITAsset } from "@/lib/types";
 import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
+import { getPendingSyncItems } from "@/utils/db";
+import { syncPendingChanges } from "@/utils/sync";
+import { initDB } from "@/utils/db";
 
 export default function VITInspectionPage() {
   const { vitAssets, vitInspections, regions, districts } = useData();
@@ -21,24 +25,54 @@ export default function VITInspectionPage() {
   const [selectedAsset, setSelectedAsset] = useState<VITAsset | null>(null);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [forceUpdate, setForceUpdate] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [pendingSync, setPendingSync] = useState(false);
   
+  // Initialize database on mount
+  useEffect(() => {
+    const initializeDatabase = async () => {
+      try {
+        await initDB();
+      } catch (error) {
+        console.error('Error initializing database:', error);
+        toast.error('Failed to initialize offline storage');
+      }
+    };
+    initializeDatabase();
+  }, []);
+
   // Filter assets based on user role
   const filteredAssets = useMemo(() => {
     if (!user) return [];
     
+    // Use a Map to ensure unique assets by ID
+    const uniqueAssets = new Map<string, VITAsset>();
+    
     if (user.role === "system_admin" || user.role === "global_engineer") {
-      return vitAssets;
+      vitAssets.forEach(asset => {
+        if (!uniqueAssets.has(asset.id)) {
+          uniqueAssets.set(asset.id, asset);
+        }
+      });
+    } else if (user.role === "regional_engineer") {
+      vitAssets
+        .filter(asset => asset.region === user.region)
+        .forEach(asset => {
+          if (!uniqueAssets.has(asset.id)) {
+            uniqueAssets.set(asset.id, asset);
+          }
+        });
+    } else if (user.role === "district_engineer" || user.role === "technician") {
+      vitAssets
+        .filter(asset => asset.district === user.district)
+        .forEach(asset => {
+          if (!uniqueAssets.has(asset.id)) {
+            uniqueAssets.set(asset.id, asset);
+          }
+        });
     }
     
-    if (user.role === "regional_engineer") {
-      return vitAssets.filter(asset => asset.region === user.region);
-      }
-    
-    if (user.role === "district_engineer" || user.role === "technician") {
-      return vitAssets.filter(asset => asset.district === user.district);
-      }
-    
-    return [];
+    return Array.from(uniqueAssets.values());
   }, [vitAssets, user]);
 
   // Filter inspections based on user role
@@ -50,11 +84,11 @@ export default function VITInspectionPage() {
     }
     
     if (user.role === "regional_engineer") {
-    return vitInspections.filter(inspection => {
-      const asset = vitAssets.find(a => a.id === inspection.vitAssetId);
+      return vitInspections.filter(inspection => {
+        const asset = vitAssets.find(a => a.id === inspection.vitAssetId);
         return asset?.region === user.region;
       });
-      }
+    }
     
     if (user.role === "district_engineer" || user.role === "technician") {
       return vitInspections.filter(inspection => {
@@ -65,6 +99,47 @@ export default function VITInspectionPage() {
     
     return [];
   }, [vitInspections, vitAssets, user]);
+
+  // Add effect to handle online/offline status
+  useEffect(() => {
+    const handleOnlineStatusChange = () => {
+      const isOnlineNow = navigator.onLine;
+      setIsOnline(isOnlineNow);
+      
+      if (isOnlineNow) {
+        // Trigger sync when coming back online
+        setForceUpdate(prev => !prev);
+      }
+    };
+
+    window.addEventListener('online', handleOnlineStatusChange);
+    window.addEventListener('offline', handleOnlineStatusChange);
+
+    return () => {
+      window.removeEventListener('online', handleOnlineStatusChange);
+      window.removeEventListener('offline', handleOnlineStatusChange);
+    };
+  }, []);
+
+  // Add effect to handle pending sync status
+  useEffect(() => {
+    const checkPendingSync = async () => {
+      try {
+        const pendingItems = await getPendingSyncItems();
+        const hasPendingVITItems = pendingItems.some(
+          item => item.type === 'vitAssets' || item.type === 'vitInspections'
+        );
+        setPendingSync(hasPendingVITItems);
+      } catch (error) {
+        console.error('Error checking pending sync:', error);
+      }
+    };
+
+    checkPendingSync();
+    const interval = setInterval(checkPendingSync, 5000);
+
+    return () => clearInterval(interval);
+  }, []);
   
   const handleAddAsset = () => {
     setSelectedAsset(null);
@@ -98,6 +173,23 @@ export default function VITInspectionPage() {
     navigate(`/asset-management/vit-inspection-details/${assetId}`);
   };
 
+  const handleSync = async () => {
+    try {
+      const { successCount, failureCount } = await syncPendingChanges();
+      if (successCount > 0) {
+        toast.success(`Successfully synced ${successCount} items`);
+      }
+      if (failureCount > 0) {
+        toast.error(`Failed to sync ${failureCount} items`);
+      }
+      // Force a re-render to update the UI
+      setForceUpdate(prev => !prev);
+    } catch (error) {
+      console.error('Error syncing:', error);
+      toast.error('Failed to sync changes');
+    }
+  };
+
   return (
     <Layout>
       <div className="container py-8">
@@ -107,6 +199,28 @@ export default function VITInspectionPage() {
             <p className="text-muted-foreground mt-1">
               Manage and monitor VIT assets and conduct inspections
             </p>
+          </div>
+          <div className="flex items-center gap-4 mt-4 md:mt-0">
+            {!isOnline && (
+              <div className="flex items-center gap-2 text-yellow-600">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <span>You are offline</span>
+              </div>
+            )}
+            {pendingSync && (
+              <Button
+                onClick={handleSync}
+                variant="outline"
+                className="inline-flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Sync Now
+              </Button>
+            )}
           </div>
         </div>
 
@@ -162,7 +276,7 @@ export default function VITInspectionPage() {
                         const district = districts.find(d => d.name === asset.district)?.name || "Unknown";
                         
                         return (
-                          <tr key={inspection.id}>
+                          <tr key={`inspection-${inspection.id}`}>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                               {new Date(inspection.inspectionDate).toLocaleDateString()}
                             </td>

@@ -23,7 +23,7 @@ import { VITAsset } from "@/lib/types";
 import { formatDate } from "@/utils/calculations";
 import { useData } from "@/contexts/DataContext";
 import { MoreHorizontal, FileText, Edit, Trash2, Download, Search, Plus } from "lucide-react";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface VITAssetsTableProps {
   assets?: VITAsset[];
@@ -41,9 +41,20 @@ export function VITAssetsTable({ assets: propAssets, onAddAsset, onEditAsset, on
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
   useEffect(() => {
+    const sourceAssets = propAssets || vitAssets;
+    // Use a Map to ensure unique assets by ID
+    const uniqueAssets = new Map<string, VITAsset>();
+    sourceAssets.forEach(asset => {
+      if (!uniqueAssets.has(asset.id)) {
+        uniqueAssets.set(asset.id, asset);
+      }
+    });
+    
+    const uniqueAssetsArray = Array.from(uniqueAssets.values());
+    
     if (searchTerm) {
       setFilteredAssets(
-        (propAssets || vitAssets).filter(
+        uniqueAssetsArray.filter(
           (asset) =>
             asset.serialNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
             asset.location.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -53,7 +64,7 @@ export function VITAssetsTable({ assets: propAssets, onAddAsset, onEditAsset, on
         )
       );
     } else {
-      setFilteredAssets(propAssets || vitAssets);
+      setFilteredAssets(uniqueAssetsArray);
     }
   }, [searchTerm, propAssets, vitAssets]);
 
@@ -77,11 +88,15 @@ export function VITAssetsTable({ assets: propAssets, onAddAsset, onEditAsset, on
     setIsDeleteDialogOpen(true);
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (assetToDelete) {
-      deleteVITAsset(assetToDelete.id);
-      setIsDeleteDialogOpen(false);
-      setAssetToDelete(null);
+      try {
+        await deleteVITAsset(assetToDelete.id);
+        setIsDeleteDialogOpen(false);
+        setAssetToDelete(null);
+      } catch (error) {
+        console.error("Error deleting asset:", error);
+      }
     }
   };
 
@@ -195,9 +210,9 @@ export function VITAssetsTable({ assets: propAssets, onAddAsset, onEditAsset, on
                 </TableCell>
               </TableRow>
             ) : (
-              filteredAssets.map((asset) => (
+              filteredAssets.map((asset, index) => (
                 <TableRow
-                  key={asset.id}
+                  key={`vit-asset-${asset.id}-${index}`}
                   onClick={() => handleViewDetails(asset.id)}
                   className="cursor-pointer hover:bg-muted transition-colors"
                 >

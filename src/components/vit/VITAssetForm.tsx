@@ -441,7 +441,7 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
       <CardHeader>
         <CardTitle>{asset ? "Edit VIT Asset" : "Add New VIT Asset"}</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="bg-card">
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">

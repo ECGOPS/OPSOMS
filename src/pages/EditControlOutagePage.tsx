@@ -178,7 +178,7 @@ export default function EditControlOutagePage() {
         loadMW: formData.loadMW,
         unservedEnergyMWh: finalUnservedEnergy,
         customersAffected: formData.customersAffected || { rural: 0, urban: 0, metro: 0 },
-        status: formData.restorationDate ? 'resolved' : 'active'
+        status: formData.restorationDate ? 'resolved' : 'pending'
       };
 
       await updateControlSystemOutage(outage.id, formDataToSubmit);

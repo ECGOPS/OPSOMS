@@ -57,6 +57,8 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
   const [indications, setIndications] = useState<string>("");
   const [areaAffected, setAreaAffected] = useState<string>("");
   const [loadMW, setLoadMW] = useState<number>(0);
+  const [estimatedResolutionTime, setEstimatedResolutionTime] = useState<string>("");
+  const [estimatedDuration, setEstimatedDuration] = useState<number | null>(null);
   
   // Derived values
   const [durationHours, setDurationHours] = useState<number | null>(null);
@@ -164,6 +166,20 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
   // Calculate metrics when dates or load changes
   useEffect(() => {
     if (occurrenceDate) {
+      // Validate estimated resolution time if it exists
+      if (estimatedResolutionTime) {
+        if (new Date(estimatedResolutionTime) <= new Date(occurrenceDate)) {
+          toast.error("Estimated resolution time must be after occurrence date");
+          setEstimatedResolutionTime("");
+          setEstimatedDuration(null);
+          return;
+        }
+        const duration = calculateDurationHours(occurrenceDate, estimatedResolutionTime);
+        setEstimatedDuration(duration);
+      } else {
+        setEstimatedDuration(null);
+      }
+
       // Validate restoration date if it exists
       if (restorationDate) {
         if (new Date(restorationDate) <= new Date(occurrenceDate)) {
@@ -182,7 +198,7 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
         }
       }
     }
-  }, [occurrenceDate, restorationDate, loadMW]);
+  }, [occurrenceDate, restorationDate, loadMW, estimatedResolutionTime]);
   
   // Add these helper functions before the handleSubmit function
   const getRegionName = (id: string) => regions.find(r => r.id === id)?.name || "Unknown";
@@ -204,6 +220,8 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
     setDurationHours(null);
     setUnservedEnergyMWh(null);
     setSpecificFaultType(undefined);
+    setEstimatedResolutionTime("");
+    setEstimatedDuration(null);
   };
   
   const handleSubmit = async (e: React.FormEvent) => {
@@ -232,6 +250,7 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
       // Format dates
       const formattedOccurrenceDate = new Date(occurrenceDate).toISOString();
       const formattedRestorationDate = restorationDate ? new Date(restorationDate).toISOString() : null;
+      const formattedEstimatedResolutionTime = estimatedResolutionTime ? new Date(estimatedResolutionTime).toISOString() : null;
 
       // Construct the base data object without audit fields
       const formDataToSubmit: Omit<ControlSystemOutage, "id" | "createdAt" | "updatedAt" | "createdBy" | "updatedBy" | "isOffline"> = {
@@ -240,7 +259,7 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
         occurrenceDate: formattedOccurrenceDate,
         restorationDate: formattedRestorationDate,
         faultType: faultType as FaultType,
-        status: restorationDate ? "resolved" as const : "active" as const,
+        status: restorationDate ? "resolved" as const : "pending" as const,
         loadMW: loadMW || 0,
         unservedEnergyMWh: unservedEnergyMWh || 0,
         reason: reason || "",
@@ -251,6 +270,7 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
           urban: urbanAffected ?? 0,
           metro: metroAffected ?? 0
         },
+        estimatedResolutionTime: formattedEstimatedResolutionTime,
       };
 
       const offlineStorage = OfflineStorageService.getInstance();
@@ -370,6 +390,28 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
               />
             </div>
             
+            <div className="space-y-3">
+              <Label htmlFor="estimatedResolutionTime" className="text-base font-medium">Estimated Resolution Time</Label>
+              <Input
+                id="estimatedResolutionTime"
+                type="datetime-local"
+                value={estimatedResolutionTime}
+                onChange={(e) => setEstimatedResolutionTime(e.target.value)}
+                className="h-12 text-base bg-background/50 border-muted"
+                placeholder="Select estimated resolution time"
+              />
+              <p className="text-sm text-muted-foreground">
+                When do you expect to resolve this outage?
+                {estimatedDuration !== null && (
+                  <span className="block mt-1">
+                    Estimated duration: {estimatedDuration.toFixed(2)} hours
+                  </span>
+                )}
+              </p>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="space-y-3">
               <Label htmlFor="faultType" className="text-base font-medium">Type of Fault</Label>
               <Select value={faultType} onValueChange={(value) => setFaultType(value as FaultType)} required>

@@ -70,6 +70,7 @@ export function StaffIdManagement() {
   const [hasMore, setHasMore] = useState(true);
   const [visibleItems, setVisibleItems] = useState(50);
   const tableRef = useRef<HTMLDivElement>(null);
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
 
   // Memoize filtered results for better performance
   const filteredResults = useMemo(() => {
@@ -277,6 +278,7 @@ export function StaffIdManagement() {
   const handleDelete = async (id: string) => {
     try {
       await deleteStaffId(id);
+      setIsDeleting(null);
       toast.success("Staff ID deleted successfully");
     } catch (error) {
       setError((error as Error).message);
@@ -958,7 +960,7 @@ Admin User,system_admin,,,ECGADMIN`;
                           ) : (
                             <>
                               <Button variant="outline" size="sm" onClick={() => setIsEditing(entry.id)} className="w-full sm:w-auto">Edit</Button>
-                              <Button variant="destructive" size="sm" onClick={() => handleDelete(entry.id)} className="w-full sm:w-auto">Delete</Button>
+                              <Button variant="destructive" size="sm" onClick={() => setIsDeleting(entry.id)} className="w-full sm:w-auto">Delete</Button>
                             </>
                           )}
                         </div>
@@ -975,6 +977,55 @@ Admin User,system_admin,,,ECGADMIN`;
             </div>
           )}
         </div>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={isDeleting !== null} onOpenChange={() => setIsDeleting(null)}>
+          <DialogContent className="w-[95vw] sm:max-w-[600px]">
+            <DialogHeader>
+              <DialogTitle className="text-destructive">Delete Staff ID</DialogTitle>
+              <DialogDescription className="text-destructive/90">
+                Warning: This action cannot be undone. Deleting a staff ID will permanently remove it from the system.
+              </DialogDescription>
+            </DialogHeader>
+            
+            {isDeleting && staffIds.find(s => s.id === isDeleting) && (
+              <div className="py-4 space-y-3 border rounded-lg bg-destructive/5 p-4">
+                <div className="flex items-center gap-2 text-destructive">
+                  <Trash2 className="h-5 w-5" />
+                  <h4 className="font-semibold">Staff ID Details to be Deleted</h4>
+                </div>
+                <div className="space-y-2 text-sm">
+                  <p><span className="font-medium">Staff ID:</span> {isDeleting}</p>
+                  <p><span className="font-medium">Name:</span> {staffIds.find(s => s.id === isDeleting)?.name}</p>
+                  <p><span className="font-medium">Role:</span> {getRoleLabel(staffIds.find(s => s.id === isDeleting)?.role as UserRole)}</p>
+                  {staffIds.find(s => s.id === isDeleting)?.region && (
+                    <p><span className="font-medium">Region:</span> {staffIds.find(s => s.id === isDeleting)?.region}</p>
+                  )}
+                  {staffIds.find(s => s.id === isDeleting)?.district && (
+                    <p><span className="font-medium">District:</span> {staffIds.find(s => s.id === isDeleting)?.district}</p>
+                  )}
+                </div>
+              </div>
+            )}
+            
+            <div className="flex flex-col sm:flex-row justify-end gap-2 mt-6">
+              <Button 
+                variant="outline" 
+                onClick={() => setIsDeleting(null)}
+                className="w-full sm:w-auto"
+              >
+                Cancel
+              </Button>
+              <Button 
+                variant="destructive" 
+                onClick={() => isDeleting && handleDelete(isDeleting)}
+                className="w-full sm:w-auto"
+              >
+                Delete Staff ID
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   );

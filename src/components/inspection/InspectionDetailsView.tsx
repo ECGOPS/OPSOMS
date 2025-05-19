@@ -79,7 +79,7 @@ export function InspectionDetailsView({
         </div>
       )}
 
-      <Card className="mb-8 bg-blue-50">
+      <Card className="mb-8">
         <CardHeader className="border-b">
           <div>
             <CardTitle className="text-2xl">Inspection Details</CardTitle>
@@ -88,7 +88,7 @@ export function InspectionDetailsView({
             </CardDescription>
           </div>
         </CardHeader>
-        <CardContent className="pt-6 bg-gray-50">
+        <CardContent className="pt-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <div className="bg-muted/50 p-4 rounded-lg">
               <p className="text-sm font-medium text-muted-foreground mb-1">Region</p>
@@ -144,29 +144,29 @@ export function InspectionDetailsView({
           <div className="mt-8">
             <h3 className="text-lg font-semibold mb-4">Inspection Status Summary</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-green-50/50 p-6 rounded-lg border border-green-100">
+              <div className="bg-green-500/10 p-6 rounded-lg border border-green-500/20">
                 <div className="flex items-center gap-3">
-                  <div className="bg-green-100 p-2 rounded-full">
-                    <CheckCircle2 className="h-6 w-6 text-green-600" />
+                  <div className="bg-green-500/20 p-2 rounded-full">
+                    <CheckCircle2 className="h-6 w-6 text-green-500" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold text-green-700">
+                    <p className="text-2xl font-bold text-green-500">
                       {statusSummary.good}
                     </p>
-                    <p className="text-sm text-green-600">Good Items</p>
+                    <p className="text-sm text-green-500/80">Good Items</p>
                   </div>
                 </div>
               </div>
-              <div className="bg-red-50/50 p-6 rounded-lg border border-red-100">
+              <div className="bg-red-500/10 p-6 rounded-lg border border-red-500/20">
                 <div className="flex items-center gap-3">
-                  <div className="bg-red-100 p-2 rounded-full">
-                    <AlertCircle className="h-6 w-6 text-red-600" />
+                  <div className="bg-red-500/20 p-2 rounded-full">
+                    <AlertCircle className="h-6 w-6 text-red-500" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold text-red-700">
+                    <p className="text-2xl font-bold text-red-500">
                       {statusSummary.requiresAttention}
                     </p>
-                    <p className="text-sm text-red-600">Items Requiring Attention</p>
+                    <p className="text-sm text-red-500/80">Items Requiring Attention</p>
                   </div>
                 </div>
               </div>

@@ -40,27 +40,9 @@ export function VITInspectionForm({
   onSubmit,
   onCancel,
 }: VITInspectionFormProps) {
-  console.log('[VITInspectionForm] Component rendered', { inspectionData, assetId });
-  
   const { vitAssets, addVITInspection, updateVITInspection, regions, districts } = useData();
   const { user } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
-
-  // Monitor online/offline status
-  useEffect(() => {
-    console.log('[VITInspectionForm] Online status changed:', navigator.onLine);
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
 
   // Form fields
   const [selectedAssetId, setSelectedAssetId] = useState<string>(assetId || inspectionData?.vitAssetId || "");
@@ -321,12 +303,6 @@ export function VITInspectionForm({
         <CardTitle className="flex items-center gap-2">
           <ClipboardList className="h-5 w-5" />
           {inspectionData ? "Edit VIT Inspection" : "New VIT Inspection"}
-          {!isOnline && (
-            <div className="flex items-center gap-1 text-yellow-600 text-sm font-normal">
-              <WifiOff className="h-4 w-4" />
-              Offline Mode
-            </div>
-          )}
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -871,7 +847,7 @@ export function VITInspectionForm({
               {isSubmitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {isOnline ? "Saving..." : "Saving Offline..."}
+                  Saving...
                 </>
               ) : (
                 "Save Inspection"

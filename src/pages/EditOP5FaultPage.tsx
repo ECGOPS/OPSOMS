@@ -106,7 +106,30 @@ export default function EditOP5FaultPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   // Use Partial for formData as it might not be complete initially
-  const [formData, setFormData] = useState<Partial<OP5Fault>>({});
+  const [formData, setFormData] = useState<Partial<OP5Fault>>({
+    faultType: "Planned" as FaultType, // Set a default value
+    specificFaultType: undefined,
+    areasAffected: "",
+    restorationDate: null,
+    affectedPopulation: {
+      rural: 0,
+      urban: 0,
+      metro: 0
+    },
+    materialsUsed: [],
+    substationName: "",
+    substationNo: "",
+    feeder: "",
+    voltageLevel: "",
+    description: "",
+    regionId: "",
+    districtId: "",
+    fuseCircuit: "",
+    fusePhase: "",
+    otherFaultType: "",
+    createdBy: "",
+    updatedBy: ""
+  });
 
   // Derived values state
   const [calculatedValues, setCalculatedValues] = useState<CalculatedState>({
@@ -131,19 +154,29 @@ export default function EditOP5FaultPage() {
       const fetchedFault = getOP5FaultById(id);
       if (fetchedFault) {
         setFault(fetchedFault);
-        // Log dates *before* formatting
-        // console.log("[Fetch Effect] Fetched Dates:", { 
-        //     occ: fetchedFault.occurrenceDate, 
-        //     rep: fetchedFault.repairDate, 
-        //     res: fetchedFault.restorationDate 
-        // });
         
         const formattedOcc = formatDateForInput(fetchedFault.occurrenceDate);
         const formattedRep = formatDateForInput(fetchedFault.repairDate);
         const formattedRes = formatDateForInput(fetchedFault.restorationDate);
         
-        // Log formatted dates *before* setting state
-        // console.log("[Fetch Effect] Formatted Dates for State:", { formattedOcc, formattedRep, formattedRes });
+        // Parse fuse-specific information from description if it exists
+        let fuseCircuit = "";
+        let fusePhase = "";
+        let description = fetchedFault.description || "";
+        
+        if (fetchedFault.specificFaultType === "REPLACE FUSE") {
+          const circuitMatch = description.match(/Circuit: ([^,]+)/);
+          const phaseMatch = description.match(/Phase: ([^,]+)/);
+          
+          if (circuitMatch) {
+            fuseCircuit = circuitMatch[1].trim();
+            description = description.replace(/Circuit: [^,]+,/, "").trim();
+          }
+          if (phaseMatch) {
+            fusePhase = phaseMatch[1].trim();
+            description = description.replace(/Phase: [^,]+,/, "").trim();
+          }
+        }
 
         setFormData({
           ...fetchedFault,
@@ -151,19 +184,22 @@ export default function EditOP5FaultPage() {
           repairDate: formattedRep,
           restorationDate: formattedRes,
           affectedPopulation: fetchedFault.affectedPopulation || { rural: 0, urban: 0, metro: 0 },
-          materialsUsed: fetchedFault.materialsUsed || [] // Ensure materials are initialized
+          materialsUsed: fetchedFault.materialsUsed || [],
+          description: description,
+          fuseCircuit: fuseCircuit,
+          fusePhase: fusePhase,
+          otherFaultType: fetchedFault.specificFaultType === "OTHERS" ? fetchedFault.otherFaultType || "" : ""
         });
       } else {
-         console.error(`[EditOP5FaultPage] Fault with ID ${id} not found.`);
-         toast.error("Fault not found.");
-         navigate("/dashboard");
+        console.error(`[EditOP5FaultPage] Fault with ID ${id} not found.`);
+        toast.error("Fault not found.");
+        navigate("/dashboard");
       }
       setIsLoading(false);
     } else {
-       console.error("[EditOP5FaultPage] No fault ID provided in URL.");
-      navigate("/dashboard"); // Redirect if no ID
+      console.error("[EditOP5FaultPage] No fault ID provided in URL.");
+      navigate("/dashboard");
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, getOP5FaultById, navigate]);
 
   // Calculate metrics when form data changes
@@ -342,79 +378,72 @@ export default function EditOP5FaultPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!fault) {
-      toast.error("Cannot submit: Fault data not loaded.");
-      return;
-    }
-    
-    if (typeof updateOP5Fault !== 'function') {
-        toast.error("Cannot submit: Update function is not available.");
-        return;
-    }
-    
+    if (!fault || !updateOP5Fault) return;
+
+    // Validate required fields
     if (!formData.regionId || !formData.districtId) {
-      toast.error("Please select region and district");
+      toast.error("Region and district are required");
       return;
     }
-    
+
+    // Validate fuse-specific fields if Replace Fuse is selected
+    if (formData.specificFaultType === "REPLACE FUSE") {
+      if (!formData.fuseCircuit) {
+        toast.error("Circuit is required for Replace Fuse");
+        return;
+      }
+      if (!formData.fusePhase) {
+        toast.error("Phase is required for Replace Fuse");
+        return;
+      }
+    }
+
+    // Validate other fault type if Others is selected
+    if (formData.specificFaultType === "OTHERS" && !formData.otherFaultType) {
+      toast.error("Please specify the fault type");
+      return;
+    }
+
     setIsSubmitting(true);
-    
+
     try {
-      // Log initial form data
-      console.log("[handleSubmit] Initial form data:", formData);
-      console.log("[handleSubmit] Materials in form data:", formData.materialsUsed);
+      // Parse dates
+      const occurrenceDate = formData.occurrenceDate ? new Date(formData.occurrenceDate).toISOString() : null;
+      const repairDate = formData.repairDate ? new Date(formData.repairDate).toISOString() : null;
+      const restorationDate = formData.restorationDate ? new Date(formData.restorationDate).toISOString() : null;
 
-      // Parse dates from form data
-      const occurrenceDateTime = formData.occurrenceDate ? new Date(formData.occurrenceDate) : null;
-      const repairDateTime = formData.repairDate ? new Date(formData.repairDate) : null;
-      const restorationDateTime = formData.restorationDate ? new Date(formData.restorationDate) : null;
-
-      // Format dates to ISO strings
-      const formattedOccurrenceDate = occurrenceDateTime ? occurrenceDateTime.toISOString() : null;
-      const formattedRepairDate = repairDateTime ? repairDateTime.toISOString() : null;
-      const formattedRestorationDate = restorationDateTime ? restorationDateTime.toISOString() : null;
-
-      const mttrValue = calculatedValues.mttr ?? 0;
-      const totalIndices = calculatedValues.reliabilityIndices.total ?? { saidi: 0, saifi: 0, caidi: 0 };
-
-      // Create the form data to submit
+      // Prepare the data for submission
       const formDataToSubmit: Partial<OP5Fault> = {
-        regionId: formData.regionId || fault.regionId,
-        districtId: formData.districtId || fault.districtId,
-        occurrenceDate: formattedOccurrenceDate || fault.occurrenceDate,
-        repairDate: formattedRepairDate || fault.repairDate,
-        faultType: formData.faultType || fault.faultType,
-        specificFaultType: formData.specificFaultType || fault.specificFaultType || null,
-        faultLocation: formData.faultLocation || fault.faultLocation || null,
-        restorationDate: formattedRestorationDate || null,
-        affectedPopulation: {
-          rural: formData.affectedPopulation?.rural ?? fault.affectedPopulation?.rural ?? 0,
-          urban: formData.affectedPopulation?.urban ?? fault.affectedPopulation?.urban ?? 0,
-          metro: formData.affectedPopulation?.metro ?? fault.affectedPopulation?.metro ?? 0
-        },
-        mttr: mttrValue,
-        reliabilityIndices: totalIndices,
-        materialsUsed: formData.materialsUsed || [], // Ensure materials are included
-        outageDescription: formData.outageDescription || null
+        ...formData,
+        occurrenceDate,
+        repairDate,
+        restorationDate,
+        status: restorationDate ? 'resolved' as const : 'pending' as const,
+        updatedAt: new Date().toISOString(),
+        updatedBy: user?.uid || "",
+        // Add fuse-specific fields to the description if Replace Fuse is selected
+        description: formData.specificFaultType === "REPLACE FUSE" 
+          ? `${formData.description || ""} Circuit: ${formData.fuseCircuit}, Phase: ${formData.fusePhase}`
+          : formData.description || "",
+        // Use otherFaultType if Others is selected
+        specificFaultType: formData.specificFaultType === "OTHERS" 
+          ? formData.otherFaultType 
+          : formData.specificFaultType
       };
 
-      // Remove any undefined values before submitting
+      // Remove undefined values
       Object.keys(formDataToSubmit).forEach(key => {
-        if (formDataToSubmit[key as keyof typeof formDataToSubmit] === undefined) {
-          delete formDataToSubmit[key as keyof typeof formDataToSubmit];
+        if (formDataToSubmit[key] === undefined) {
+          delete formDataToSubmit[key];
         }
       });
-
-      // Log the form data before submission
-      console.log("[handleSubmit] Submitting form data:", formDataToSubmit);
-      console.log("[handleSubmit] Materials in submission:", formDataToSubmit.materialsUsed);
 
       await updateOP5Fault(fault.id, formDataToSubmit);
       toast.success("Fault updated successfully");
       navigate("/dashboard");
     } catch (error) {
-      console.error("[handleSubmit] Error updating fault:", error);
-      toast.error(`Failed to update fault: ${error instanceof Error ? error.message : String(error)}`);
+      console.error("Error updating fault:", error);
+      toast.error("Failed to update fault");
     } finally {
       setIsSubmitting(false);
     }
@@ -610,9 +639,9 @@ export default function EditOP5FaultPage() {
               <div className="flex items-start gap-3">
                 <MapPin className="h-5 w-5 text-muted-foreground mt-0.5" />
                 <div>
-                  <div className="font-medium text-base">Location</div>
+                  <div className="font-medium text-base">Areas Affected</div>
                   <div className="text-muted-foreground mt-1">{regionName}, {districtName}</div>
-                  <div className="text-sm mt-2">{formData.faultLocation || "No specific location"}</div>
+                  <div className="text-sm mt-2">{formData.areasAffected || "No specific areas affected"}</div>
                 </div>
               </div>
               
@@ -695,10 +724,10 @@ export default function EditOP5FaultPage() {
                     </div>
                     
                     <div className="space-y-2 sm:col-span-2">
-                      <Label htmlFor="faultLocation" className="text-sm font-medium">Specific Fault Location</Label>
+                      <Label htmlFor="areasAffected" className="text-sm font-medium">Areas Affected</Label>
                       <Input
-                        id="faultLocation"
-                        value={formData.faultLocation || ""} 
+                        id="areasAffected"
+                        value={formData.areasAffected || ""} 
                         onChange={handleInputChange}
                         placeholder="E.g., Near transformer XYZ, Pole #123, or specific address"
                         className="h-10"
@@ -734,18 +763,32 @@ export default function EditOP5FaultPage() {
                       </Select>
                     </div>
 
+                    {/* Show specific fault type dropdown when Unplanned or Emergency is selected */}
                     {(formData.faultType === "Unplanned" || formData.faultType === "Emergency") && (
-                      <div className="space-y-2">
-                        <Label htmlFor="specificFaultType" className="text-sm font-medium">Specific Fault Type</Label>
-                        <Select
-                          value={formData.specificFaultType || ''}
-                          onValueChange={(value) => handleSelectChange('specificFaultType', value)}
+                      <div className="space-y-3">
+                        <Label htmlFor="specificFaultType" className="text-base font-medium">Specific Fault Type</Label>
+                        <Select 
+                          value={formData.specificFaultType || ""} 
+                          onValueChange={(value) => {
+                            setFormData(prev => ({
+                              ...prev,
+                              specificFaultType: value,
+                              // Reset fuse-specific fields when changing fault type
+                              ...(value !== "REPLACE FUSE" && {
+                                fuseCircuit: "",
+                                fusePhase: ""
+                              }),
+                              // Reset other fault type when not selecting Others
+                              ...(value !== "OTHERS" && {
+                                otherFaultType: ""
+                              })
+                            }));
+                          }}
                         >
-                          <SelectTrigger id="specificFaultType" className="h-10">
+                          <SelectTrigger className="h-12 text-base bg-background/50 border-muted">
                             <SelectValue placeholder="Select specific fault type" />
                           </SelectTrigger>
                           <SelectContent>
-                            {/* Options based on faultType */}
                             {formData.faultType === "Unplanned" ? (
                               <>
                                 <SelectItem value="JUMPER CUT">Jumper Cut</SelectItem>
@@ -763,8 +806,10 @@ export default function EditOP5FaultPage() {
                                 <SelectItem value="ANIMAL INTERRUPTION">Animal Interruption</SelectItem>
                                 <SelectItem value="BAD WEATHER">Bad Weather</SelectItem>
                                 <SelectItem value="TRANSIENT FAULTS">Transient Faults</SelectItem>
+                                <SelectItem value="REPLACE FUSE">Replace Fuse</SelectItem>
+                                <SelectItem value="OTHERS">Others</SelectItem>
                               </>
-                            ) : formData.faultType === "Emergency" ? (
+                            ) : (
                               <>
                                 <SelectItem value="MEND CABLE">Mend Cable</SelectItem>
                                 <SelectItem value="WORK ON EQUIPMENT">Work on Equipment</SelectItem>
@@ -783,19 +828,66 @@ export default function EditOP5FaultPage() {
                                 <SelectItem value="MEND LOOSE">Mend Loose</SelectItem>
                                 <SelectItem value="MAINTENANCE">Maintenance</SelectItem>
                                 <SelectItem value="REPLACE FUSE">Replace Fuse</SelectItem>
+                                <SelectItem value="OTHERS">Others</SelectItem>
                               </>
-                            ) : null}
+                            )}
                           </SelectContent>
                         </Select>
+
+                        {/* Show additional fields for Replace Fuse */}
+                        {formData.specificFaultType === "REPLACE FUSE" && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-4">
+                            <div className="space-y-3">
+                              <Label htmlFor="fuseCircuit" className="text-base font-medium">Circuit</Label>
+                              <Input
+                                id="fuseCircuit"
+                                value={formData.fuseCircuit || ""}
+                                onChange={(e) => setFormData(prev => ({ ...prev, fuseCircuit: e.target.value }))}
+                                placeholder="Enter circuit name/number"
+                                className="h-12 text-base bg-background/50 border-muted"
+                              />
+                            </div>
+                            <div className="space-y-3">
+                              <Label htmlFor="fusePhase" className="text-base font-medium">Phase</Label>
+                              <Select 
+                                value={formData.fusePhase || ""} 
+                                onValueChange={(value) => setFormData(prev => ({ ...prev, fusePhase: value }))}
+                              >
+                                <SelectTrigger className="h-12 text-base bg-background/50 border-muted">
+                                  <SelectValue placeholder="Select phase" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="RED">Red Phase</SelectItem>
+                                  <SelectItem value="YELLOW">Yellow Phase</SelectItem>
+                                  <SelectItem value="BLUE">Blue Phase</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Show input field for Other fault type */}
+                        {formData.specificFaultType === "OTHERS" && (
+                          <div className="mt-4">
+                            <Label htmlFor="otherFaultType" className="text-base font-medium">Specify Fault Type</Label>
+                            <Input
+                              id="otherFaultType"
+                              value={formData.otherFaultType || ""}
+                              onChange={(e) => setFormData(prev => ({ ...prev, otherFaultType: e.target.value }))}
+                              placeholder="Enter the specific fault type"
+                              className="h-12 text-base bg-background/50 border-muted"
+                            />
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
 
                   <div className="pt-2">
-                    <Label htmlFor="outageDescription" className="text-sm font-medium">Fault Description</Label>
+                    <Label htmlFor="description" className="text-sm font-medium">Fault Description</Label>
                     <Textarea
-                      id="outageDescription"
-                      value={formData.outageDescription || ''}
+                      id="description"
+                      value={formData.description || ''}
                       onChange={handleInputChange}
                       placeholder="Provide a detailed description of the fault incident, including cause if known"
                       className="mt-1 h-24 resize-none"
@@ -1012,7 +1104,7 @@ export default function EditOP5FaultPage() {
                               <ActivityIcon className="h-4 w-4 text-primary"/> 
                               <span>Reliability Indices</span>
                             </Label>
-                            <InfoIcon className="h-4 w-4 text-muted-foreground" title="Calculated based on district population data"/>
+                            <InfoIcon className="h-4 w-4 text-muted-foreground" />
                           </div>
                           
                           {/* Combined Indices Table */} 

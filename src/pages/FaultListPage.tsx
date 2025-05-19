@@ -166,19 +166,20 @@ export default function FaultListPage() {
     if (!searchTerm) return faults;
     
     return faults.filter(fault => {
-      const isOP5 = 'faultLocation' in fault;
+      const isOP5 = 'substationName' in fault;
       if (isOP5) {
         const op5Fault = fault as OP5Fault;
         return (
           op5Fault.faultType.toLowerCase().includes(searchTerm.toLowerCase()) ||
           op5Fault.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          op5Fault.faultLocation.toLowerCase().includes(searchTerm.toLowerCase())
+          op5Fault.substationName.toLowerCase().includes(searchTerm.toLowerCase())
         );
       } else {
         const controlOutage = fault as ControlSystemOutage;
         return (
           controlOutage.faultType.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          controlOutage.outageDescription.toLowerCase().includes(searchTerm.toLowerCase())
+          (controlOutage.reason || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (controlOutage.areaAffected || '').toLowerCase().includes(searchTerm.toLowerCase())
         );
       }
     });
@@ -298,7 +299,7 @@ export default function FaultListPage() {
           {/* Faults List */}
           <div className="grid grid-cols-1 gap-4">
             {filteredFaults.map((fault) => {
-              const isOP5 = 'faultLocation' in fault;
+              const isOP5 = 'substationName' in fault;
               const op5Fault = isOP5 ? fault as OP5Fault : null;
               const controlOutage = !isOP5 ? fault as ControlSystemOutage : null;
 
@@ -308,7 +309,7 @@ export default function FaultListPage() {
                     <div className="flex justify-between items-start">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
-                          <Badge variant={fault.status === "active" ? "destructive" : "default"}>
+                          <Badge variant={fault.status === "pending" ? "destructive" : "default"}>
                             {fault.status}
                           </Badge>
                           <span className="text-sm text-muted-foreground">
@@ -316,7 +317,7 @@ export default function FaultListPage() {
                           </span>
                         </div>
                         <h3 className="font-semibold">
-                          {isOP5 ? op5Fault?.description : controlOutage?.outageDescription}
+                          {isOP5 ? op5Fault?.description : controlOutage?.reason}
                         </h3>
                         <p className="text-sm text-muted-foreground">
                           {regions.find(r => r.id === fault.regionId)?.name || "Unknown"} • {districts.find(d => d.id === fault.districtId)?.name || "Unknown"}

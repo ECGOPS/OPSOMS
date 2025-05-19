@@ -63,7 +63,7 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
   const [districtId, setDistrictId] = useState<string>(defaultDistrictId);
   const [outageType, setOutageType] = useState<string>("");
   const [outageDescription, setOutageDescription] = useState<string>("");
-  const [faultLocation, setFaultLocation] = useState<string>("");
+  const [areasAffected, setAreasAffected] = useState<string>("");
   const [substationNo, setSubstationNo] = useState<string>("");
   const [occurrenceDate, setOccurrenceDate] = useState<string>("");
   const [repairDate, setRepairDate] = useState<string>("");
@@ -72,6 +72,9 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
   const [urbanAffected, setUrbanAffected] = useState<number | null>(null);
   const [metroAffected, setMetroAffected] = useState<number | null>(null);
   const [specificFaultType, setSpecificFaultType] = useState<UnplannedFaultType | EmergencyFaultType | undefined>(undefined);
+  const [fuseCircuit, setFuseCircuit] = useState<string>("");
+  const [fusePhase, setFusePhase] = useState<string>("");
+  const [otherFaultType, setOtherFaultType] = useState<string>("");
   
   // Derived values
   const [outageDuration, setOutageDuration] = useState<number | null>(null);
@@ -95,6 +98,10 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
   
   // Add new state for substation name
   const [substationName, setSubstationName] = useState<string>("");
+  
+  // Add new state for estimated resolution time
+  const [estimatedResolutionTime, setEstimatedResolutionTime] = useState<string>("");
+  const [estimatedDuration, setEstimatedDuration] = useState<number | null>(null);
   
   // Check if user has permission to report faults
   useEffect(() => {
@@ -142,6 +149,20 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
   // Calculate metrics when dates change
   useEffect(() => {
     if (occurrenceDate) {
+      // Validate estimated resolution time if it exists
+      if (estimatedResolutionTime) {
+        if (new Date(estimatedResolutionTime) <= new Date(occurrenceDate)) {
+          toast.error("Estimated resolution time must be after occurrence date");
+          setEstimatedResolutionTime("");
+          setEstimatedDuration(null);
+          return;
+        }
+        const duration = calculateOutageDuration(occurrenceDate, estimatedResolutionTime);
+        setEstimatedDuration(duration);
+      } else {
+        setEstimatedDuration(null);
+      }
+
       // Validate repair date if it exists
       if (repairDate) {
         if (new Date(repairDate) <= new Date(occurrenceDate)) {
@@ -214,7 +235,7 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
         }
       }
     }
-  }, [occurrenceDate, repairDate, restorationDate, districtId, districts, ruralAffected, urbanAffected, metroAffected]);
+  }, [occurrenceDate, repairDate, restorationDate, districtId, districts, ruralAffected, urbanAffected, metroAffected, estimatedResolutionTime]);
   
   // Reset specific fault type when fault type changes
   useEffect(() => {
@@ -271,7 +292,7 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
     setDistrictId(defaultDistrictId);
     setOutageType("");
     setOutageDescription("");
-    setFaultLocation("");
+    setAreasAffected("");
     setSubstationNo("");
     setOccurrenceDate("");
     setRepairDate("");
@@ -291,6 +312,10 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
     setFeeder("");
     setVoltageLevel("");
     setSubstationName("");
+    setFuseCircuit("");
+    setFusePhase("");
+    setOtherFaultType("");
+    setEstimatedResolutionTime("");
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -308,6 +333,24 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
       return;
     }
 
+    // Validate fuse-specific fields if Replace Fuse is selected
+    if (specificFaultType === "REPLACE FUSE") {
+      if (!fuseCircuit) {
+        toast.error("Failed to create OP5 fault: Circuit is required for Replace Fuse");
+        return;
+      }
+      if (!fusePhase) {
+        toast.error("Failed to create OP5 fault: Phase is required for Replace Fuse");
+        return;
+      }
+    }
+
+    // Validate other fault type if Others is selected
+    if (specificFaultType === "OTHERS" && !otherFaultType) {
+      toast.error("Failed to create OP5 fault: Please specify the fault type");
+      return;
+    }
+
     // Check if district population is set
     if (!isDistrictPopulationSet()) {
       const selectedDistrict = districts.find(d => d.id === districtId);
@@ -320,8 +363,8 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
       return;
     }
 
-    if (!faultLocation) {
-      toast.error("Failed to create OP5 fault: Fault location is required");
+    if (!areasAffected) {
+      toast.error("Failed to create OP5 fault: Areas affected is required");
       return;
     }
 
@@ -356,9 +399,11 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
       const formattedOccurrenceDate = new Date(occurrenceDate).toISOString();
       const formattedRepairDate = repairDate ? new Date(repairDate).toISOString() : null;
       const formattedRestorationDate = restorationDate ? new Date(restorationDate).toISOString() : null;
+      const formattedEstimatedResolutionTime = estimatedResolutionTime ? new Date(estimatedResolutionTime).toISOString() : null;
 
       const formDataToSubmit: Omit<OP5Fault, "id"> = {
         faultType: outageType as FaultType,
+        specificFaultType: specificFaultType === "OTHERS" ? otherFaultType : specificFaultType,
         substationName: substationName || "",
         substationNo: substationNo || "",
         feeder: feeder || "",
@@ -367,12 +412,13 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
         restorationDate: formattedRestorationDate,
         repairDate: formattedRepairDate,
         description: outageDescription || "",
-        status: restorationDate ? 'resolved' as const : 'active' as const,
+        status: restorationDate ? 'resolved' as const : 'pending' as const,
         ...(mttr !== null && { mttr }),
         regionId,
         region: regions.find(r => r.id === regionId)?.name || '',
         districtId,
         district: districts.find(d => d.id === districtId)?.name || '',
+        areasAffected: areasAffected || "",
         affectedPopulation: {
           rural: ruralAffected || 0,
           urban: urbanAffected || 0,
@@ -388,7 +434,14 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
           }
         })),
         createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
+        createdBy: user?.uid || "",
+        updatedBy: user?.uid || "",
+        estimatedResolutionTime: formattedEstimatedResolutionTime,
+        // Add fuse-specific fields to the description if Replace Fuse is selected
+        ...(specificFaultType === "REPLACE FUSE" && {
+          description: `${outageDescription || ""} Circuit: ${fuseCircuit}, Phase: ${fusePhase}`
+        })
       };
 
       // Remove undefined fields recursively before saving
@@ -634,12 +687,12 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
             </div>
             
             <div className="space-y-3">
-              <Label htmlFor="faultLocation" className="text-base font-medium">Fault Location *</Label>
+              <Label htmlFor="areasAffected" className="text-base font-medium">Areas Affected *</Label>
               <Input
-                id="faultLocation"
-                value={faultLocation}
-                onChange={(e) => setFaultLocation(e.target.value)}
-                placeholder="Enter fault location"
+                id="areasAffected"
+                value={areasAffected}
+                onChange={(e) => setAreasAffected(e.target.value)}
+                placeholder="Enter areas affected"
                 className="h-12 text-base bg-background/50 border-muted"
                 required
               />
@@ -698,11 +751,22 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
               <Label htmlFor="specificFaultType" className="text-base font-medium">Specific Fault Type</Label>
               <Select 
                 value={specificFaultType} 
-                onValueChange={(value) => setSpecificFaultType(
-                  outageType === "Unplanned" 
-                    ? value as UnplannedFaultType 
-                    : value as EmergencyFaultType
-                )}
+                onValueChange={(value) => {
+                  setSpecificFaultType(
+                    outageType === "Unplanned" 
+                      ? value as UnplannedFaultType 
+                      : value as EmergencyFaultType
+                  );
+                  // Reset fuse-specific fields when changing fault type
+                  if (value !== "REPLACE FUSE") {
+                    setFuseCircuit("");
+                    setFusePhase("");
+                  }
+                  // Reset other fault type when not selecting Others
+                  if (value !== "OTHERS") {
+                    setOtherFaultType("");
+                  }
+                }}
               >
                 <SelectTrigger className="h-12 text-base bg-background/50 border-muted">
                   <SelectValue placeholder="Select specific fault type" />
@@ -725,6 +789,8 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
                       <SelectItem value="ANIMAL INTERRUPTION">Animal Interruption</SelectItem>
                       <SelectItem value="BAD WEATHER">Bad Weather</SelectItem>
                       <SelectItem value="TRANSIENT FAULTS">Transient Faults</SelectItem>
+                      <SelectItem value="REPLACE FUSE">Replace Fuse</SelectItem>
+                      <SelectItem value="OTHERS">Others</SelectItem>
                     </>
                   ) : (
                     <>
@@ -745,10 +811,54 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
                       <SelectItem value="MEND LOOSE">Mend Loose</SelectItem>
                       <SelectItem value="MAINTENANCE">Maintenance</SelectItem>
                       <SelectItem value="REPLACE FUSE">Replace Fuse</SelectItem>
+                      <SelectItem value="OTHERS">Others</SelectItem>
                     </>
                   )}
                 </SelectContent>
               </Select>
+
+              {/* Show additional fields for Replace Fuse */}
+              {specificFaultType === "REPLACE FUSE" && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-4">
+                  <div className="space-y-3">
+                    <Label htmlFor="fuseCircuit" className="text-base font-medium">Circuit</Label>
+                    <Input
+                      id="fuseCircuit"
+                      value={fuseCircuit}
+                      onChange={(e) => setFuseCircuit(e.target.value)}
+                      placeholder="Enter circuit name/number"
+                      className="h-12 text-base bg-background/50 border-muted"
+                    />
+                  </div>
+                  <div className="space-y-3">
+                    <Label htmlFor="fusePhase" className="text-base font-medium">Phase</Label>
+                    <Select value={fusePhase} onValueChange={setFusePhase}>
+                      <SelectTrigger className="h-12 text-base bg-background/50 border-muted">
+                        <SelectValue placeholder="Select phase" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="RED">Red Phase</SelectItem>
+                        <SelectItem value="YELLOW">Yellow Phase</SelectItem>
+                        <SelectItem value="BLUE">Blue Phase</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+
+              {/* Show input field for Other fault type */}
+              {specificFaultType === "OTHERS" && (
+                <div className="mt-4">
+                  <Label htmlFor="otherFaultType" className="text-base font-medium">Specify Fault Type</Label>
+                  <Input
+                    id="otherFaultType"
+                    value={otherFaultType}
+                    onChange={(e) => setOtherFaultType(e.target.value)}
+                    placeholder="Enter the specific fault type"
+                    className="h-12 text-base bg-background/50 border-muted"
+                  />
+                </div>
+              )}
             </div>
           )}
           
@@ -1012,6 +1122,27 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
                 />
                 <p className="text-xs text-muted-foreground">
                   Leave empty if the fault is still active
+                </p>
+              </div>
+
+              {/* Add this after the occurrence date input */}
+              <div className="space-y-3">
+                <Label htmlFor="estimatedResolutionTime" className="text-base font-medium">Estimated Resolution Time</Label>
+                <Input
+                  id="estimatedResolutionTime"
+                  type="datetime-local"
+                  value={estimatedResolutionTime}
+                  onChange={(e) => setEstimatedResolutionTime(e.target.value)}
+                  className="h-12 text-base bg-background/50 border-muted"
+                  placeholder="Select estimated resolution time"
+                />
+                <p className="text-sm text-muted-foreground">
+                  When do you expect to resolve this fault?
+                  {estimatedDuration !== null && (
+                    <span className="block mt-1">
+                      Estimated duration: {formatDuration(estimatedDuration)}
+                    </span>
+                  )}
                 </p>
               </div>
             </TabsContent>

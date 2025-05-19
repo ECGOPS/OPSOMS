@@ -375,7 +375,7 @@ export default function VITInspectionManagementPage() {
                 </Button>
               </TabsContent>
               
-              <TabsContent value="inspections" className="space-y-4">
+              <TabsContent value="inspections" className="space-y-4 bg-card p-6 rounded-md">
                 <InspectionRecordsTable 
                   onViewDetails={handleViewDetails} 
                   onEditInspection={handleEditInspection}
@@ -822,22 +822,22 @@ function InspectionRecordsTable({ onViewDetails, onEditInspection, onViewAsset }
         <div className="relative">
           <div className="overflow-x-auto">
             <div className="max-h-[calc(100vh-300px)] overflow-y-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50 sticky top-0 z-10">
+              <table className="min-w-full divide-y divide-border">
+                <thead className="bg-muted sticky top-0 z-10">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 bg-gray-50">Date</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Asset</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Region</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">District</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Inspector</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Issues</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider sticky right-0 bg-gray-50">Actions</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider sticky left-0 bg-muted">Date</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Asset</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Region</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">District</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Inspector</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Issues</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider sticky right-0 bg-muted">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="bg-card divide-y divide-border">
                   {filteredInspections.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-6 py-4 text-center text-sm text-gray-500">
+                      <td colSpan={7} className="px-6 py-4 text-center text-sm text-muted-foreground">
                         {searchTerm ? "No inspections found matching your search" : "No inspection records found"}
                       </td>
                     </tr>
@@ -882,29 +882,29 @@ function InspectionRecordsTable({ onViewDetails, onEditInspection, onViewAsset }
                           }}
                           className="cursor-pointer hover:bg-muted transition-colors"
                         >
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 sticky left-0 bg-white">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-foreground sticky left-0 bg-card">
                             {new Date(inspection.inspectionDate).toLocaleDateString()}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-foreground bg-card">
                             {asset.serialNumber}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-foreground bg-card">
                             {region}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-foreground bg-card">
                             {district}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-foreground bg-card">
                             {inspection.inspectedBy}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-foreground bg-card">
                             <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              issuesCount > 0 ? "bg-red-100 text-red-800" : "bg-green-100 text-green-800"
+                              issuesCount > 0 ? "bg-red-500/20 text-red-400" : "bg-green-500/20 text-green-400"
                             }`}>
                               {issuesCount} {issuesCount === 1 ? "issue" : "issues"}
                             </span>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium sticky right-0 bg-white actions-cell">
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium sticky right-0 bg-card actions-cell">
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <Button variant="ghost" className="h-8 w-8 p-0">
