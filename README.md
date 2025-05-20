@@ -69,15 +69,38 @@ ECG OMS is a comprehensive asset management and fault tracking system designed f
    npm install
    ```
 
-3. Start the development server:
+3. Set up environment variables:
+   ```bash
+   # Copy the example environment file
+   cp .env.example .env
+   
+   # Edit .env with your configuration
+   # Required variables:
+   # - Firebase configuration
+   # - Application settings
+   # - Security settings
+   # - Service-specific settings (if applicable)
+   ```
+
+4. Start the development server:
    ```bash
    npm run dev
    ```
 
-4. Build for production:
+5. Build for production:
    ```bash
    npm run build
    ```
+
+## Security Considerations
+- All sensitive data is stored in environment variables
+- HTTPS is enforced in production
+- Security headers are configured for protection against common web vulnerabilities
+- Rate limiting is implemented for API endpoints
+- Session management includes secure cookie settings
+- Password hashing and validation follow security best practices
+- CORS is properly configured
+- Content Security Policy (CSP) is implemented
 
 ## Project Structure
 ```
