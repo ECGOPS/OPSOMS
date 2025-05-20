@@ -9,6 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { Layout } from "@/components/layout/Layout";
+import { HeaderTest } from "@/components/HeaderTest";
+import { PageHeader } from "@/components/ui/page-header";
 
 export default function SecurityTestPage() {
   const { user } = useAuth();
@@ -102,179 +105,186 @@ export default function SecurityTestPage() {
   };
 
   return (
-    <div className="container mx-auto p-4 space-y-6">
-      <h1 className="text-3xl font-bold mb-6">Permission Testing Dashboard</h1>
+    <Layout>
+      <PageHeader 
+        title="Security Testing"
+        description="Test various security aspects of the application"
+      />
+      <div className="container mx-auto py-6">
+        <HeaderTest />
+        <h1 className="text-3xl font-bold mb-6">Permission Testing Dashboard</h1>
 
-      {/* Feature List Card */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>Available Features and Permissions</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Feature Name</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead>Allowed Roles</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow>
-                <TableCell className="font-medium">Asset Management</TableCell>
-                <TableCell>Manage and monitor system assets</TableCell>
-                <TableCell>
-                  {featurePermissions['asset_management']?.map((role) => (
-                    <Badge key={role} variant="outline" className="mr-2">
-                      {role.replace('_', ' ').toUpperCase()}
-                    </Badge>
-                  ))}
-                </TableCell>
-              </TableRow>
-              <TableRow>
-                <TableCell className="font-medium">Inspection Management</TableCell>
-                <TableCell>Handle system inspections and reports</TableCell>
-                <TableCell>
-                  {featurePermissions['inspection_management']?.map((role) => (
-                    <Badge key={role} variant="outline" className="mr-2">
-                      {role.replace('_', ' ').toUpperCase()}
-                    </Badge>
-                  ))}
-                </TableCell>
-              </TableRow>
-              <TableRow>
-                <TableCell className="font-medium">Load Monitoring</TableCell>
-                <TableCell>Monitor system load and performance</TableCell>
-                <TableCell>
-                  {featurePermissions['load_monitoring']?.map((role) => (
-                    <Badge key={role} variant="outline" className="mr-2">
-                      {role.replace('_', ' ').toUpperCase()}
-                    </Badge>
-                  ))}
-                </TableCell>
-              </TableRow>
-              <TableRow>
-                <TableCell className="font-medium">User Management</TableCell>
-                <TableCell>Manage system users and roles</TableCell>
-                <TableCell>
-                  {featurePermissions['user_management']?.map((role) => (
-                    <Badge key={role} variant="outline" className="mr-2">
-                      {role.replace('_', ' ').toUpperCase()}
-                    </Badge>
-                  ))}
-                </TableCell>
-              </TableRow>
-              <TableRow>
-                <TableCell className="font-medium">System Configuration</TableCell>
-                <TableCell>Configure system settings and permissions</TableCell>
-                <TableCell>
-                  {featurePermissions['system_configuration']?.map((role) => (
-                    <Badge key={role} variant="outline" className="mr-2">
-                      {role.replace('_', ' ').toUpperCase()}
-                    </Badge>
-                  ))}
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>Test Configuration</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-2">
-            <Label>Select Role to Test</Label>
-            <Select value={selectedRole} onValueChange={(value) => setSelectedRole(value as UserRole)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select a role" />
-              </SelectTrigger>
-              <SelectContent>
-                {roles.map((role) => (
-                  <SelectItem key={role} value={role}>
-                    {role.replace('_', ' ').toUpperCase()}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid gap-2">
-            <Label>Select Feature to Test</Label>
-            <Select value={selectedFeature} onValueChange={setSelectedFeature}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select a feature" />
-              </SelectTrigger>
-              <SelectContent>
-                {features.map((feature) => (
-                  <SelectItem key={feature} value={feature}>
-                    {feature.replace('_', ' ').toUpperCase()}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card>
+        {/* Feature List Card */}
+        <Card className="mb-6">
           <CardHeader>
-            <CardTitle>Role Hierarchy Tests</CardTitle>
+            <CardTitle>Available Features and Permissions</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <Button 
-              onClick={testRoleHierarchy}
-              className="w-full"
-              variant="outline"
-            >
-              Test Role Hierarchy
-            </Button>
-            <Button 
-              onClick={testFeatureAccess}
-              className="w-full"
-              variant="outline"
-            >
-              Test Feature Access
-            </Button>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Feature Name</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead>Allowed Roles</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow>
+                  <TableCell className="font-medium">Asset Management</TableCell>
+                  <TableCell>Manage and monitor system assets</TableCell>
+                  <TableCell>
+                    {featurePermissions['asset_management']?.map((role) => (
+                      <Badge key={role} variant="outline" className="mr-2">
+                        {role.replace('_', ' ').toUpperCase()}
+                      </Badge>
+                    ))}
+                  </TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">Inspection Management</TableCell>
+                  <TableCell>Handle system inspections and reports</TableCell>
+                  <TableCell>
+                    {featurePermissions['inspection_management']?.map((role) => (
+                      <Badge key={role} variant="outline" className="mr-2">
+                        {role.replace('_', ' ').toUpperCase()}
+                      </Badge>
+                    ))}
+                  </TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">Load Monitoring</TableCell>
+                  <TableCell>Monitor system load and performance</TableCell>
+                  <TableCell>
+                    {featurePermissions['load_monitoring']?.map((role) => (
+                      <Badge key={role} variant="outline" className="mr-2">
+                        {role.replace('_', ' ').toUpperCase()}
+                      </Badge>
+                    ))}
+                  </TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">User Management</TableCell>
+                  <TableCell>Manage system users and roles</TableCell>
+                  <TableCell>
+                    {featurePermissions['user_management']?.map((role) => (
+                      <Badge key={role} variant="outline" className="mr-2">
+                        {role.replace('_', ' ').toUpperCase()}
+                      </Badge>
+                    ))}
+                  </TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">System Configuration</TableCell>
+                  <TableCell>Configure system settings and permissions</TableCell>
+                  <TableCell>
+                    {featurePermissions['system_configuration']?.map((role) => (
+                      <Badge key={role} variant="outline" className="mr-2">
+                        {role.replace('_', ' ').toUpperCase()}
+                      </Badge>
+                    ))}
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="mb-6">
           <CardHeader>
-            <CardTitle>Permission Tests</CardTitle>
+            <CardTitle>Test Configuration</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Button 
-              onClick={testAssetPermissions}
-              className="w-full"
-              variant="outline"
-            >
-              Test Asset Permissions
-            </Button>
-            <Button 
-              onClick={testStaffPermissions}
-              className="w-full"
-              variant="outline"
-            >
-              Test Staff Permissions
-            </Button>
+            <div className="grid gap-2">
+              <Label>Select Role to Test</Label>
+              <Select value={selectedRole} onValueChange={(value) => setSelectedRole(value as UserRole)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a role" />
+                </SelectTrigger>
+                <SelectContent>
+                  {roles.map((role) => (
+                    <SelectItem key={role} value={role}>
+                      {role.replace('_', ' ').toUpperCase()}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-2">
+              <Label>Select Feature to Test</Label>
+              <Select value={selectedFeature} onValueChange={setSelectedFeature}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a feature" />
+                </SelectTrigger>
+                <SelectContent>
+                  {features.map((feature) => (
+                    <SelectItem key={feature} value={feature}>
+                      {feature.replace('_', ' ').toUpperCase()}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Role Hierarchy Tests</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Button 
+                onClick={testRoleHierarchy}
+                className="w-full"
+                variant="outline"
+              >
+                Test Role Hierarchy
+              </Button>
+              <Button 
+                onClick={testFeatureAccess}
+                className="w-full"
+                variant="outline"
+              >
+                Test Feature Access
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Permission Tests</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Button 
+                onClick={testAssetPermissions}
+                className="w-full"
+                variant="outline"
+              >
+                Test Asset Permissions
+              </Button>
+              <Button 
+                onClick={testStaffPermissions}
+                className="w-full"
+                variant="outline"
+              >
+                Test Staff Permissions
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Current User Info</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <pre className="bg-muted p-4 rounded-lg overflow-auto">
+              {JSON.stringify(user, null, 2)}
+            </pre>
           </CardContent>
         </Card>
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Current User Info</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <pre className="bg-muted p-4 rounded-lg overflow-auto">
-            {JSON.stringify(user, null, 2)}
-          </pre>
-        </CardContent>
-      </Card>
-    </div>
+    </Layout>
   );
 }

@@ -5,25 +5,58 @@ export const securityConfig = {
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
-        imgSrc: ["'self'", "data:", "https:"],
-        connectSrc: ["'self'"],
-        fontSrc: ["'self'"],
+        imgSrc: ["'self'", "data:", "https:", "blob:"],
+        connectSrc: ["'self'", "https:", "wss:"],
+        fontSrc: ["'self'", "data:", "https:"],
         objectSrc: ["'none'"],
         mediaSrc: ["'self'"],
         frameSrc: ["'none'"],
+        workerSrc: ["'self'", "blob:"],
+        manifestSrc: ["'self'"],
+        prefetchSrc: ["'self'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+        frameAncestors: ["'none'"],
+        upgradeInsecureRequests: [],
       },
     },
     xssFilter: true,
     noSniff: true,
-    referrerPolicy: { policy: 'same-origin' }
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+    hsts: {
+      maxAge: 31536000,
+      includeSubDomains: true,
+      preload: true
+    },
+    frameguard: {
+      action: 'deny'
+    },
+    dnsPrefetchControl: {
+      allow: false
+    },
+    ieNoOpen: true,
+    permittedCrossDomainPolicies: {
+      permittedPolicies: 'none'
+    },
+    hidePoweredBy: true,
+    crossOriginEmbedderPolicy: true,
+    crossOriginOpenerPolicy: {
+      policy: 'same-origin'
+    },
+    crossOriginResourcePolicy: {
+      policy: 'same-site'
+    },
+    originAgentCluster: true
   }),
   cors: {
     origin: process.env.VITE_APP_URL || 'http://localhost:3000',
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
+    exposedHeaders: ['Content-Length', 'X-CSRF-Token'],
+    maxAge: 86400 // 24 hours
   },
   session: {
     cookie: {
