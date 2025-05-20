@@ -12,6 +12,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/components/ui/sonner";
 import { useNavigate } from "react-router-dom";
 import { PermissionService } from "@/services/PermissionService";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 
 // Type augmentation to fix type errors
 interface EnhancedOP5Fault extends OP5Fault {
@@ -42,6 +44,7 @@ export function FaultCard({ fault, type }: FaultCardProps) {
   const permissionService = PermissionService.getInstance();
   const [isResolveOpen, setIsResolveOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [restorationDate, setRestorationDate] = useState<string>("");
   
   const region = regions.find(r => r.id === fault.regionId);
   const district = districts.find(d => d.id === fault.districtId);
@@ -163,6 +166,52 @@ export function FaultCard({ fault, type }: FaultCardProps) {
   
   const affectedPopulation = op5Fault?.affectedPopulation || { rural: 0, urban: 0, metro: 0 };
   
+  // Add validation function
+  const validateRestorationDate = (restorationDateStr: string): boolean => {
+    if (!restorationDateStr) {
+      toast.error("Please select a restoration date");
+      return false;
+    }
+
+    const restorationDateTime = new Date(restorationDateStr);
+    const occurrenceDateTime = new Date(fault.occurrenceDate);
+
+    // Check against occurrence date
+    if (restorationDateTime <= occurrenceDateTime) {
+      toast.error("Restoration date must be after occurrence date");
+      return false;
+    }
+
+    // If it's an OP5 fault, check against repair dates
+    if (isOP5 && op5Fault) {
+      if (op5Fault.repairDate) {
+        const repairDateTime = new Date(op5Fault.repairDate);
+        if (restorationDateTime <= repairDateTime) {
+          toast.error("Restoration date must be after repair start date");
+          return false;
+        }
+      }
+
+      if (op5Fault.repairEndDate) {
+        const repairEndDateTime = new Date(op5Fault.repairEndDate);
+        if (restorationDateTime <= repairEndDateTime) {
+          toast.error("Restoration date must be after repair end date");
+          return false;
+        }
+      }
+
+      if (op5Fault.estimatedResolutionTime) {
+        const estimatedDateTime = new Date(op5Fault.estimatedResolutionTime);
+        if (restorationDateTime <= estimatedDateTime) {
+          toast.error("Restoration date must be after estimated resolution time");
+          return false;
+        }
+      }
+    }
+
+    return true;
+  };
+
   const handleResolve = () => {
     // Check if user has permission to manage faults
     const feature = isOP5 ? 'fault_reporting' : 'fault_reporting';
@@ -170,9 +219,15 @@ export function FaultCard({ fault, type }: FaultCardProps) {
       toast.error("You don't have permission to resolve faults");
       return;
     }
+
+    // Validate restoration date
+    if (!validateRestorationDate(restorationDate)) {
+      return;
+    }
     
-    resolveFault(fault.id, isOP5);
+    resolveFault(fault.id, isOP5, restorationDate);
     setIsResolveOpen(false);
+    setRestorationDate(""); // Reset restoration date
     toast.success("Fault has been marked as resolved");
   };
 
@@ -203,7 +258,7 @@ export function FaultCard({ fault, type }: FaultCardProps) {
   };
   
   return (
-    <Card className={`h-full flex flex-col shadow-md hover:shadow-lg transition-all duration-200 ease-out hover:scale-[1.01] overflow-hidden ${getCardColors(fault.faultType)}`}>
+    <Card className={`h-full flex flex-col shadow-md hover:shadow-lg transition-all duration-200 ease-out hover:scale-[1.01] overflow-hidden ${getCardColors(fault.faultType)} pb-20`}>
       <CardHeader className="p-4 pb-2 bg-white/80 dark:bg-gray-800/50">
         <div className="flex justify-between items-start">
           <CardTitle className="text-lg font-semibold">
@@ -230,6 +285,9 @@ export function FaultCard({ fault, type }: FaultCardProps) {
                 {(fault as any).specificFaultType}
               </Badge>
             )}
+            <Badge variant="outline" className="text-xs">
+              {isOP5 ? `OP5-${fault.id.slice(0, 8)}` : `CON-${fault.id.slice(0, 8)}`}
+            </Badge>
           </div>
           
           <div className="space-y-2">
@@ -244,16 +302,16 @@ export function FaultCard({ fault, type }: FaultCardProps) {
             </div>
             
             {isOP5 && op5Fault?.repairDate && (
-              <div>
-                <div className="font-medium text-muted-foreground">Repair Started:</div>
-                <div>{formatDate(op5Fault.repairDate)}</div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Clock size={14} />
+                <span>Repair Started: {formatDate(op5Fault.repairDate, true)}</span>
               </div>
             )}
             
             {isOP5 && op5Fault?.repairEndDate && (
-              <div>
-                <div className="font-medium text-muted-foreground">Repair Ended:</div>
-                <div>{formatDate(op5Fault.repairEndDate)}</div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Clock size={14} />
+                <span>Repair Ended: {formatDate(op5Fault.repairEndDate, true)}</span>
               </div>
             )}
             
@@ -278,13 +336,13 @@ export function FaultCard({ fault, type }: FaultCardProps) {
               <AccordionContent className="text-xs space-y-2 bg-white/50 dark:bg-gray-900/30 p-2 rounded-md">
                 <div>
                   <div className="font-medium text-muted-foreground">Occurred:</div>
-                  <div>{formatDate(fault.occurrenceDate)}</div>
+                  <div>{formatDate(fault.occurrenceDate, true)}</div>
                 </div>
                 
                 {fault.restorationDate && (
                   <div>
                     <div className="font-medium text-muted-foreground">Restored:</div>
-                    <div>{formatDate(fault.restorationDate)}</div>
+                    <div>{formatDate(fault.restorationDate, true)}</div>
                   </div>
                 )}
                 
@@ -292,6 +350,20 @@ export function FaultCard({ fault, type }: FaultCardProps) {
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <MapPin size={14} />
                     <span>Location: {(fault as any).faultLocation}</span>
+                  </div>
+                )}
+                
+                {isOP5 && (fault as any).areasAffected && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <MapPin size={14} />
+                    <span>Areas Affected: {(fault as any).areasAffected}</span>
+                  </div>
+                )}
+                
+                {!isOP5 && (fault as any).areaAffected && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <MapPin size={14} />
+                    <span>Area Affected: {(fault as any).areaAffected}</span>
                   </div>
                 )}
                 
@@ -321,11 +393,29 @@ export function FaultCard({ fault, type }: FaultCardProps) {
                 <DialogHeader>
                   <DialogTitle>Resolve Fault</DialogTitle>
                   <DialogDescription>
-                    Are you sure you want to mark this fault as resolved?
+                    Please select the restoration date and time to mark this fault as resolved.
                   </DialogDescription>
                 </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="restorationDate">Restoration Date & Time</Label>
+                    <Input
+                      id="restorationDate"
+                      type="datetime-local"
+                      value={restorationDate}
+                      onChange={(e) => setRestorationDate(e.target.value)}
+                      className="w-full"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      The restoration date must be after the occurrence date and any repair dates.
+                    </p>
+                  </div>
+                </div>
                 <DialogFooter>
-                  <Button variant="outline" onClick={() => setIsResolveOpen(false)}>
+                  <Button variant="outline" onClick={() => {
+                    setIsResolveOpen(false);
+                    setRestorationDate(""); // Reset restoration date
+                  }}>
                     Cancel
                   </Button>
                   <Button onClick={handleResolve} className="bg-green-600 hover:bg-green-700">

@@ -157,7 +157,9 @@ export default function EditOP5FaultPage() {
         
         const formattedOcc = formatDateForInput(fetchedFault.occurrenceDate);
         const formattedRep = formatDateForInput(fetchedFault.repairDate);
+        const formattedRepEnd = formatDateForInput(fetchedFault.repairEndDate);
         const formattedRes = formatDateForInput(fetchedFault.restorationDate);
+        const formattedEstRes = formatDateForInput(fetchedFault.estimatedResolutionTime);
         
         // Parse fuse-specific information from description if it exists
         let fuseCircuit = "";
@@ -182,7 +184,9 @@ export default function EditOP5FaultPage() {
           ...fetchedFault,
           occurrenceDate: formattedOcc,
           repairDate: formattedRep,
+          repairEndDate: formattedRepEnd,
           restorationDate: formattedRes,
+          estimatedResolutionTime: formattedEstRes,
           affectedPopulation: fetchedFault.affectedPopulation || { rural: 0, urban: 0, metro: 0 },
           materialsUsed: fetchedFault.materialsUsed || [],
           description: description,
@@ -207,6 +211,7 @@ export default function EditOP5FaultPage() {
     const { 
       occurrenceDate: occStr, 
       repairDate: repStr,
+      repairEndDate: repEndStr,
       restorationDate: resStr,
       affectedPopulation,
       districtId
@@ -216,6 +221,7 @@ export default function EditOP5FaultPage() {
     console.log("[MTTR Debug] Input dates:", { 
       occurrenceDate: occStr,
       repairDate: repStr,
+      repairEndDate: repEndStr,
       restorationDate: resStr
     });
 
@@ -230,6 +236,7 @@ export default function EditOP5FaultPage() {
     // --- Safely create Date objects --- 
     let occDate: Date | null = null;
     let repDate: Date | null = null;
+    let repEndDate: Date | null = null;
     let resDate: Date | null = null;
 
     // Safely parse dates with debug logging
@@ -257,6 +264,18 @@ export default function EditOP5FaultPage() {
         repDate = null; 
       } 
     }
+    if (repEndStr) {
+      try {
+        repEndDate = new Date(repEndStr);
+        if(isNaN(repEndDate.getTime())) {
+          console.warn("[MTTR Debug] Invalid Repair End Date:", repEndStr);
+          repEndDate = null;
+        }
+      } catch (error) {
+        console.error("[MTTR Debug] Error parsing Repair End Date:", error);
+        repEndDate = null;
+      }
+    }
     if (resStr) { 
       try { 
         resDate = new Date(resStr); 
@@ -274,8 +293,23 @@ export default function EditOP5FaultPage() {
     console.log("[MTTR Debug] Parsed dates:", { 
       occurrenceDate: occDate?.toISOString(),
       repairDate: repDate?.toISOString(),
+      repairEndDate: repEndDate?.toISOString(),
       restorationDate: resDate?.toISOString()
     });
+
+    // Validate repair end date if it exists
+    if (repEndDate) {
+      if (!repDate) {
+        toast.error("Repair start date must be set before repair end date");
+        setFormData(prev => ({ ...prev, repairEndDate: "" }));
+        return;
+      }
+      if (repEndDate <= repDate) {
+        toast.error("Repair end date must be after repair start date");
+        setFormData(prev => ({ ...prev, repairEndDate: "" }));
+        return;
+      }
+    }
 
     // Calculate duration only if both dates are valid and in correct order
     if (occDate && resDate && resDate > occDate) {
@@ -284,14 +318,14 @@ export default function EditOP5FaultPage() {
     }
 
     // Calculate MTTR only if both dates are valid and in correct order
-    if (repDate && resDate && resDate > repDate) {
-        mttrValue = calculateMTTR(repStr!, formData.repairEndDate!);
+    if (repDate && repEndDate && repEndDate > repDate) {
+        mttrValue = calculateMTTR(repStr!, repEndStr!);
         console.log("[MTTR Debug] Calculated MTTR:", mttrValue);
     } else {
         console.log("[MTTR Debug] MTTR not calculated because:", {
             hasRepairDate: !!repDate,
-            hasRepairEndDate: !!formData.repairEndDate,
-            isRepairEndAfterRepair: repDate && formData.repairEndDate ? new Date(formData.repairEndDate) > repDate : false
+            hasRepairEndDate: !!repEndDate,
+            isRepairEndAfterRepair: repDate && repEndDate ? repEndDate > repDate : false
         });
     }
     
@@ -935,6 +969,40 @@ export default function EditOP5FaultPage() {
                         className="w-full h-10"
                       />
                       <p className="text-xs text-muted-foreground mt-1">When repair work began</p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="repairEndDate" className="text-sm font-medium">
+                        <span className="flex items-center gap-1.5">
+                          <span className="h-2 w-2 rounded-full bg-blue-500"></span>
+                          Repair End Date & Time
+                        </span>
+                      </Label>
+                      <Input
+                        id="repairEndDate"
+                        type="datetime-local"
+                        value={formData.repairEndDate || ""} 
+                        onChange={handleInputChange}
+                        className="w-full h-10"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">When repair work was completed</p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="estimatedResolutionTime" className="text-sm font-medium">
+                        <span className="flex items-center gap-1.5">
+                          <span className="h-2 w-2 rounded-full bg-purple-500"></span>
+                          Estimated Resolution Time
+                        </span>
+                      </Label>
+                      <Input
+                        id="estimatedResolutionTime"
+                        type="datetime-local"
+                        value={formData.estimatedResolutionTime || ""} 
+                        onChange={handleInputChange}
+                        className="w-full h-10"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">Expected time of fault resolution</p>
                     </div>
 
                     <div className="space-y-2 sm:col-span-2 lg:col-span-1">

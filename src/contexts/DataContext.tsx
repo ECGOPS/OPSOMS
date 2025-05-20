@@ -254,7 +254,7 @@ export interface DataContextType {
   deleteControlSystemOutage: (id: string) => Promise<void>;
   canResolveFault: (fault: OP5Fault | ControlSystemOutage) => boolean;
   getFilteredFaults: (regionId?: string, districtId?: string) => { op5Faults: OP5Fault[]; controlOutages: ControlSystemOutage[] };
-  resolveFault: (id: string, isOP5: boolean) => Promise<void>;
+  resolveFault: (id: string, isOP5: boolean, restorationDate: string) => Promise<void>;
   deleteFault: (id: string, isOP5: boolean) => Promise<void>;
   canEditFault: (fault: OP5Fault | ControlSystemOutage) => boolean;
   loadMonitoringRecords?: LoadMonitoringData[];
@@ -1985,12 +1985,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }, [user, regions, districts]);
 
   // Function to resolve a fault
-  const resolveFault = useCallback(async (id: string, isOP5: boolean) => {
+  const resolveFault = useCallback(async (id: string, isOP5: boolean, restorationDate: string) => {
     try {
-      const formattedDate = new Date().toISOString();
       const updateData = {
         status: "resolved" as const,
-        restorationDate: formattedDate,
+        restorationDate,
         updatedAt: serverTimestamp()
       };
       
@@ -2013,7 +2012,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         setOP5Faults(prevFaults => 
           prevFaults.map(fault => 
             fault.id === id 
-              ? { ...fault, ...updateData, updatedAt: formattedDate }
+              ? { ...fault, ...updateData, updatedAt: new Date().toISOString() }
               : fault
           )
         );
@@ -2021,7 +2020,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         setControlSystemOutages(prevOutages => 
           prevOutages.map(outage => 
             outage.id === id 
-              ? { ...outage, ...updateData, updatedAt: formattedDate }
+              ? { ...outage, ...updateData, updatedAt: new Date().toISOString() }
               : outage
           )
         );

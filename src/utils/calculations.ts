@@ -78,27 +78,37 @@ export const calculateDurationHours = (occurrenceDate: string, restorationDate: 
 };
 
 // Format a date object to a readable string
-export const formatDate = (timestamp: any) => {
+export const formatDate = (timestamp: any, includeTime: boolean = false) => {
   if (!timestamp) return "Not available";
   
   try {
     // Handle Firestore timestamp
     if (timestamp?.seconds) {
       const date = new Date(timestamp.seconds * 1000);
-      return date.toLocaleDateString('en-US', { 
+      return date.toLocaleString('en-US', { 
         month: 'short', 
         day: 'numeric', 
-        year: 'numeric' 
+        year: 'numeric',
+        ...(includeTime && {
+          hour: 'numeric',
+          minute: 'numeric',
+          hour12: true
+        })
       });
     }
     
     // Handle string date
     const date = new Date(timestamp);
     return !isNaN(date.getTime()) 
-      ? date.toLocaleDateString('en-US', { 
+      ? date.toLocaleString('en-US', { 
           month: 'short', 
           day: 'numeric', 
-          year: 'numeric' 
+          year: 'numeric',
+          ...(includeTime && {
+            hour: 'numeric',
+            minute: 'numeric',
+            hour12: true
+          })
         })
       : "Invalid date";
   } catch (error) {

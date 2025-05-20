@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { 
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, 
@@ -128,12 +127,12 @@ const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({ filteredFaults }) => 
   ];
 
   // Count faults by type
-  const faultTypeCount = filteredFaults.reduce((acc, fault) => {
+  const outageTypeCount = filteredFaults.reduce((acc, fault) => {
     acc[fault.faultType] = (acc[fault.faultType] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
 
-  const faultTypeData = Object.entries(faultTypeCount).map(([name, value]) => ({
+  const outageTypeData = Object.entries(outageTypeCount).map(([name, value]) => ({
     name,
     value
   }));
@@ -275,7 +274,7 @@ const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({ filteredFaults }) => 
         <TabsList className="grid grid-cols-3 mb-8 w-full max-w-md mx-auto">
           <TabsTrigger value="performance">Reliability</TabsTrigger>
           <TabsTrigger value="impact">Impact</TabsTrigger>
-          <TabsTrigger value="types">Fault Types</TabsTrigger>
+          <TabsTrigger value="types">Outage Types</TabsTrigger>
         </TabsList>
         
         <TabsContent value="performance">
@@ -309,13 +308,13 @@ const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({ filteredFaults }) => 
         <TabsContent value="types">
           <Card>
             <CardHeader>
-              <CardTitle>Fault Type Distribution</CardTitle>
+              <CardTitle>Outage Type Distribution</CardTitle>
               <CardDescription>
-                Number of faults by type
+                Number of outages by type
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {renderChart(faultTypeData)}
+              {renderChart(outageTypeData)}
             </CardContent>
           </Card>
         </TabsContent>
@@ -331,7 +330,7 @@ const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({ filteredFaults }) => 
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-primary/10 p-4 rounded-lg flex flex-col">
-              <span className="text-sm text-muted-foreground">Total Faults</span>
+              <span className="text-sm text-muted-foreground">Total Outages</span>
               <span className="text-3xl font-bold">{filteredFaults.length}</span>
             </div>
             <div className="bg-secondary/20 p-4 rounded-lg flex flex-col">

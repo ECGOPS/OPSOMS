@@ -13,7 +13,7 @@ interface AccessControlWrapperProps {
   districtId?: string;
   assetId?: string;
   inspectionId?: string;
-  type?: 'asset' | 'inspection' | 'district_population' | 'analytics_dashboard' | 'reliability_metrics' | 'performance_reports';
+  type?: 'asset' | 'inspection' | 'district_population' | 'analytics_dashboard' | 'analytics_page' | 'reliability_metrics' | 'performance_reports';
 }
 
 export function AccessControlWrapper({

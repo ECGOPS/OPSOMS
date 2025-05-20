@@ -3,6 +3,7 @@ import { getFirestore, disableNetwork, enableNetwork, initializeFirestore, CACHE
 import { getAuth, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { getAnalytics, isSupported } from 'firebase/analytics';
 import { getFunctions } from 'firebase/functions';
+import { getStorage } from 'firebase/storage';
 
 // Validate environment variables
 const requiredEnvVars = [
@@ -129,6 +130,10 @@ const handleFirestoreError = (error: any) => {
 // Initialize Functions
 const functions = getFunctions(app);
 
+// Initialize Storage
+console.log('[Firebase] Initializing Storage');
+const storage = getStorage(app);
+
 // Configure auth persistence
 if (typeof window !== 'undefined') {
   console.log('[Firebase] Configuring auth persistence');
@@ -162,4 +167,4 @@ auth.onAuthStateChanged((user) => {
   });
 });
 
-export { auth, db, functions, securityConfig, resetFirestoreConnection, handleFirestoreError }; 
+export { auth, db, functions, storage, securityConfig, resetFirestoreConnection, handleFirestoreError }; 

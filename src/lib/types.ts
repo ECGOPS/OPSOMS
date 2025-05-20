@@ -15,12 +15,12 @@ export type UserRole =
   | null;
 
 export interface User {
+  id: string;
   uid: string;
   email: string;
   displayName: string;
-  role: UserRole;
-  id: string;
   name: string;
+  role: UserRole;
   region?: string;
   regionId?: string;
   district?: string;
@@ -30,6 +30,9 @@ export interface User {
   password?: string;
   staffId?: string;
   disabled?: boolean;
+  photoURL?: string;
+  createdAt?: any;
+  updatedAt?: any;
 }
 
 export type RegionPopulation = {
@@ -295,26 +298,25 @@ export interface AuthContextType {
 }
 
 export interface DataContextType {
-  op5Faults: OP5Fault[];
-  controlOutages: ControlSystemOutage[];
   regions: Region[];
   districts: District[];
-  vitAssets: VITAsset[];
-  vitInspections: VITInspectionChecklist[];
-  savedInspections?: SubstationInspection[];
-  loadMonitoringRecords?: LoadMonitoringData[];
-  setOP5Faults: (faults: OP5Fault[]) => void;
-  setControlOutages: (outages: ControlSystemOutage[]) => void;
-  setRegions: (regions: Region[]) => void;
-  setDistricts: (districts: District[]) => void;
-  setVITAssets: (assets: VITAsset[]) => void;
-  setVITInspections: (inspections: VITInspectionChecklist[]) => void;
-  setSavedInspections: (inspections: SubstationInspection[]) => void;
-  setLoadMonitoringRecords: (records: LoadMonitoringData[]) => void;
-  resolveFault: (id: string, isOP5: boolean) => void;
-  deleteFault: (id: string, isOP5: boolean) => void;
-  updateOP5Fault: (id: string, data: Partial<OP5Fault>) => void;
-  updateControlOutage: (id: string, data: Partial<ControlSystemOutage>) => void;
+  regionsLoading: boolean;
+  districtsLoading: boolean;
+  regionsError: string | null;
+  districtsError: string | null;
+  retryRegionsAndDistricts: () => Promise<void>;
+  op5Faults: OP5Fault[];
+  controlSystemOutages: ControlSystemOutage[];
+  addOP5Fault: (fault: Omit<OP5Fault, "id">) => Promise<string>;
+  updateOP5Fault: (id: string, data: Partial<OP5Fault>) => Promise<void>;
+  deleteOP5Fault: (id: string) => Promise<void>;
+  addControlSystemOutage: (outage: Omit<ControlSystemOutage, "id" | "createdAt" | "updatedAt" | "createdBy" | "updatedBy">) => Promise<string>;
+  updateControlSystemOutage: (id: string, data: Partial<ControlSystemOutage>) => Promise<void>;
+  deleteControlSystemOutage: (id: string) => Promise<void>;
+  canResolveFault: (fault: OP5Fault | ControlSystemOutage) => boolean;
+  getFilteredFaults: (regionId?: string, districtId?: string) => { op5Faults: OP5Fault[]; controlOutages: ControlSystemOutage[] };
+  resolveFault: (id: string, isOP5: boolean, restorationDate: string) => Promise<void>;
+  deleteFault: (id: string, isOP5: boolean) => Promise<void>;
   canEditFault: (fault: OP5Fault | ControlSystemOutage) => boolean;
   canEditOutage: (outage: ControlSystemOutage) => boolean;
   canEditAsset: (asset: VITAsset) => boolean;
@@ -323,14 +325,10 @@ export interface DataContextType {
   canDeleteOutage: (outage: ControlSystemOutage) => boolean;
   canDeleteAsset: (asset: VITAsset) => boolean;
   canDeleteInspection: (inspection: VITInspectionChecklist | SubstationInspection) => boolean;
-  canResolveFault: (fault: OP5Fault | ControlSystemOutage) => boolean;
   canAddAsset: (regionId: string, districtId: string) => boolean;
   canAddInspection: (assetId?: string, region?: string, district?: string) => boolean;
-  addOP5Fault: (fault: Omit<OP5Fault, "id" | "status">) => void;
-  deleteOP5Fault: (id: string) => void;
   addControlOutage: (outage: Omit<ControlSystemOutage, "id" | "status">) => void;
   deleteControlOutage: (id: string) => void;
-  getFilteredFaults: (regionId?: string, districtId?: string) => { op5Faults: OP5Fault[]; controlOutages: ControlSystemOutage[] };
   addVITAsset: (asset: Omit<VITAsset, "id" | "createdAt" | "updatedAt">) => void;
   updateVITAsset: (id: string, updates: Partial<VITAsset>) => void;
   deleteVITAsset: (id: string) => void;

@@ -60,3 +60,6 @@ serviceAccountKey.json
 api-keys.json
 keys.json
 credentials.json
+
+# Local Netlify folder
+.netlify

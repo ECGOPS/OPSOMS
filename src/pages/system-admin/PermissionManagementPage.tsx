@@ -109,6 +109,11 @@ const featureCategories: FeatureCategory[] = [
         description: "View system-wide analytics"
       },
       {
+        id: "analytics_page",
+        name: "Analytics Page",
+        description: "Access detailed analytics and reports"
+      },
+      {
         id: "reliability_metrics",
         name: "Reliability Metrics",
         description: "Track system reliability KPIs"

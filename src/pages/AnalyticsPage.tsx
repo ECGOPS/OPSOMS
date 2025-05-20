@@ -1284,7 +1284,7 @@ export default function AnalyticsPage() {
     ];
 
     const dataRows = paginatedFaults.map((fault: any) => {
-      const type = 'faultLocation' in fault ? 'OP5' : 'Control';
+      const type = 'faultLocation' in fault || 'substationName' in fault ? 'OP5' : 'Control';
       const region = getRegionName(fault.regionId);
       const district = getDistrictName(fault.districtId);
       const date = formatSafeDate(fault.occurrenceDate);
@@ -1572,16 +1572,16 @@ export default function AnalyticsPage() {
             </div>
             {/* Fault Type Select */}
             <div>
-               <Label htmlFor="fault-type-select" className="text-xs text-muted-foreground">Fault Type</Label>
+               <Label htmlFor="fault-type-select" className="text-xs text-muted-foreground">Outage Type</Label>
               <Select
                 value={selectedFaultType}
                 onValueChange={handleFaultTypeChange}
               >
                 <SelectTrigger id="fault-type-select" className="mt-1">
-                  <SelectValue placeholder="Select Fault Type" />
+                  <SelectValue placeholder="Select Outage Type" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Fault Types</SelectItem>
+                  <SelectItem value="all">All Outage Types</SelectItem>
                   <SelectItem value="Planned">Planned</SelectItem>
                   <SelectItem value="Unplanned">Unplanned</SelectItem>
                   <SelectItem value="Emergency">Emergency</SelectItem>

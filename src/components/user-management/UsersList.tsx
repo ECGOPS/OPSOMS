@@ -601,7 +601,7 @@ export function UsersList() {
                     <SelectValue placeholder="Select role" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="system_admin">System Administrator</SelectItem>
+                    {isSystemAdmin && <SelectItem value="system_admin">System Administrator</SelectItem>}
                     <SelectItem value="global_engineer">Global Engineer</SelectItem>
                     <SelectItem value="regional_engineer">Regional Engineer</SelectItem>
                     <SelectItem value="district_engineer">District Engineer</SelectItem>
@@ -780,7 +780,7 @@ export function UsersList() {
                   <SelectValue placeholder="Select role" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="system_admin">System Administrator</SelectItem>
+                  {isSystemAdmin && <SelectItem value="system_admin">System Administrator</SelectItem>}
                   <SelectItem value="global_engineer">Global Engineer</SelectItem>
                   <SelectItem value="regional_engineer">Regional Engineer</SelectItem>
                   <SelectItem value="district_engineer">District Engineer</SelectItem>

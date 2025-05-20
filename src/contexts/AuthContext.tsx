@@ -39,6 +39,7 @@ export interface AuthContextType {
   isAuthenticated: boolean;
   users: User[];
   setUsers: React.Dispatch<React.SetStateAction<User[]>>;
+  setUser: React.Dispatch<React.SetStateAction<User | null>>;
   addUser: (user: Omit<User, "id">) => Promise<string>;
   updateUser: (id: string, userData: Partial<User>) => Promise<void>;
   deleteUser: (id: string) => Promise<void>;
@@ -135,7 +136,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             // Initialize user state with basic data
             const userState: User = {
               id: firebaseUser.uid,
+              uid: firebaseUser.uid,
               email: firebaseUser.email || "",
+              displayName: userData.name || "",
               name: userData.name || "",
               role: userData.role,
               staffId: userData.staffId || "",
@@ -144,7 +147,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               district: userData.district,
               districtId: userData.districtId,
               disabled: userData.disabled,
-              mustChangePassword: userData.mustChangePassword
+              mustChangePassword: userData.mustChangePassword,
+              photoURL: userData.photoURL
             };
 
             console.log('[AuthContext] Initial user state:', userState);
@@ -452,7 +456,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Set user state
       setUser({
         id: user.uid,
-        ...userData
+        uid: user.uid,
+        email: user.email || "",
+        displayName: name,
+        name: name,
+        role: role,
+        region: region || "",
+        regionId: regionId || "",
+        district: district || "",
+        districtId: districtId || "",
+        staffId: staffId || "",
+        disabled: false,
+        mustChangePassword: false
       });
 
       toast.success("Account created successfully");
@@ -763,6 +778,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAuthenticated: !!user,
         users,
         setUsers,
+        setUser,
         addUser,
         updateUser,
         deleteUser,

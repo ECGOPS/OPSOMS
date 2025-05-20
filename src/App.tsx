@@ -81,7 +81,7 @@ function App() {
                 } />
 
                 <Route path="/analytics" element={
-                  <ProtectedRoute requiredFeature="analytics_dashboard">
+                  <ProtectedRoute requiredFeature="analytics_page">
                     <AnalyticsPage />
                   </ProtectedRoute>
                 } />

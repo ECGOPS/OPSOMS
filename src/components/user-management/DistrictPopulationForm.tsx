@@ -38,9 +38,9 @@ export function DistrictPopulationForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedRegion, setSelectedRegion] = useState<string>("");
   const [selectedDistrict, setSelectedDistrict] = useState<string>("");
-  const [ruralPopulation, setRuralPopulation] = useState<number>(0);
-  const [urbanPopulation, setUrbanPopulation] = useState<number>(0);
-  const [metroPopulation, setMetroPopulation] = useState<number>(0);
+  const [ruralPopulation, setRuralPopulation] = useState<number | null>(null);
+  const [urbanPopulation, setUrbanPopulation] = useState<number | null>(null);
+  const [metroPopulation, setMetroPopulation] = useState<number | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   
   // Set initial values based on user role
@@ -64,9 +64,9 @@ export function DistrictPopulationForm() {
           if (userDistrict) {
             setSelectedDistrict(userDistrict.id);
             // Add null checks and default values for population data
-            setRuralPopulation(userDistrict.population?.rural ?? 0);
-            setUrbanPopulation(userDistrict.population?.urban ?? 0);
-            setMetroPopulation(userDistrict.population?.metro ?? 0);
+            setRuralPopulation(userDistrict.population?.rural ?? null);
+            setUrbanPopulation(userDistrict.population?.urban ?? null);
+            setMetroPopulation(userDistrict.population?.metro ?? null);
           }
         }
       }
@@ -80,9 +80,9 @@ export function DistrictPopulationForm() {
       if (userDistrict) {
         setSelectedDistrict(userDistrict.id);
         // Add null checks and default values for population data
-        setRuralPopulation(userDistrict.population?.rural ?? 0);
-        setUrbanPopulation(userDistrict.population?.urban ?? 0);
-        setMetroPopulation(userDistrict.population?.metro ?? 0);
+        setRuralPopulation(userDistrict.population?.rural ?? null);
+        setUrbanPopulation(userDistrict.population?.urban ?? null);
+        setMetroPopulation(userDistrict.population?.metro ?? null);
       }
     }
   }, [user, selectedRegion, selectedDistrict, districts]);
@@ -93,18 +93,18 @@ export function DistrictPopulationForm() {
       const district = districts.find(d => d.id === selectedDistrict);
       if (district) {
         // Add null checks and default values for population data
-        setRuralPopulation(district.population?.rural ?? 0);
-        setUrbanPopulation(district.population?.urban ?? 0);
-        setMetroPopulation(district.population?.metro ?? 0);
+        setRuralPopulation(district.population?.rural ?? null);
+        setUrbanPopulation(district.population?.urban ?? null);
+        setMetroPopulation(district.population?.metro ?? null);
       } else {
-        setRuralPopulation(0);
-        setUrbanPopulation(0);
-        setMetroPopulation(0);
+        setRuralPopulation(null);
+        setUrbanPopulation(null);
+        setMetroPopulation(null);
       }
     } else {
-      setRuralPopulation(0);
-      setUrbanPopulation(0);
-      setMetroPopulation(0);
+      setRuralPopulation(null);
+      setUrbanPopulation(null);
+      setMetroPopulation(null);
     }
   }, [selectedDistrict, districts]);
   
@@ -125,9 +125,9 @@ export function DistrictPopulationForm() {
       }
 
       const currentPopulation = {
-        rural: ruralPopulation,
-        urban: urbanPopulation,
-        metro: metroPopulation
+        rural: ruralPopulation ?? 0,
+        urban: urbanPopulation ?? 0,
+        metro: metroPopulation ?? 0
       };
 
       // Create new history entry
@@ -232,8 +232,8 @@ export function DistrictPopulationForm() {
                 id="ruralPopulation"
                 type="number"
                 min="0"
-                value={ruralPopulation}
-                onChange={(e) => setRuralPopulation(parseInt(e.target.value) || 0)}
+                value={ruralPopulation ?? ""}
+                onChange={(e) => setRuralPopulation(e.target.value ? parseInt(e.target.value) : null)}
               />
             </div>
             
@@ -243,8 +243,8 @@ export function DistrictPopulationForm() {
                 id="urbanPopulation"
                 type="number"
                 min="0"
-                value={urbanPopulation}
-                onChange={(e) => setUrbanPopulation(parseInt(e.target.value) || 0)}
+                value={urbanPopulation ?? ""}
+                onChange={(e) => setUrbanPopulation(e.target.value ? parseInt(e.target.value) : null)}
               />
             </div>
             
@@ -254,8 +254,8 @@ export function DistrictPopulationForm() {
                 id="metroPopulation"
                 type="number"
                 min="0"
-                value={metroPopulation}
-                onChange={(e) => setMetroPopulation(parseInt(e.target.value) || 0)}
+                value={metroPopulation ?? ""}
+                onChange={(e) => setMetroPopulation(e.target.value ? parseInt(e.target.value) : null)}
               />
             </div>
           </div>

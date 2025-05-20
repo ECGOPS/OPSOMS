@@ -69,6 +69,7 @@ export class PermissionService {
     
     // Analytics Features
     'analytics_dashboard': ['technician', 'district_engineer', 'regional_engineer', 'global_engineer', 'system_admin'],
+    'analytics_page': ['district_engineer', 'regional_engineer', 'global_engineer', 'system_admin'],
     'reliability_metrics': ['district_engineer', 'regional_engineer', 'global_engineer', 'system_admin'],
     'reliability_metrics_update': ['district_engineer', 'regional_engineer', 'global_engineer', 'system_admin'],
     'reliability_metrics_delete': ['regional_engineer', 'global_engineer', 'system_admin'],

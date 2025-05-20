@@ -147,7 +147,61 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
     return false;
   });
 
-  // Calculate metrics when dates change
+  // Add this validation function before the useEffect
+  const validateRestorationDate = (restorationDateStr: string): boolean => {
+    if (!restorationDateStr) return true; // Empty restoration date is valid (for pending faults)
+    
+    const restorationDateTime = new Date(restorationDateStr);
+    const occurrenceDateTime = new Date(occurrenceDate);
+    
+    // Basic validation for occurrence date
+    if (!occurrenceDate) {
+      toast.error("Please set the occurrence date first");
+      setRestorationDate("");
+      return false;
+    }
+
+    // Check against occurrence date
+    if (restorationDateTime <= occurrenceDateTime) {
+      toast.error("Restoration date must be after occurrence date");
+      setRestorationDate("");
+      return false;
+    }
+
+    // If repair date exists, validate against it
+    if (repairDate) {
+      const repairDateTime = new Date(repairDate);
+      if (restorationDateTime <= repairDateTime) {
+        toast.error("Restoration date must be after repair start date");
+        setRestorationDate("");
+        return false;
+      }
+
+      // If repair end date exists, validate against it
+      if (repairEndDate) {
+        const repairEndDateTime = new Date(repairEndDate);
+        if (restorationDateTime <= repairEndDateTime) {
+          toast.error("Restoration date must be after repair end date");
+          setRestorationDate("");
+          return false;
+        }
+      }
+    }
+
+    // Validate against estimated resolution time if it exists
+    if (estimatedResolutionTime) {
+      const estimatedDateTime = new Date(estimatedResolutionTime);
+      if (restorationDateTime <= estimatedDateTime) {
+        toast.error("Restoration date must be after estimated resolution time");
+        setRestorationDate("");
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+  // Update the useEffect to validate restoration date whenever any date changes
   useEffect(() => {
     if (occurrenceDate) {
       // Validate estimated resolution time if it exists
@@ -173,29 +227,32 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
         }
       }
 
-      // Validate restoration date if it exists
-      if (restorationDate) {
-        if (new Date(restorationDate) <= new Date(occurrenceDate)) {
-          toast.error("Restoration date must be after occurrence date");
-          setRestorationDate("");
+      // Validate repair end date if it exists
+      if (repairEndDate) {
+        if (!repairDate) {
+          toast.error("Repair start date must be set before repair end date");
+          setRepairEndDate("");
           return;
         }
-
-        // Ensure restoration date is after repair date if repair date exists
-        if (repairDate && new Date(restorationDate) <= new Date(repairDate)) {
-          toast.error("Restoration date must be after repair date");
-          setRestorationDate("");
+        if (new Date(repairEndDate) <= new Date(repairDate)) {
+          toast.error("Repair end date must be after repair start date");
+          setRepairEndDate("");
           return;
         }
       }
 
-      // Calculate metrics only if dates are valid
+      // Validate restoration date if it exists
       if (restorationDate) {
+        if (!validateRestorationDate(restorationDate)) {
+          return;
+        }
+
+        // Calculate metrics only if all validations pass
         const duration = calculateOutageDuration(occurrenceDate, restorationDate);
         setOutageDuration(duration);
         
-        // Calculate MTTR if repair date is available
-        if (repairDate) {
+        // Calculate MTTR if both repair dates are available
+        if (repairDate && repairEndDate) {
           const mttr = calculateMTTR(repairDate, repairEndDate);
           setMttr(mttr);
         }
@@ -240,6 +297,7 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
     occurrenceDate,
     repairDate,
     repairEndDate,
+    restorationDate,
     districtId,
     districts,
     ruralAffected,
@@ -248,6 +306,13 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
     estimatedResolutionTime,
     outageType
   ]);
+
+  // Add a separate useEffect to validate restoration date when other dates change
+  useEffect(() => {
+    if (restorationDate) {
+      validateRestorationDate(restorationDate);
+    }
+  }, [occurrenceDate, repairDate, repairEndDate, estimatedResolutionTime]);
   
   // Reset specific fault type when fault type changes
   useEffect(() => {
@@ -696,10 +761,10 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="space-y-3">
-              <Label htmlFor="outageType" className="text-base font-medium">Type of Fault</Label>
+              <Label htmlFor="outageType" className="text-base font-medium">Outage Type</Label>
               <Select value={outageType} onValueChange={(value) => setOutageType(value as string)}>
                 <SelectTrigger className="h-12 text-base bg-background/50 border-muted">
-                  <SelectValue placeholder="Select fault type" />
+                  <SelectValue placeholder="Select outage type" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Planned">Planned</SelectItem>
