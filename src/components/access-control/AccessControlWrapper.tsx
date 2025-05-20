@@ -13,7 +13,7 @@ interface AccessControlWrapperProps {
   districtId?: string;
   assetId?: string;
   inspectionId?: string;
-  type?: 'asset' | 'inspection' | 'district_population';
+  type?: 'asset' | 'inspection' | 'district_population' | 'analytics_dashboard' | 'reliability_metrics' | 'performance_reports';
 }
 
 export function AccessControlWrapper({
@@ -58,6 +58,17 @@ export function AccessControlWrapper({
         if (!permissionService.canAccessFeature(user?.role || null, 'district_population')) {
           console.log('Access denied: Cannot access district population feature');
           toast.error("You don't have permission to access district population");
+          setIsAuthorized(false);
+          navigate('/');
+          return;
+        }
+      }
+
+      // Check analytics access
+      if (type === 'analytics_dashboard' || type === 'reliability_metrics' || type === 'performance_reports') {
+        if (!permissionService.canAccessFeature(user?.role || null, type)) {
+          console.log('Access denied: Cannot access analytics feature');
+          toast.error("You don't have permission to access analytics");
           setIsAuthorized(false);
           navigate('/');
           return;

@@ -14,7 +14,10 @@ export class PermissionService {
     'district_engineer': 2,
     'regional_engineer': 3,
     'global_engineer': 4,
-    'system_admin': 5
+    'system_admin': 5,
+    'load_monitoring_edit': 2,
+    'load_monitoring_delete': 3,
+    'admin': 5
   };
 
   private permissionChangeListeners: (() => void)[] = [];
@@ -66,8 +69,12 @@ export class PermissionService {
     
     // Analytics Features
     'analytics_dashboard': ['technician', 'district_engineer', 'regional_engineer', 'global_engineer', 'system_admin'],
-    'reliability_metrics': ['district_engineer', 'global_engineer', 'system_admin'],
-    'performance_reports': ['district_engineer', 'global_engineer', 'system_admin'],
+    'reliability_metrics': ['district_engineer', 'regional_engineer', 'global_engineer', 'system_admin'],
+    'reliability_metrics_update': ['district_engineer', 'regional_engineer', 'global_engineer', 'system_admin'],
+    'reliability_metrics_delete': ['regional_engineer', 'global_engineer', 'system_admin'],
+    'performance_reports': ['district_engineer', 'regional_engineer', 'global_engineer', 'system_admin'],
+    'performance_reports_update': ['district_engineer', 'regional_engineer', 'global_engineer', 'system_admin'],
+    'performance_reports_delete': ['regional_engineer', 'global_engineer', 'system_admin'],
     
     // User Management Features
     'user_management': ['global_engineer', 'system_admin'],
@@ -76,7 +83,7 @@ export class PermissionService {
     
     'district_population': ['district_engineer', 'regional_engineer', 'global_engineer', 'system_admin'],
     'district_population_update': ['district_engineer', 'regional_engineer', 'global_engineer', 'system_admin'],
-    'district_population_delete': ['global_engineer', 'system_admin'],
+    'district_population_delete': ['regional_engineer', 'global_engineer', 'system_admin'],
     'district_population_reset': ['global_engineer', 'system_admin'],
     
     // System Administration Features
@@ -141,7 +148,7 @@ export class PermissionService {
         this.isInitialized = true;
         this.retryCount = 0;
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error loading permissions:", error);
       
       // If we get an offline error and haven't exceeded retries, try again
@@ -170,6 +177,7 @@ export class PermissionService {
     if (!this.isInitialized) {
       await this.loadPermissions();
     }
+    return this.isInitialized;
   }
 
   private notifyPermissionChange() {
@@ -295,6 +303,11 @@ export class PermissionService {
 
   public canAccessFeature(userRole: UserRole | null, feature: string): boolean {
     if (!userRole) return false;
+    if (!this.isInitialized) {
+      console.warn('PermissionService not initialized, using default permissions');
+      const defaultRoles = this.defaultFeaturePermissions[feature] || [];
+      return defaultRoles.includes(userRole);
+    }
     const allowedRoles = this.featurePermissions[feature] || [];
     console.log(`Checking access for ${feature}:`, { userRole, allowedRoles });
     return allowedRoles.includes(userRole);

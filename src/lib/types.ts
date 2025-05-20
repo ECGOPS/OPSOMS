@@ -89,7 +89,8 @@ export type UnplannedFaultType =
   | "PUNCTURED CABLE"
   | "ANIMAL INTERRUPTION"
   | "BAD WEATHER"
-  | "TRANSIENT FAULTS";
+  | "TRANSIENT FAULTS"
+  | "OTHERS";
 
 export type EmergencyFaultType =
   | "MEND CABLE"
@@ -108,7 +109,8 @@ export type EmergencyFaultType =
   | "TROUBLE SHOOTING"
   | "MEND LOOSE"
   | "MAINTENANCE"
-  | "REPLACE FUSE";
+  | "REPLACE FUSE"
+  | "OTHERS";
 
 export type StatsOverviewProps = {
   op5Faults: OP5Fault[];
@@ -157,6 +159,7 @@ export interface OP5Fault {
   occurrenceDate: string;
   restorationDate: string | null;
   repairDate: string | null;
+  repairEndDate: string | null;
   estimatedResolutionTime: string | null;
   description: string;
   status: 'pending' | 'resolved';
@@ -172,9 +175,9 @@ export interface OP5Fault {
   updatedAt: string;
   createdBy: string;
   updatedBy: string;
-  fuseCircuit?: string; // Add optional field for fuse circuit
-  fusePhase?: string; // Add optional field for fuse phase
-  otherFaultType?: string; // Add optional field for other fault type
+  fuseCircuit?: string;
+  fusePhase?: string;
+  otherFaultType?: string;
 }
 
 export interface ControlSystemOutage extends BaseRecord {

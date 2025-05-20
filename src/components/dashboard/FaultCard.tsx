@@ -243,6 +243,20 @@ export function FaultCard({ fault, type }: FaultCardProps) {
               <span>Affected: {getTotalAffectedCustomers().toLocaleString()} customers</span>
             </div>
             
+            {isOP5 && op5Fault?.repairDate && (
+              <div>
+                <div className="font-medium text-muted-foreground">Repair Started:</div>
+                <div>{formatDate(op5Fault.repairDate)}</div>
+              </div>
+            )}
+            
+            {isOP5 && op5Fault?.repairEndDate && (
+              <div>
+                <div className="font-medium text-muted-foreground">Repair Ended:</div>
+                <div>{formatDate(op5Fault.repairEndDate)}</div>
+              </div>
+            )}
+            
             {isOP5 && op5Fault?.mttr && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <BarChart size={14} />
@@ -271,13 +285,6 @@ export function FaultCard({ fault, type }: FaultCardProps) {
                   <div>
                     <div className="font-medium text-muted-foreground">Restored:</div>
                     <div>{formatDate(fault.restorationDate)}</div>
-                  </div>
-                )}
-                
-                {isOP5 && op5Fault?.repairDate && (
-                  <div>
-                    <div className="font-medium text-muted-foreground">Repair Started:</div>
-                    <div>{formatDate(op5Fault.repairDate)}</div>
                   </div>
                 )}
                 

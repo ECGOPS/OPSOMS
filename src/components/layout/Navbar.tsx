@@ -47,9 +47,17 @@ export function Navbar() {
     if (user.role === "technician") {
       return requiredRole === "district_engineer" && !location.pathname.startsWith("/analytics");
     }
-    // For district engineers, allow access to district population
+    // For district engineers, allow access to analytics and district population
     if (user.role === "district_engineer") {
       return requiredRole === "district_engineer" || requiredRole === "global_engineer";
+    }
+    // For regional engineers, allow access to analytics and district population
+    if (user.role === "regional_engineer") {
+      return requiredRole === "district_engineer" || requiredRole === "regional_engineer" || requiredRole === "global_engineer";
+    }
+    // For global engineers, allow access to all features
+    if (user.role === "global_engineer") {
+      return true;
     }
     return hasRequiredRole(user.role, requiredRole);
   };
@@ -73,13 +81,14 @@ export function Navbar() {
             Report Fault
           </NavLink>
           
-          {/* Show Analytics only for non-technician roles */}
-          {user?.role !== "technician" && showMenuItem("district_engineer") && (
-            <NavLink
-              to="/analytics"
-              className={({ isActive }: { isActive: boolean }) =>
-                `${isActive ? "text-ecg-blue" : "text-gray-700"} hover:text-ecg-blue transition-colors`
-              }
+          {/* Analytics Menu - Show for district engineers and above */}
+          {showMenuItem("district_engineer") && (
+            <NavLink 
+              to="/analytics" 
+              className={cn(
+                "text-foreground hover:text-primary transition-colors",
+                isActiveRoute("/analytics") && "text-primary"
+              )}
             >
               Analytics
             </NavLink>

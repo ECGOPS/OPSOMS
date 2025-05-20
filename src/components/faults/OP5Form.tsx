@@ -67,6 +67,7 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
   const [substationNo, setSubstationNo] = useState<string>("");
   const [occurrenceDate, setOccurrenceDate] = useState<string>("");
   const [repairDate, setRepairDate] = useState<string>("");
+  const [repairEndDate, setRepairEndDate] = useState<string>("");
   const [restorationDate, setRestorationDate] = useState<string>("");
   const [ruralAffected, setRuralAffected] = useState<number | null>(null);
   const [urbanAffected, setUrbanAffected] = useState<number | null>(null);
@@ -195,7 +196,7 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
         
         // Calculate MTTR if repair date is available
         if (repairDate) {
-          const mttr = calculateMTTR(repairDate, restorationDate);
+          const mttr = calculateMTTR(repairDate, repairEndDate);
           setMttr(mttr);
         }
         
@@ -235,7 +236,18 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
         }
       }
     }
-  }, [occurrenceDate, repairDate, restorationDate, districtId, districts, ruralAffected, urbanAffected, metroAffected, estimatedResolutionTime]);
+  }, [
+    occurrenceDate,
+    repairDate,
+    repairEndDate,
+    districtId,
+    districts,
+    ruralAffected,
+    urbanAffected,
+    metroAffected,
+    estimatedResolutionTime,
+    outageType
+  ]);
   
   // Reset specific fault type when fault type changes
   useEffect(() => {
@@ -296,6 +308,7 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
     setSubstationNo("");
     setOccurrenceDate("");
     setRepairDate("");
+    setRepairEndDate("");
     setRestorationDate("");
     setRuralAffected(null);
     setUrbanAffected(null);
@@ -346,7 +359,7 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
     }
 
     // Validate other fault type if Others is selected
-    if (specificFaultType === "OTHERS" && !otherFaultType) {
+    if (specificFaultType === "OTHERS" as UnplannedFaultType | EmergencyFaultType && !otherFaultType) {
       toast.error("Failed to create OP5 fault: Please specify the fault type");
       return;
     }
@@ -398,12 +411,13 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
       // Format dates
       const formattedOccurrenceDate = new Date(occurrenceDate).toISOString();
       const formattedRepairDate = repairDate ? new Date(repairDate).toISOString() : null;
+      const formattedRepairEndDate = repairEndDate ? new Date(repairEndDate).toISOString() : null;
       const formattedRestorationDate = restorationDate ? new Date(restorationDate).toISOString() : null;
       const formattedEstimatedResolutionTime = estimatedResolutionTime ? new Date(estimatedResolutionTime).toISOString() : null;
 
       const formDataToSubmit: Omit<OP5Fault, "id"> = {
         faultType: outageType as FaultType,
-        specificFaultType: specificFaultType === "OTHERS" ? otherFaultType : specificFaultType,
+        specificFaultType: specificFaultType === "OTHERS" ? otherFaultType : (specificFaultType || ""),
         substationName: substationName || "",
         substationNo: substationNo || "",
         feeder: feeder || "",
@@ -411,6 +425,7 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
         occurrenceDate: formattedOccurrenceDate,
         restorationDate: formattedRestorationDate,
         repairDate: formattedRepairDate,
+        repairEndDate: formattedRepairEndDate,
         description: outageDescription || "",
         status: restorationDate ? 'resolved' as const : 'pending' as const,
         ...(mttr !== null && { mttr }),
@@ -610,6 +625,16 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
       }
     }
   }, [user, regions, districts]);
+  
+  // Update MTTR calculation when repair dates change
+  useEffect(() => {
+    if (repairDate && repairEndDate) {
+      const calculatedMTTR = calculateMTTR(repairDate, repairEndDate);
+      setMttr(calculatedMTTR);
+    } else {
+      setMttr(null);
+    }
+  }, [repairDate, repairEndDate]);
   
   return (
     <Card className="border-0 shadow-none bg-transparent">
@@ -1099,18 +1124,33 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
                 </div>
                 
                 <div className="space-y-3">
-                  <Label htmlFor="repairDate" className="text-base font-medium">Repair Start Date & Time *</Label>
+                  <Label htmlFor="repairDate">Repair Start Date & Time</Label>
                   <Input
                     id="repairDate"
                     type="datetime-local"
                     value={repairDate}
                     onChange={(e) => setRepairDate(e.target.value)}
-                    required
-                    className="h-12 text-base bg-background/50 border-muted"
+                    className="h-10"
                   />
                 </div>
               </div>
               
+              <div className="space-y-3">
+                <Label htmlFor="repairEndDate">Repair End Date & Time</Label>
+                <Input
+                  id="repairEndDate"
+                  type="datetime-local"
+                  value={repairEndDate}
+                  onChange={(e) => setRepairEndDate(e.target.value)}
+                  className="h-10"
+                />
+                {mttr !== null && (
+                  <p className="text-sm text-muted-foreground">
+                    MTTR: {formatDuration(mttr)}
+                  </p>
+                )}
+              </div>
+
               <div className="space-y-3">
                 <Label htmlFor="restorationDate" className="text-base font-medium">Fault Restoration Date & Time</Label>
                 <Input
@@ -1149,21 +1189,23 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
             
             <TabsContent value="calculations" className="pt-4 sm:pt-6">
               <div className="space-y-4 sm:space-y-8">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="mttr" className="font-medium text-sm">MTTR (Mean Time To Repair)</Label>
+                    <Label htmlFor="customerLostHours" className="font-medium text-sm">Customer Lost Hours</Label>
+                    <div className="bg-muted/50 rounded-md p-2 sm:p-3 text-sm border border-muted">
+                      {customerLostHours !== null 
+                        ? formatDuration(customerLostHours)
+                        : "Not calculated yet"}
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="repairDuration" className="font-medium text-sm">Repair Duration</Label>
                     <div className="bg-muted/50 rounded-md p-2 sm:p-3 text-sm border border-muted">
                       {mttr !== null 
                         ? formatDuration(mttr)
                         : "Not calculated yet"}
                     </div>
-                  </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="customerLostHours" className="font-medium text-sm">Customer Lost Hours</Label>
-                  <div className="bg-muted/50 rounded-md p-2 sm:p-3 text-sm border border-muted">
-                      {customerLostHours !== null 
-                      ? formatDuration(customerLostHours)
-                        : "Not calculated yet"}
                   </div>
                 </div>
                 
@@ -1174,7 +1216,7 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
                       <div className="font-medium text-sm">Rural Population</div>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
                         <div className="bg-muted/50 rounded-md p-2 sm:p-3 text-sm border border-muted">
-                      <div className="font-medium">SAIDI</div>
+                          <div className="font-medium">SAIDI</div>
                           <div>{(reliabilityIndices.rural.saidi ?? 0).toFixed(2)}</div>
                         </div>
                         <div className="bg-muted/50 rounded-md p-2 sm:p-3 text-sm border border-muted">
@@ -1196,7 +1238,7 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
                           <div>{(reliabilityIndices.urban.saidi ?? 0).toFixed(2)}</div>
                         </div>
                         <div className="bg-muted/50 rounded-md p-2 sm:p-3 text-sm border border-muted">
-                      <div className="font-medium">SAIFI</div>
+                          <div className="font-medium">SAIFI</div>
                           <div>{(reliabilityIndices.urban.saifi ?? 0).toFixed(2)}</div>
                         </div>
                         <div className="bg-muted/50 rounded-md p-2 sm:p-3 text-sm border border-muted">
@@ -1218,7 +1260,7 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
                           <div>{(reliabilityIndices.metro.saifi ?? 0).toFixed(2)}</div>
                         </div>
                         <div className="bg-muted/50 rounded-md p-2 sm:p-3 text-sm border border-muted">
-                      <div className="font-medium">CAIDI</div>
+                          <div className="font-medium">CAIDI</div>
                           <div>{(reliabilityIndices.metro.caidi ?? 0).toFixed(2)}</div>
                         </div>
                       </div>

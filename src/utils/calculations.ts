@@ -6,10 +6,10 @@ export const calculateOutageDuration = (occurrenceDate: string, restorationDate:
   return Number(hours.toFixed(2)); // Round to 2 decimal places
 };
 
-// MTTR Calculation (Mean Time To Repair) in hours
-export const calculateMTTR = (repairDate: string, restorationDate: string): number => {
-  const start = new Date(repairDate).getTime();
-  const end = new Date(restorationDate).getTime();
+// MTTR (Mean Time To Repair) Calculation (in hours)
+export const calculateMTTR = (repairStartDate: string, repairEndDate: string): number => {
+  const start = new Date(repairStartDate).getTime();
+  const end = new Date(repairEndDate).getTime();
   const hours = (end - start) / (1000 * 60 * 60); // Convert milliseconds to hours
   return Number(hours.toFixed(2)); // Round to 2 decimal places
 };
@@ -107,9 +107,13 @@ export const formatDate = (timestamp: any) => {
   }
 };
 
-// Format duration in hours to hours with two decimal places
+// Format duration in hours to a human-readable string
 export const formatDuration = (hours: number): string => {
-  return `${hours.toFixed(2)} hours`;
+  if (hours < 1) {
+    const minutes = Math.round(hours * 60);
+    return `${minutes} min`;
+  }
+  return `${hours.toFixed(1)} hr`;
 };
 
 // Calculate Customer Lost Hours

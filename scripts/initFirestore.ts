@@ -1,15 +1,17 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, doc, setDoc, getDocs, deleteDoc, writeBatch } from 'firebase/firestore';
+import dotenv from 'dotenv';
 
-// Initialize Firebase with direct config
+// Load environment variables
+dotenv.config();
+
 const firebaseConfig = {
-  apiKey: "AIzaSyBsWB5wiJXBpBd9XPsMq9LFqNfghMMZyOQ",
-  authDomain: "omss-30595.firebaseapp.com",
-  projectId: "omss-30595",
-  storageBucket: "omss-30595.firebasestorage.app",
-  messagingSenderId: "967164809090",
-  appId: "1:967164809090:web:762166ecef2840da20099b",
-  measurementId: "G-S5VKN4ZHHP"
+  apiKey: process.env.VITE_FIREBASE_API_KEY,
+  authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.VITE_FIREBASE_APP_ID,
 };
 
 // Initialize Firebase

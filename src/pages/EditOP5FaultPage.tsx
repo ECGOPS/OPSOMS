@@ -285,13 +285,13 @@ export default function EditOP5FaultPage() {
 
     // Calculate MTTR only if both dates are valid and in correct order
     if (repDate && resDate && resDate > repDate) {
-        mttrValue = calculateMTTR(repStr!, resStr!);
+        mttrValue = calculateMTTR(repStr!, formData.repairEndDate!);
         console.log("[MTTR Debug] Calculated MTTR:", mttrValue);
     } else {
         console.log("[MTTR Debug] MTTR not calculated because:", {
             hasRepairDate: !!repDate,
-            hasRestorationDate: !!resDate,
-            isRestorationAfterRepair: repDate && resDate ? resDate > repDate : false
+            hasRepairEndDate: !!formData.repairEndDate,
+            isRepairEndAfterRepair: repDate && formData.repairEndDate ? new Date(formData.repairEndDate) > repDate : false
         });
     }
     

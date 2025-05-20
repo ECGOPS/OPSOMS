@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { ReactNode, useState, useEffect } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { UserRole } from '@/lib/types';
@@ -16,10 +16,24 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredRole,
   const { isAuthenticated, user } = useAuth();
   const location = useLocation();
   const permissionService = PermissionService.getInstance();
+  const [isInitialized, setIsInitialized] = useState(false);
+
+  useEffect(() => {
+    const initPermissions = async () => {
+      const initialized = await permissionService.initialize();
+      setIsInitialized(initialized);
+    };
+    initPermissions();
+  }, []);
 
   // Check if user is authenticated
   if (!isAuthenticated) {
     return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  // Wait for permissions to be initialized
+  if (!isInitialized) {
+    return <div>Loading...</div>;
   }
 
   // Check feature-based access

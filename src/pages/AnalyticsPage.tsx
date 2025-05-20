@@ -425,7 +425,9 @@ export default function AnalyticsPage() {
     const op5Faults = faults.filter(fault => 
       ('faultLocation' in fault || 'substationName' in fault) && 
       fault.occurrenceDate && 
-      fault.restorationDate
+      fault.restorationDate &&
+      fault.repairDate &&
+      fault.repairEndDate
     );
 
     // Get total population based on level
@@ -1476,6 +1478,17 @@ export default function AnalyticsPage() {
     setSelectedYear(undefined);
   };
   
+  // Set initial filters based on user role
+  useEffect(() => {
+    if (user?.role === "regional_engineer" && user.region) {
+      const userRegion = regions.find(r => r.name === user.region);
+      if (userRegion) {
+        setFilterRegion(userRegion.id);
+        setSelectedRegion(userRegion.id);
+      }
+    }
+  }, [user, regions]);
+  
   if (!isAuthenticated) {
     return null;
   }
@@ -1491,63 +1504,13 @@ export default function AnalyticsPage() {
           <p className="text-sm sm:text-base text-muted-foreground mt-1">
             {user?.role === "district_engineer" 
               ? `Analysis for ${user.district}` 
+              : user?.role === "regional_engineer"
+              ? `Analysis for ${user.region}`
               : "Analyze fault patterns and generate insights for better decision making"}
           </p>
         </div>
 
-        {/* Load Monitoring Overview Section - moved to top */}
-        <div className="mb-8">
-          <h2 className="text-2xl font-bold mb-4 text-primary">Load Monitoring Overview</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-6">
-            <Card className="bg-yellow-50 dark:bg-[#2a281f] border border-yellow-200 dark:border-yellow-900">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-yellow-700 dark:text-yellow-200">Load Monitoring Activities</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-xl sm:text-2xl font-bold text-yellow-900 dark:text-yellow-100">{loadStats.total}</div>
-                <p className="text-xs text-yellow-700 dark:text-yellow-200 mt-1">Total Activities</p>
-              </CardContent>
-            </Card>
-            <Card className="bg-red-50 dark:bg-[#2a2325] border border-red-200 dark:border-red-900">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-red-700 dark:text-red-200">Overloaded Transformers</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-xl sm:text-2xl font-bold text-red-900 dark:text-red-100">{loadStats.overloaded}</div>
-                <p className="text-xs text-red-700 dark:text-red-200 mt-1">Over 100% Load</p>
-              </CardContent>
-            </Card>
-            <Card className="bg-green-50 dark:bg-[#202a23] border border-green-200 dark:border-green-900">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-green-700 dark:text-green-200">Normal Condition</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-xl sm:text-2xl font-bold text-green-900 dark:text-green-100">{loadStats.okay}</div>
-                <p className="text-xs text-green-700 dark:text-green-200 mt-1">At or Below 100% Load</p>
-              </CardContent>
-            </Card>
-            <Card className="bg-blue-50 dark:bg-[#20232a] border border-blue-200 dark:border-blue-900">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-blue-700 dark:text-blue-200">Average Load (%)</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-xl sm:text-2xl font-bold text-blue-900 dark:text-blue-100">{loadStats.avgLoad}</div>
-                <p className="text-xs text-blue-700 dark:text-blue-200 mt-1">Across All Records</p>
-              </CardContent>
-            </Card>
-            <Card className="bg-orange-50 dark:bg-[#2a2820] border border-orange-200 dark:border-orange-900">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-orange-700 dark:text-orange-200">Urgent Attention</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-xl sm:text-2xl font-bold text-orange-900 dark:text-orange-100">{loadStats.urgent}</div>
-                <p className="text-xs text-orange-700 dark:text-orange-200 mt-1">Critical Neutral Warning</p>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-        
-        {/* Filters Section in a Card */}
+        {/* Filters Section */}
         <Card className="p-4 sm:p-6 bg-muted/30 border shadow-sm">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4">
             <h2 className="text-lg font-semibold flex items-center gap-2">
@@ -1894,7 +1857,7 @@ export default function AnalyticsPage() {
                 {filteredFaults.filter(f => 
                   ('faultLocation' in f || 'substationName' in f) && 
                   f.repairDate && 
-                  f.restorationDate
+                  f.repairEndDate
                 ).length} Faults Analyzed
               </Badge>
             </div>
@@ -1911,12 +1874,12 @@ export default function AnalyticsPage() {
                       const op5FaultsWithMTTR = filteredFaults.filter(f => 
                         ('faultLocation' in f || 'substationName' in f) && 
                         f.repairDate && 
-                        f.restorationDate
+                        f.repairEndDate
                       );
                       const totalMTTR = op5FaultsWithMTTR.reduce((sum, fault) => {
                         const repairDate = new Date(fault.repairDate);
-                        const restorationDate = new Date(fault.restorationDate);
-                        const mttr = (restorationDate.getTime() - repairDate.getTime()) / (1000 * 60 * 60);
+                        const repairEndDate = new Date(fault.repairEndDate);
+                        const mttr = (repairEndDate.getTime() - repairDate.getTime()) / (1000 * 60 * 60);
                         return sum + mttr;
                       }, 0);
                       const averageMTTR = op5FaultsWithMTTR.length > 0 ? totalMTTR / op5FaultsWithMTTR.length : 0;
@@ -1939,12 +1902,12 @@ export default function AnalyticsPage() {
                       const op5FaultsWithMTTR = filteredFaults.filter(f => 
                         ('faultLocation' in f || 'substationName' in f) && 
                         f.repairDate && 
-                        f.restorationDate
+                        f.repairEndDate
                       );
                       const totalMTTR = op5FaultsWithMTTR.reduce((sum, fault) => {
                         const repairDate = new Date(fault.repairDate);
-                        const restorationDate = new Date(fault.restorationDate);
-                        const mttr = (restorationDate.getTime() - repairDate.getTime()) / (1000 * 60 * 60);
+                        const repairEndDate = new Date(fault.repairEndDate);
+                        const mttr = (repairEndDate.getTime() - repairDate.getTime()) / (1000 * 60 * 60);
                         return sum + mttr;
                       }, 0);
                       return `${totalMTTR.toFixed(2)} hours`;
@@ -2012,13 +1975,13 @@ export default function AnalyticsPage() {
                     const itemFaults = filteredFaults.filter(f => 
                       ('faultLocation' in f || 'substationName' in f) && 
                       f.repairDate && 
-                      f.restorationDate && 
+                      f.repairEndDate && 
                       (isDisplayingDistricts ? f.districtId === item.id : f.regionId === item.id)
                     );
                     const itemMTTR = itemFaults.reduce((sum, fault) => {
                       const repairDate = new Date(fault.repairDate);
-                      const restorationDate = new Date(fault.restorationDate);
-                      const mttr = (restorationDate.getTime() - repairDate.getTime()) / (1000 * 60 * 60);
+                      const repairEndDate = new Date(fault.repairEndDate);
+                      const mttr = (repairEndDate.getTime() - repairDate.getTime()) / (1000 * 60 * 60);
                       return sum + mttr;
                     }, 0);
                     const avgMTTR = itemFaults.length > 0 ? itemMTTR / itemFaults.length : 0;
@@ -2157,17 +2120,18 @@ export default function AnalyticsPage() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Region</TableHead>
-                          <TableHead>District</TableHead>
-                          <TableHead>Date</TableHead>
-                          <TableHead>Type</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Outage Duration</TableHead>
-                          <TableHead>Estimated Resolution</TableHead>
-                          <TableHead>Resolution Status</TableHead>
-                          <TableHead>Customers Affected</TableHead>
-                          <TableHead>Fault Description</TableHead>
-                          <TableHead>Details</TableHead>
+                          <TableHead className="text-xs sm:text-sm py-2 px-2 sm:px-4">Region</TableHead>
+                          <TableHead className="text-xs sm:text-sm py-2 px-2 sm:px-4">District</TableHead>
+                          <TableHead className="text-xs sm:text-sm py-2 px-2 sm:px-4">Occurrence Date</TableHead>
+                          <TableHead className="text-xs sm:text-sm py-2 px-2 sm:px-4">Type</TableHead>
+                          <TableHead className="text-xs sm:text-sm py-2 px-2 sm:px-4">Status</TableHead>
+                          <TableHead className="text-xs sm:text-sm py-2 px-2 sm:px-4">Outage Duration</TableHead>
+                          <TableHead className="text-xs sm:text-sm py-2 px-2 sm:px-4">Repair Duration</TableHead>
+                          <TableHead className="text-xs sm:text-sm py-2 px-2 sm:px-4">Estimated Resolution</TableHead>
+                          <TableHead className="text-xs sm:text-sm py-2 px-2 sm:px-4">Resolution Status</TableHead>
+                          <TableHead className="text-xs sm:text-sm py-2 px-2 sm:px-4">Customers Affected</TableHead>
+                          <TableHead className="text-xs sm:text-sm py-2 px-2 sm:px-4">Description</TableHead>
+                          <TableHead className="text-xs sm:text-sm py-2 px-2 sm:px-4">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -2188,6 +2152,11 @@ export default function AnalyticsPage() {
                               <TableCell className="text-xs sm:text-sm py-2 px-2 sm:px-4">{
                                 fault.occurrenceDate && fault.restorationDate
                                   ? `${((new Date(fault.restorationDate).getTime() - new Date(fault.occurrenceDate).getTime()) / (1000 * 60 * 60)).toFixed(2)} hr`
+                                  : 'N/A'
+                              }</TableCell>
+                              <TableCell className="text-xs sm:text-sm py-2 px-2 sm:px-4">{
+                                fault.repairDate && fault.repairEndDate
+                                  ? `${((new Date(fault.repairEndDate).getTime() - new Date(fault.repairDate).getTime()) / (1000 * 60 * 60)).toFixed(2)} hr`
                                   : 'N/A'
                               }</TableCell>
                               <TableCell className="text-xs sm:text-sm py-2 px-2 sm:px-4">{
