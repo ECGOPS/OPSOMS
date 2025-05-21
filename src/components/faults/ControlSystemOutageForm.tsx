@@ -79,40 +79,34 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
 
     console.log("[ControlSystemOutageForm] Initializing with user:", {
       role: user.role,
-      districtId: user.districtId,
-      regionId: user.regionId
+      region: user.region,
+      district: user.district
     });
 
-    if (user.role === "district_engineer" || user.role === "regional_engineer" || user.role === "technician") {
-      // For district engineers and technicians, find their region through their district
-      if ((user.role === "district_engineer" || user.role === "technician") && user.districtId) {
-        const userDistrict = districts.find(d => d.id === user.districtId);
-        console.log("[ControlSystemOutageForm] Found user district:", userDistrict);
-        
-        if (userDistrict) {
-          setDistrictId(userDistrict.id);
-          setRegionId(userDistrict.regionId);
-          console.log("[ControlSystemOutageForm] Set district and region:", {
-            districtId: userDistrict.id,
-            regionId: userDistrict.regionId
-          });
-          return;
-        } else {
-          console.error("[ControlSystemOutageForm] Could not find district for user:", user.districtId);
-        }
-      }
+    // For district engineers, district managers and technicians
+    if ((user.role === "district_engineer" || user.role === "district_manager" || user.role === "technician") && user.district) {
+      const userDistrict = districts.find(d => d.name === user.district);
+      console.log("[ControlSystemOutageForm] Found user district:", userDistrict);
       
-      // For regional engineers, find region by name
-      if (user.role === "regional_engineer") {
-        const userRegion = regions.find(r => r.name === user.region);
-        console.log("[ControlSystemOutageForm] Found user region:", userRegion);
-        
-        if (userRegion) {
-          setRegionId(userRegion.id);
-          console.log("[ControlSystemOutageForm] Set region:", userRegion.id);
-        } else {
-          console.error("[ControlSystemOutageForm] Could not find region for user:", user.region);
-        }
+      if (userDistrict) {
+        setDistrictId(userDistrict.id);
+        setRegionId(userDistrict.regionId);
+        console.log("[ControlSystemOutageForm] Set district and region:", {
+          districtId: userDistrict.id,
+          regionId: userDistrict.regionId
+        });
+        return;
+      }
+    }
+    
+    // For regional engineers and regional general managers
+    if ((user.role === "regional_engineer" || user.role === "regional_general_manager") && user.region) {
+      const userRegion = regions.find(r => r.name === user.region);
+      console.log("[ControlSystemOutageForm] Found user region:", userRegion);
+      
+      if (userRegion) {
+        setRegionId(userRegion.id);
+        console.log("[ControlSystemOutageForm] Set region:", userRegion.id);
       }
     }
   }, [user, regions, districts]);
@@ -133,12 +127,13 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
     // Global engineers and system admins can see all regions
     if (user?.role === "global_engineer" || user?.role === "system_admin") return true;
     
-    // Regional engineers can only see their assigned region
-    if (user?.role === "regional_engineer") return region.id === user.regionId;
+    // Regional engineers and regional general managers can only see their assigned region
+    if (user?.role === "regional_engineer" || user?.role === "regional_general_manager") 
+      return region.name === user.region;
     
-    // District engineers and technicians can only see their assigned region
-    if (user?.role === "district_engineer" || user?.role === "technician") {
-      const userDistrict = districts.find(d => d.id === user.districtId);
+    // District engineers, district managers and technicians can only see their assigned region
+    if (user?.role === "district_engineer" || user?.role === "district_manager" || user?.role === "technician") {
+      const userDistrict = districts.find(d => d.name === user.district);
       return userDistrict ? region.id === userDistrict.regionId : false;
     }
     
@@ -152,13 +147,13 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
     if (user?.role === "global_engineer" || user?.role === "system_admin") 
       return district.regionId === regionId;
     
-    // Regional engineers can see all districts in their region
-    if (user?.role === "regional_engineer") 
+    // Regional engineers and regional general managers can see all districts in their region
+    if (user?.role === "regional_engineer" || user?.role === "regional_general_manager") 
       return district.regionId === user.regionId;
     
-    // District engineers and technicians can only see their assigned district
-    if (user?.role === "district_engineer" || user?.role === "technician") 
-      return district.id === user.districtId;
+    // District engineers, district managers and technicians can only see their assigned district
+    if (user?.role === "district_engineer" || user?.role === "district_manager" || user?.role === "technician") 
+      return district.name === user.district;
     
     return false;
   });
@@ -336,7 +331,7 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
               <Select 
                 value={regionId} 
                 onValueChange={setRegionId}
-                disabled={user?.role === "district_engineer" || user?.role === "regional_engineer" || user?.role === "technician"}
+                disabled={user?.role === "district_engineer" || user?.role === "district_manager" || user?.role === "regional_engineer" || user?.role === "regional_general_manager" || user?.role === "technician"}
                 required
               >
                 <SelectTrigger className="h-12 text-base bg-background/50 border-muted">
@@ -357,7 +352,7 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
               <Select 
                 value={districtId} 
                 onValueChange={setDistrictId}
-                disabled={user?.role === "district_engineer" || user?.role === "technician" || !regionId}
+                disabled={user?.role === "district_engineer" || user?.role === "district_manager" || user?.role === "technician" || !regionId}
                 required
               >
                 <SelectTrigger className="h-12 text-base bg-background/50 border-muted">

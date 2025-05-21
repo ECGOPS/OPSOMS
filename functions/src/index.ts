@@ -1,8 +1,12 @@
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
-import { CallableRequest } from 'firebase-functions/v1/https';
+import axios from 'axios';
 
 admin.initializeApp();
+
+// BulkSMS API configuration
+const BULKSMS_API_URL = 'https://pelrq3.api.infobip.com/sms/2/text/advanced';
+const BULKSMS_API_KEY = functions.config().bulksms.api_key;
 
 interface ResetPasswordRequest {
   userId: string;
@@ -10,6 +14,11 @@ interface ResetPasswordRequest {
 
 interface ResetPasswordResponse {
   tempPassword: string;
+}
+
+interface BulkSMSResponse {
+  id: string;
+  status: string;
 }
 
 export const adminResetPassword = functions.https.onCall(async (data: ResetPasswordRequest, context) => {
@@ -64,4 +73,172 @@ export const getIpAddress = functions.https.onCall((data: any, context: function
   return {
     ip: ipAddress
   };
-}); 
+});
+
+export const sendSMS = functions.https.onCall(async (data, context) => {
+  // Verify authentication
+  if (!context.auth) {
+    throw new functions.https.HttpsError(
+      'unauthenticated',
+      'The function must be called while authenticated.'
+    );
+  }
+
+  const { phoneNumber, message, faultId, faultType } = data;
+
+  try {
+    // Format phone number to ensure it's in the correct format (e.g., +233XXXXXXXXX)
+    const formattedPhoneNumber = formatPhoneNumber(phoneNumber);
+
+    // Send SMS using BulkSMS
+    const response = await axios.post<BulkSMSResponse>(
+      BULKSMS_API_URL,
+      {
+        messages: [{
+          destinations: [{
+            to: formattedPhoneNumber
+          }],
+          from: 'ECG OUTAGE MANAGMENT SYSTEM',
+          text: message
+        }]
+      },
+      {
+        headers: {
+          'Authorization': `App ${BULKSMS_API_KEY}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        }
+      }
+    );
+
+    // Log successful SMS
+    await admin.firestore().collection('sms_logs').add({
+      phoneNumber: formattedPhoneNumber,
+      message,
+      faultId,
+      faultType,
+      status: 'sent',
+      bulksmsMessageId: response.data.id,
+      timestamp: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    return { success: true, messageId: response.data.id };
+  } catch (error: any) {
+    // Log failed SMS
+    await admin.firestore().collection('sms_logs').add({
+      phoneNumber,
+      message,
+      faultId,
+      faultType,
+      status: 'failed',
+      error: error.response?.data?.message || error.message,
+      timestamp: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    throw new functions.https.HttpsError(
+      'internal',
+      'Failed to send SMS',
+      error.response?.data || error
+    );
+  }
+});
+
+// Test function to send SMS
+export const testSMS = functions.https.onCall(async (data, context) => {
+  // Verify authentication
+  if (!context.auth) {
+    throw new functions.https.HttpsError(
+      'unauthenticated',
+      'The function must be called while authenticated.'
+    );
+  }
+
+  const { phoneNumber } = data;
+  const testMessage = "This is a test message from ECG Fault Master. Your fault has been resolved.";
+
+  try {
+    // Format phone number
+    const formattedPhoneNumber = formatPhoneNumber(phoneNumber);
+
+    // Send test SMS
+    const response = await axios.post<BulkSMSResponse>(
+      BULKSMS_API_URL,
+      {
+        messages: [{
+          destinations: [{
+            to: formattedPhoneNumber
+          }],
+          from: 'ECG OUTAGE MANAGMENT SYSTEM',
+          text: testMessage
+        }]
+      },
+      {
+        headers: {
+          'Authorization': `App ${BULKSMS_API_KEY}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        }
+      }
+    );
+
+    // Log test SMS
+    await admin.firestore().collection('sms_logs').add({
+      phoneNumber: formattedPhoneNumber,
+      message: testMessage,
+      faultId: 'TEST',
+      faultType: 'TEST',
+      status: 'sent',
+      bulksmsMessageId: response.data.id,
+      timestamp: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    return { 
+      success: true, 
+      messageId: response.data.id,
+      message: 'Test SMS sent successfully'
+    };
+  } catch (error: any) {
+    console.error('Test SMS Error:', error.response?.data || error);
+    
+    // Log failed test SMS
+    await admin.firestore().collection('sms_logs').add({
+      phoneNumber,
+      message: testMessage,
+      faultId: 'TEST',
+      faultType: 'TEST',
+      status: 'failed',
+      error: error.response?.data?.message || error.message,
+      timestamp: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    throw new functions.https.HttpsError(
+      'internal',
+      'Failed to send test SMS',
+      error.response?.data || error
+    );
+  }
+});
+
+// Helper function to format phone numbers
+function formatPhoneNumber(phoneNumber: string): string {
+  // Remove any non-digit characters
+  const cleaned = phoneNumber.replace(/\D/g, '');
+  
+  // If number starts with 0, replace with +233
+  if (cleaned.startsWith('0')) {
+    return '+233' + cleaned.substring(1);
+  }
+  
+  // If number starts with 233, add +
+  if (cleaned.startsWith('233')) {
+    return '+' + cleaned;
+  }
+  
+  // If number doesn't have country code, add +233
+  if (cleaned.length === 10) {
+    return '+233' + cleaned;
+  }
+  
+  // Return as is if already in international format
+  return '+' + cleaned;
+} 

@@ -76,6 +76,81 @@ export default function EditInspectionPage() {
     }
   }, [id, getSavedInspection, navigate]);
 
+  // Initialize region and district based on user's assigned values
+  useEffect(() => {
+    if (user?.role === "district_engineer" || user?.role === "regional_engineer" || user?.role === "technician" || user?.role === "district_manager") {
+      // Find region ID based on user's assigned region name
+      const userRegion = regions.find(r => r.name === user.region);
+      if (userRegion) {
+        setFormData(prev => ({ ...prev, region: userRegion.name }));
+        
+        // For district engineer, technician, and district manager, also set the district
+        if ((user.role === "district_engineer" || user?.role === "technician" || user?.role === "district_manager") && user.district) {
+          const userDistrict = districts.find(d => 
+            d.regionId === userRegion.id && d.name === user.district
+          );
+          if (userDistrict) {
+            setFormData(prev => ({ ...prev, district: userDistrict.name }));
+          }
+        }
+      }
+    }
+  }, [user, regions, districts]);
+
+  // Ensure district engineer's, technician's, and district manager's district is always set correctly
+  useEffect(() => {
+    if ((user?.role === "district_engineer" || user?.role === "technician" || user?.role === "district_manager") && user.district && user.region) {
+      const userRegion = regions.find(r => r.name === user.region);
+      if (userRegion) {
+        const userDistrict = districts.find(d => 
+          d.regionId === userRegion.id && d.name === user.district
+        );
+        if (userDistrict) {
+          setFormData(prev => ({ 
+            ...prev, 
+            region: userRegion.name,
+            district: userDistrict.name 
+          }));
+        }
+      }
+    }
+  }, [user, regions, districts]);
+
+  // Filter regions and districts based on user role
+  const filteredRegions = user?.role === "global_engineer"
+    ? regions
+    : regions.filter(r => user?.region ? r.name === user.region : true);
+  
+  const filteredDistricts = formData.region
+    ? districts.filter(d => {
+        // First check if district belongs to selected region
+        const region = regions.find(r => r.name === formData.region);
+        if (!region || d.regionId !== region.id) return false;
+        
+        // For district engineers, technicians, and district managers, only show their assigned district
+        if (user?.role === "district_engineer" || user?.role === "technician" || user?.role === "district_manager") {
+          return d.name === user.district;
+        }
+        
+        // For other roles, show all districts in the region
+        return true;
+      })
+    : [];
+
+  // Handle region change - prevent district engineers, technicians, and district managers from changing region
+  const handleRegionChange = (value: string) => {
+    if (user?.role === "district_engineer" || user?.role === "technician" || user?.role === "district_manager") return; // Prevent district engineers, technicians, and district managers from changing region
+    
+    setFormData(prev => ({ ...prev, region: value, district: "" }));
+  };
+
+  // Handle district change - prevent district engineers, technicians, and district managers from changing district
+  const handleDistrictChange = (value: string) => {
+    if (user?.role === "district_engineer" || user?.role === "technician" || user?.role === "district_manager") return; // Prevent district engineers, technicians, and district managers from changing district
+    
+    setFormData(prev => ({ ...prev, district: value }));
+  };
+
   // Handle generic form input changes
   const handleInputChange = (field: keyof SubstationInspection, value: any) => {
     setFormData(prev => ({
@@ -172,14 +247,15 @@ export default function EditInspectionPage() {
                     <Label htmlFor="region">Region</Label>
                     <Select
                       value={formData.region}
-                      onValueChange={(value) => handleInputChange('region', value)}
+                      onValueChange={handleRegionChange}
                       required
+                      disabled={user?.role === "district_engineer" || user?.role === "regional_engineer" || user?.role === "technician" || user?.role === "district_manager"}
                     >
                       <SelectTrigger id="region">
                         <SelectValue placeholder="Select region" />
                       </SelectTrigger>
                       <SelectContent>
-                        {regions.map(region => (
+                        {filteredRegions.map(region => (
                           <SelectItem key={region.id} value={region.name}>
                             {region.name}
                           </SelectItem>
@@ -191,21 +267,19 @@ export default function EditInspectionPage() {
                     <Label htmlFor="district">District</Label>
                     <Select
                       value={formData.district}
-                      onValueChange={(value) => handleInputChange('district', value)}
+                      onValueChange={handleDistrictChange}
                       required
-                      disabled={!formData.region}
+                      disabled={user?.role === "district_engineer" || user?.role === "technician" || user?.role === "district_manager" || !formData.region}
                     >
-                      <SelectTrigger id="district">
+                      <SelectTrigger id="district" className={user?.role === "district_engineer" || user?.role === "district_manager" ? "bg-muted" : ""}>
                         <SelectValue placeholder="Select district" />
                       </SelectTrigger>
                       <SelectContent>
-                        {districts
-                          .filter(d => regions.find(r => r.name === formData.region)?.id === d.regionId)
-                          .map(district => (
-                            <SelectItem key={district.id} value={district.name}>
-                              {district.name}
-                            </SelectItem>
-                          ))}
+                        {filteredDistricts.map(district => (
+                          <SelectItem key={district.id} value={district.name}>
+                            {district.name}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>

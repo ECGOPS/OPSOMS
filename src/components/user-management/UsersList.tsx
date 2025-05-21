@@ -64,7 +64,11 @@ export function UsersList() {
     switch (role) {
       case "district_engineer":
         return "bg-green-100 text-green-800 hover:bg-green-100";
+      case "district_manager":
+        return "bg-green-100 text-green-800 hover:bg-green-100";
       case "regional_engineer":
+        return "bg-blue-100 text-blue-800 hover:bg-blue-100";
+      case "regional_general_manager":
         return "bg-blue-100 text-blue-800 hover:bg-blue-100";
       case "global_engineer":
         return "bg-purple-100 text-purple-800 hover:bg-purple-100";
@@ -81,8 +85,12 @@ export function UsersList() {
     switch (role) {
       case "district_engineer":
         return "District Engineer";
+      case "district_manager":
+        return "District Manager";
       case "regional_engineer":
         return "Regional Engineer";
+      case "regional_general_manager":
+        return "Regional General Manager";
       case "global_engineer":
         return "Global Engineer";
       case "system_admin":
@@ -197,8 +205,8 @@ export function UsersList() {
         role: newRole,
         region: (newRole !== "system_admin" && newRole !== "global_engineer") ? newRegion : undefined,
         regionId: (newRole !== "system_admin" && newRole !== "global_engineer") ? regionId : undefined,
-        district: (newRole === "district_engineer" || newRole === "technician") ? newDistrict : undefined,
-        districtId: (newRole === "district_engineer" || newRole === "technician") ? districtId : undefined
+        district: (newRole === "district_engineer" || newRole === "district_manager" || newRole === "technician") ? newDistrict : undefined,
+        districtId: (newRole === "district_engineer" || newRole === "district_manager" || newRole === "technician") ? districtId : undefined
       });
     
       resetForm();
@@ -603,14 +611,16 @@ export function UsersList() {
                   <SelectContent>
                     {isSystemAdmin && <SelectItem value="system_admin">System Administrator</SelectItem>}
                     <SelectItem value="global_engineer">Global Engineer</SelectItem>
+                    <SelectItem value="regional_general_manager">Regional General Manager</SelectItem>
                     <SelectItem value="regional_engineer">Regional Engineer</SelectItem>
+                    <SelectItem value="district_manager">District Manager</SelectItem>
                     <SelectItem value="district_engineer">District Engineer</SelectItem>
                     <SelectItem value="technician">Technician</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               
-              {(newRole === "district_engineer" || newRole === "regional_engineer" || newRole === "technician") && (
+              {(newRole === "district_engineer" || newRole === "district_manager" || newRole === "technician") && (
                 <div className="space-y-2">
                   <Label htmlFor="region">Region</Label>
                   <Select value={newRegion} onValueChange={setNewRegion}>
@@ -628,7 +638,7 @@ export function UsersList() {
                 </div>
               )}
               
-              {(newRole === "district_engineer" || newRole === "technician") && newRegion && (
+              {(newRole === "district_engineer" || newRole === "district_manager" || newRole === "technician") && newRegion && (
                 <div className="space-y-2">
                   <Label htmlFor="district">District</Label>
                   <Select value={newDistrict} onValueChange={setNewDistrict}>
@@ -782,14 +792,16 @@ export function UsersList() {
                 <SelectContent>
                   {isSystemAdmin && <SelectItem value="system_admin">System Administrator</SelectItem>}
                   <SelectItem value="global_engineer">Global Engineer</SelectItem>
+                  <SelectItem value="regional_general_manager">Regional General Manager</SelectItem>
                   <SelectItem value="regional_engineer">Regional Engineer</SelectItem>
+                  <SelectItem value="district_manager">District Manager</SelectItem>
                   <SelectItem value="district_engineer">District Engineer</SelectItem>
                   <SelectItem value="technician">Technician</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             
-            {(newRole === "regional_engineer" || newRole === "district_engineer" || newRole === "technician") && (
+            {(newRole === "regional_engineer" || newRole === "regional_general_manager" || newRole === "district_engineer" || newRole === "district_manager" || newRole === "technician") && (
               <div className="space-y-2">
                 <Label htmlFor="edit-region">Region</Label>
                 <Select value={newRegion} onValueChange={setNewRegion}>
@@ -807,7 +819,7 @@ export function UsersList() {
               </div>
             )}
             
-            {(newRole === "district_engineer" || newRole === "technician") && newRegion && (
+            {(newRole === "district_engineer" || newRole === "district_manager" || newRole === "technician") && newRegion && (
               <div className="space-y-2">
                 <Label htmlFor="edit-district">District</Label>
                 <Select value={newDistrict} onValueChange={setNewDistrict}>

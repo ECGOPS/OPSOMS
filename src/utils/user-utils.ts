@@ -23,8 +23,8 @@ export function getUserRegionAndDistrict(
     return { regionId, districtId };
   }
 
-  // For district engineers and technicians, find both region and district
-  if ((user.role === "district_engineer" || user.role === "technician") && user.region && user.district) {
+  // For district engineers, district managers and technicians, find both region and district
+  if ((user.role === "district_engineer" || user.role === "district_manager" || user.role === "technician") && user.region && user.district) {
     const userRegion = regions.find(r => r.name === user.region);
     if (userRegion) {
       regionId = userRegion.id;
@@ -34,8 +34,8 @@ export function getUserRegionAndDistrict(
       }
     }
   }
-  // For regional engineers, find only region
-  else if (user.role === "regional_engineer" && user.region) {
+  // For regional engineers and regional general managers, find only region
+  else if ((user.role === "regional_engineer" || user.role === "regional_general_manager") && user.region) {
     const userRegion = regions.find(r => r.name === user.region);
     if (userRegion) {
       regionId = userRegion.id;
@@ -57,7 +57,7 @@ export function validateUserRoleAssignment(
     return { isValid: true };
   }
 
-  // For regional engineers, technicians, and district engineers, region is required
+  // For regional engineers, regional general managers, technicians, and district engineers, region is required
   if (!region) {
     return { isValid: false, error: "Region is required" };
   }
@@ -68,10 +68,10 @@ export function validateUserRoleAssignment(
     return { isValid: false, error: "Invalid region selected" };
   }
 
-  // For district engineers and technicians, district is required
-  if (role === "district_engineer" || role === "technician") {
+  // For district engineers, district managers and technicians, district is required
+  if (role === "district_engineer" || role === "district_manager" || role === "technician") {
     if (!district) {
-      return { isValid: false, error: "District is required for District Engineers and Technicians" };
+      return { isValid: false, error: "District is required for District Engineers, District Managers and Technicians" };
     }
 
     // Validate district exists and belongs to selected region

@@ -111,9 +111,11 @@ export default function VITInspectionManagementPage() {
       let q = query(inspectionsRef);
       
       // Apply role-based filtering
-      if (user?.role === 'regional_engineer') {
+      if (user?.role === 'global_engineer') {
+        // No filtering for global engineers
+      } else if (user?.role === 'regional_engineer' || user?.role === 'regional_general_manager') {
         q = query(q, where("region", "==", user.region));
-      } else if (user?.role === 'district_engineer' || user?.role === 'technician') {
+      } else if (user?.role === 'district_engineer' || user?.role === 'technician' || user?.role === 'district_manager') {
         q = query(q, where("district", "==", user.district));
       }
 
@@ -596,10 +598,10 @@ function InspectionRecordsTable({ onViewDetails, onEditInspection, onViewAsset }
     let roleBasedAccess = true;
     if (user?.role === "global_engineer") {
       roleBasedAccess = true;
-    } else if (user?.role === "regional_engineer" && user.region) {
+    } else if (user?.role === "regional_engineer" || user?.role === "regional_general_manager") {
       const userRegion = regions.find(r => r.name === user.region);
       roleBasedAccess = userRegion ? asset.region === userRegion.id : false;
-    } else if ((user?.role === "district_engineer" || user?.role === "technician") && user.region && user.district) {
+    } else if ((user?.role === "district_engineer" || user?.role === "technician" || user?.role === "district_manager") && user.region && user.district) {
       const userRegion = regions.find(r => r.name === user.region);
       const userDistrict = districts.find(d => d.name === user.district);
       roleBasedAccess = userRegion && userDistrict ? 

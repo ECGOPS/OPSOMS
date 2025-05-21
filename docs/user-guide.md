@@ -101,7 +101,23 @@ The dashboard provides a comprehensive view of system status:
 - Update fault status
 - Access regional analytics
 
-#### 3. District Engineer
+#### 3. Regional General Manager
+**Responsibilities:**
+- Regional oversight
+- Team management
+- Performance monitoring
+- Resource allocation
+- Strategic planning
+
+**Permissions:**
+- View regional data
+- Manage regional users
+- Generate regional reports
+- Update fault status
+- Access regional analytics
+- Manage regional resources
+
+#### 4. District Engineer
 **Responsibilities:**
 - District-level operations
 - Fault response
@@ -115,7 +131,23 @@ The dashboard provides a comprehensive view of system status:
 - Generate basic reports
 - Access district analytics
 
-#### 4. Viewer
+#### 5. District Manager
+**Responsibilities:**
+- District-level operations
+- Team leadership
+- Resource management
+- Performance monitoring
+- Customer service oversight
+
+**Permissions:**
+- Report faults
+- Update fault status
+- View district data
+- Generate basic reports
+- Access district analytics
+- Manage district resources
+
+#### 6. Viewer
 **Responsibilities:**
 - Monitor system status
 - View reports

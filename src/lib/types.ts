@@ -5,7 +5,9 @@ import { BaseRecord } from '../utils/db';
 
 export type UserRole = 
   | "district_engineer" 
+  | "district_manager"
   | "regional_engineer" 
+  | "regional_general_manager"
   | "global_engineer" 
   | "technician" 
   | "system_admin"
@@ -181,6 +183,8 @@ export interface OP5Fault {
   fuseCircuit?: string;
   fusePhase?: string;
   otherFaultType?: string;
+  customerPhoneNumber?: string;
+  alternativePhoneNumber?: string;
 }
 
 export interface ControlSystemOutage extends BaseRecord {

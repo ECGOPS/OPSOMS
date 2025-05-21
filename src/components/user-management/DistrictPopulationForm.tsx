@@ -49,15 +49,15 @@ export function DistrictPopulationForm() {
     console.log("User region:", user?.region);
     console.log("User district:", user?.district);
     
-    if ((user?.role === "district_engineer" || user?.role === "regional_engineer") && user.region) {
+    if ((user?.role === "district_engineer" || user?.role === "regional_engineer" || user?.role === "district_manager") && user.region) {
       const userRegion = regions.find(r => r.name === user.region);
       console.log("Found user region:", userRegion);
       
       if (userRegion) {
         setSelectedRegion(userRegion.id);
         
-        // For district engineer, also set the district
-        if (user.role === "district_engineer" && user.district) {
+        // For district engineer and district manager, also set the district
+        if ((user.role === "district_engineer" || user?.role === "district_manager") && user.district) {
           const userDistrict = districts.find(d => d.name === user.district);
           console.log("Found user district:", userDistrict);
           
@@ -73,9 +73,9 @@ export function DistrictPopulationForm() {
     }
   }, [user, regions, districts]);
   
-  // Ensure district is set for district engineers
+  // Ensure district is set for district engineers and district managers
   useEffect(() => {
-    if (user?.role === "district_engineer" && user.district && selectedRegion && !selectedDistrict) {
+    if ((user?.role === "district_engineer" || user?.role === "district_manager") && user.district && selectedRegion && !selectedDistrict) {
       const userDistrict = districts.find(d => d.name === user.district);
       if (userDistrict) {
         setSelectedDistrict(userDistrict.id);
@@ -159,11 +159,11 @@ export function DistrictPopulationForm() {
     ? regions 
     : regions.filter(r => user?.region ? r.name === user.region : true);
   
-  // Filter districts for district engineers
+  // Filter districts for district engineers and district managers
   const filteredDistricts = selectedRegion
     ? districts.filter(d => {
         return d.regionId === selectedRegion && (
-          user?.role === "district_engineer" 
+          (user?.role === "district_engineer" || user?.role === "district_manager")
             ? d.name === user.district 
             : true
         );
@@ -189,7 +189,7 @@ export function DistrictPopulationForm() {
               <Select 
                 value={selectedRegion} 
                 onValueChange={setSelectedRegion}
-                disabled={user?.role === "district_engineer" || user?.role === "regional_engineer"}
+                disabled={user?.role === "district_engineer" || user?.role === "regional_engineer" || user?.role === "district_manager"}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select region" />
@@ -209,7 +209,7 @@ export function DistrictPopulationForm() {
               <Select 
                 value={selectedDistrict} 
                 onValueChange={setSelectedDistrict}
-                disabled={!selectedRegion || user?.role === "district_engineer"}
+                disabled={!selectedRegion || user?.role === "district_engineer" || user?.role === "district_manager"}
               >
                 <SelectTrigger>
                   <SelectValue placeholder={selectedRegion ? "Select district" : "Select region first"} />

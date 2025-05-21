@@ -40,50 +40,50 @@ export const HeaderTest: React.FC = () => {
 
   return (
     <div className="p-4">
-      <h2 className="text-xl font-bold mb-4">Security Headers Test</h2>
+      <h2 className="text-xl font-bold mb-4 text-foreground">Security Headers Test</h2>
       
       <div className="flex gap-2 mb-4">
         <button
           onClick={runTest}
           disabled={loading}
-          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-400"
+          className="px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground"
         >
           {loading ? 'Testing...' : 'Run Test'}
         </button>
         <button
           onClick={resetTest}
           disabled={loading || results.length === 0}
-          className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 disabled:bg-gray-400"
+          className="px-4 py-2 bg-secondary text-secondary-foreground rounded hover:bg-secondary/90 disabled:bg-muted disabled:text-muted-foreground"
         >
           Reset
         </button>
       </div>
 
       {error && (
-        <div className="mb-4 p-4 bg-red-100 text-red-700 rounded">
+        <div className="mb-4 p-4 bg-destructive/10 text-destructive rounded">
           Error: {error}
         </div>
       )}
 
       <div className="overflow-x-auto">
-        <table className="min-w-full bg-white border border-gray-300">
+        <table className="min-w-full border border-border">
           <thead>
-            <tr className="bg-gray-100">
-              <th className="px-4 py-2 border">Header</th>
-              <th className="px-4 py-2 border">Expected</th>
-              <th className="px-4 py-2 border">Actual</th>
-              <th className="px-4 py-2 border">Status</th>
-              <th className="px-4 py-2 border">Details</th>
+            <tr className="bg-muted/80 dark:bg-muted/40">
+              <th className="px-4 py-2 border border-border text-foreground">Header</th>
+              <th className="px-4 py-2 border border-border text-foreground">Expected</th>
+              <th className="px-4 py-2 border border-border text-foreground">Actual</th>
+              <th className="px-4 py-2 border border-border text-foreground">Status</th>
+              <th className="px-4 py-2 border border-border text-foreground">Details</th>
             </tr>
           </thead>
           <tbody>
             {results.map((result, index) => (
-              <tr key={index} className={index % 2 === 0 ? 'bg-gray-50' : ''}>
-                <td className="px-4 py-2 border font-mono">{result.header}</td>
-                <td className="px-4 py-2 border font-mono text-sm">{result.expected}</td>
-                <td className="px-4 py-2 border font-mono text-sm">{result.actual || 'Not Set'}</td>
-                <td className="px-4 py-2 border text-center">{result.status}</td>
-                <td className="px-4 py-2 border text-sm text-red-600 whitespace-pre-wrap">
+              <tr key={index} className={index % 2 === 0 ? 'bg-muted/50' : 'bg-background'}>
+                <td className="px-4 py-2 border border-border font-mono text-foreground">{result.header}</td>
+                <td className="px-4 py-2 border border-border font-mono text-sm text-foreground">{result.expected}</td>
+                <td className="px-4 py-2 border border-border font-mono text-sm text-foreground">{result.actual || 'Not Set'}</td>
+                <td className="px-4 py-2 border border-border text-center text-foreground">{result.status}</td>
+                <td className="px-4 py-2 border border-border text-sm text-destructive whitespace-pre-wrap">
                   {result.details || ''}
                 </td>
               </tr>
@@ -93,9 +93,9 @@ export const HeaderTest: React.FC = () => {
       </div>
 
       {/* Debug information */}
-      <div className="mt-4 p-4 bg-gray-100 rounded">
-        <h3 className="font-bold mb-2">Debug Information:</h3>
-        <pre className="text-sm">
+      <div className="mt-4 p-4 bg-muted rounded overflow-x-auto">
+        <h3 className="font-bold mb-2 text-foreground">Debug Information:</h3>
+        <pre className="text-sm text-muted-foreground">
           {JSON.stringify(results, null, 2)}
         </pre>
       </div>

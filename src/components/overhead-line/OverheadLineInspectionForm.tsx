@@ -457,7 +457,7 @@ export function OverheadLineInspectionForm({ inspection, onSubmit, onCancel }: O
             <Select
               value={formData.region}
               onValueChange={handleRegionChange}
-              disabled={user?.role === "district_engineer" || user?.role === "regional_engineer" || user?.role === "technician"}
+              disabled={user?.role === "district_engineer" || user?.role === "regional_engineer" || user?.role === "technician" || user?.role === "regional_general_manager"}
               required
             >
               <SelectTrigger>

@@ -323,7 +323,11 @@ export function StaffIdManagement() {
     switch (role) {
       case "district_engineer":
         return "bg-green-100 text-green-800 hover:bg-green-100";
+      case "district_manager":
+        return "bg-green-100 text-green-800 hover:bg-green-100";
       case "regional_engineer":
+        return "bg-blue-100 text-blue-800 hover:bg-blue-100";
+      case "regional_general_manager":
         return "bg-blue-100 text-blue-800 hover:bg-blue-100";
       case "global_engineer":
         return "bg-purple-100 text-purple-800 hover:bg-purple-100";
@@ -340,8 +344,12 @@ export function StaffIdManagement() {
     switch (role) {
       case "district_engineer":
         return "District Engineer";
+      case "district_manager":
+        return "District Manager";
       case "regional_engineer":
         return "Regional Engineer";
+      case "regional_general_manager":
+        return "Regional General Manager";
       case "global_engineer":
         return "Global Engineer";
       case "system_admin":
@@ -657,7 +665,9 @@ Admin User,system_admin,,,ECGADMIN`;
                     <SelectItem value="all">All Roles</SelectItem>
                     <SelectItem value="system_admin">System Admin</SelectItem>
                     <SelectItem value="global_engineer">Global Engineer</SelectItem>
+                    <SelectItem value="regional_general_manager">Regional General Manager</SelectItem>
                     <SelectItem value="regional_engineer">Regional Engineer</SelectItem>
+                    <SelectItem value="district_manager">District Manager</SelectItem>
                     <SelectItem value="district_engineer">District Engineer</SelectItem>
                     <SelectItem value="technician">Technician</SelectItem>
                   </SelectContent>
@@ -763,7 +773,9 @@ Admin User,system_admin,,,ECGADMIN`;
                   <SelectContent>
                     <SelectItem value="system_admin">System Admin</SelectItem>
                     <SelectItem value="global_engineer">Global Engineer</SelectItem>
+                    <SelectItem value="regional_general_manager">Regional General Manager</SelectItem>
                     <SelectItem value="regional_engineer">Regional Engineer</SelectItem>
+                    <SelectItem value="district_manager">District Manager</SelectItem>
                     <SelectItem value="district_engineer">District Engineer</SelectItem>
                     <SelectItem value="technician">Technician</SelectItem>
                   </SelectContent>
@@ -888,7 +900,9 @@ Admin User,system_admin,,,ECGADMIN`;
                             <SelectContent>
                               <SelectItem value="system_admin">System Admin</SelectItem>
                               <SelectItem value="global_engineer">Global Engineer</SelectItem>
+                              <SelectItem value="regional_general_manager">Regional General Manager</SelectItem>
                               <SelectItem value="regional_engineer">Regional Engineer</SelectItem>
+                              <SelectItem value="district_manager">District Manager</SelectItem>
                               <SelectItem value="district_engineer">District Engineer</SelectItem>
                               <SelectItem value="technician">Technician</SelectItem>
                             </SelectContent>

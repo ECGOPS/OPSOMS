@@ -22,9 +22,19 @@ service cloud.firestore {
              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'regional_engineer';
     }
     
+    function isRegionalGeneralManager() {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'regional_general_manager';
+    }
+    
     function isDistrictEngineer() {
       return isAuthenticated() && 
              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'district_engineer';
+    }
+    
+    function isDistrictManager() {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'district_manager';
     }
     
     function isTechnician() {
@@ -69,18 +79,19 @@ service cloud.firestore {
       allow write: if isAuthenticated() && (
         isSystemAdmin() || 
         isGlobalEngineer() || 
-        (isRegionalEngineer() && resource.data.name == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.region)
+        ((isRegionalEngineer() || isRegionalGeneralManager()) && resource.data.name == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.region)
       );
     }
 
     // Districts collection
     match /districts/{districtId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && (
+      allow read, write: if true;  // Allow public access
+      allow update: if isAuthenticated() && (
         isSystemAdmin() || 
         isGlobalEngineer() || 
         (isRegionalEngineer() && resource.data.regionId == get(/databases/$(database)/documents/regions/$(resource.data.regionId)).id) ||
-        (isDistrictEngineer() && resource.data.name == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.district)
+        (isRegionalGeneralManager() && resource.data.regionId == get(/databases/$(database)/documents/regions/$(resource.data.regionId)).id) ||
+        ((isDistrictEngineer() || isDistrictManager()) && resource.data.name == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.district)
       );
     }
 
@@ -92,13 +103,14 @@ service cloud.firestore {
 
     // Users collection
     match /users/{userId} {
-      allow read: if isAuthenticated();
+      allow read: if true;  // Allow public read
       allow create: if true;  // Allow public create for signup
       allow update: if isAuthenticated() && (
         isSystemAdmin() || 
         isGlobalEngineer() || 
         (isRegionalEngineer() && resource.data.region == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.region) ||
-        (isDistrictEngineer() && resource.data.district == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.district) ||
+        (isRegionalGeneralManager() && resource.data.region == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.region) ||
+        ((isDistrictEngineer() || isDistrictManager()) && resource.data.district == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.district) ||
         request.auth.uid == userId
       );
       allow delete: if isSystemAdmin();
@@ -116,19 +128,19 @@ service cloud.firestore {
     }
     
     // Control Outages collection
-    match /controlSystemOutages/{outageId} {
+    match /controlOutages/{outageId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated() && (
         isSystemAdmin() || 
         isGlobalEngineer() || 
-        (isRegionalEngineer() && request.resource.data.regionId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.regionId) ||
-        (isDistrictEngineer() && request.resource.data.districtId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.districtId)
+        ((isRegionalEngineer() || isRegionalGeneralManager()) && request.resource.data.regionId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.regionId) ||
+        ((isDistrictEngineer() || isDistrictManager()) && request.resource.data.districtId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.districtId)
       );
       allow update: if isAuthenticated() && (
         isSystemAdmin() || 
         isGlobalEngineer() || 
-        (isRegionalEngineer() && resource.data.regionId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.regionId) ||
-        (isDistrictEngineer() && resource.data.districtId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.districtId)
+        ((isRegionalEngineer() || isRegionalGeneralManager()) && resource.data.regionId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.regionId) ||
+        ((isDistrictEngineer() || isDistrictManager()) && resource.data.districtId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.districtId)
       );
       allow delete: if isAuthenticated() && (isSystemAdmin() || isGlobalEngineer());
     }

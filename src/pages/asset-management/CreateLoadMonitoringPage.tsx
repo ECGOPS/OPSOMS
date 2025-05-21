@@ -500,7 +500,7 @@ export default function CreateLoadMonitoringPage() {
                       value={formData.regionId || ""}
                       onValueChange={handleRegionChange}
                       required
-                      disabled={user?.role === "district_engineer" || user?.role === "regional_engineer" || user?.role === "technician"}
+                      disabled={user?.role === "district_engineer" || user?.role === "district_manager" || user?.role === "regional_engineer" || user?.role === "regional_general_manager" || user?.role === "technician"}
                     >
                       <SelectTrigger id="region">
                         <SelectValue placeholder="Select Region" />
@@ -518,17 +518,12 @@ export default function CreateLoadMonitoringPage() {
                   <div className="space-y-2">
                     <Label htmlFor="district">District</Label>
                     <Select
-                      value={formData.districtId || ""} // Use ID for value
-                      onValueChange={handleDistrictChange} // Use custom handler
+                      value={formData.districtId || ""}
+                      onValueChange={handleDistrictChange}
                       required
-                      disabled={
-                        user?.role === "district_engineer" || // Always disable for district engineers
-                        user?.role === "technician" || 
-                        !formData.regionId || 
-                        filteredDistricts.length === 0
-                      }
+                      disabled={user?.role === "district_engineer" || user?.role === "district_manager" || user?.role === "technician" || !formData.regionId || filteredDistricts.length === 0}
                     >
-                      <SelectTrigger id="district" className={user?.role === "district_engineer" ? "bg-muted" : ""}>
+                      <SelectTrigger id="district" className={user?.role === "district_engineer" || user?.role === "district_manager" ? "bg-muted" : ""}>
                         <SelectValue placeholder="Select District" />
                       </SelectTrigger>
                       <SelectContent>

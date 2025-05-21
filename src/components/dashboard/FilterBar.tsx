@@ -105,7 +105,7 @@ export function FilterBar({
   // Set initial values based on user role
   useEffect(() => {
     if (user) {
-      if ((user.role === "district_engineer" || user.role === "technician") && user.region && user.district) {
+      if ((user.role === "district_engineer" || user.role === "district_manager" || user.role === "technician") && user.region && user.district) {
         const userRegion = regions.find(r => r.name === user.region);
         if (userRegion) {
           setSelectedRegion(userRegion.id);
@@ -117,7 +117,7 @@ export function FilterBar({
             setFilterDistrict(userDistrict.id);
           }
         }
-      } else if (user.role === "regional_engineer" && user.region) {
+      } else if ((user.role === "regional_engineer" || user.role === "regional_general_manager") && user.region) {
         const userRegion = regions.find(r => r.name === user.region);
         if (userRegion) {
           setSelectedRegion(userRegion.id);
@@ -143,7 +143,7 @@ export function FilterBar({
 
   const handleStatusChange = (value: string) => {
     // Cast the string value to the expected type
-    setFilterStatus(value as "all" | "active" | "resolved");
+    setFilterStatus(value as "all" | "pending" | "resolved");
   };
   
   const handleClearFilters = () => {
@@ -179,13 +179,13 @@ export function FilterBar({
         // First check if district belongs to selected region
         if (d.regionId !== selectedRegion) return false;
         
-        // For district engineers and technicians, only show their assigned district
-        if (user?.role === "district_engineer" || user?.role === "technician") {
+        // For district engineers, district managers and technicians, only show their assigned district
+        if (user?.role === "district_engineer" || user?.role === "district_manager" || user?.role === "technician") {
           return d.name === user.district;
         }
         
-        // For regional engineers, only show districts in their region
-        if (user?.role === "regional_engineer") {
+        // For regional engineers and regional general managers, only show districts in their region
+        if (user?.role === "regional_engineer" || user?.role === "regional_general_manager") {
           const userRegion = regions.find(r => r.name === user.region);
           return userRegion ? d.regionId === userRegion.id : false;
         }

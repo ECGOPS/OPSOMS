@@ -22,7 +22,7 @@ import {
   CardTitle 
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, InfoIcon, Users, Clock, ActivityIcon, FileText, Calculator, X, PlusCircle } from "lucide-react";
+import { Loader2, InfoIcon, Users, Clock, ActivityIcon, FileText, Calculator, X, PlusCircle, Phone } from "lucide-react";
 import { 
     FaultType, 
     UnplannedFaultType, 
@@ -76,6 +76,8 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
   const [fuseCircuit, setFuseCircuit] = useState<string>("");
   const [fusePhase, setFusePhase] = useState<string>("");
   const [otherFaultType, setOtherFaultType] = useState<string>("");
+  const [customerPhoneNumber, setCustomerPhoneNumber] = useState<string>("");
+  const [alternativePhoneNumber, setAlternativePhoneNumber] = useState<string>("");
   
   // Derived values
   const [outageDuration, setOutageDuration] = useState<number | null>(null);
@@ -117,11 +119,12 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
     // Global engineers and system admins can see all regions
     if (user?.role === "global_engineer" || user?.role === "system_admin") return true;
     
-    // Regional engineers can only see their assigned region
-    if (user?.role === "regional_engineer") return region.id === user.regionId;
+    // Regional engineers and regional general managers can only see their assigned region
+    if (user?.role === "regional_engineer" || user?.role === "regional_general_manager") 
+      return region.id === user.regionId;
     
-    // District engineers and technicians can only see their assigned region
-    if (user?.role === "district_engineer" || user?.role === "technician") {
+    // District engineers, district managers and technicians can only see their assigned region
+    if (user?.role === "district_engineer" || user?.role === "district_manager" || user?.role === "technician") {
       const userDistrict = districts.find(d => d.id === user.districtId);
       return userDistrict ? region.id === userDistrict.regionId : false;
     }
@@ -136,12 +139,12 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
     if (user?.role === "global_engineer" || user?.role === "system_admin") 
       return district.regionId === regionId;
     
-    // Regional engineers can see all districts in their region
-    if (user?.role === "regional_engineer") 
+    // Regional engineers and regional general managers can see all districts in their region
+    if (user?.role === "regional_engineer" || user?.role === "regional_general_manager") 
       return district.regionId === user.regionId;
     
-    // District engineers and technicians can only see their assigned district
-    if (user?.role === "district_engineer" || user?.role === "technician") 
+    // District engineers, district managers and technicians can only see their assigned district
+    if (user?.role === "district_engineer" || user?.role === "district_manager" || user?.role === "technician") 
       return district.id === user.districtId;
     
     return false;
@@ -394,6 +397,8 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
     setFusePhase("");
     setOtherFaultType("");
     setEstimatedResolutionTime("");
+    setCustomerPhoneNumber("");
+    setAlternativePhoneNumber("");
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -451,11 +456,6 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
       return;
     }
 
-    if (!repairDate) {
-      toast.error("Failed to create OP5 fault: Repair date is required");
-      return;
-    }
-
     // Validate that at least one population type has affected customers
     if ((!ruralAffected || ruralAffected <= 0) && 
         (!urbanAffected || urbanAffected <= 0) && 
@@ -467,6 +467,12 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
     // Validate specific fault type for Unplanned and Emergency faults
     if ((outageType === "Unplanned" || outageType === "Emergency") && !specificFaultType) {
       toast.error("Failed to create OP5 fault: Specific fault type is required for " + outageType + " faults");
+      return;
+    }
+
+    // Validate repair end date if fault is resolved
+    if (restorationDate && !repairEndDate) {
+      toast.error("Failed to create OP5 fault: Repair end date is required when fault is resolved");
       return;
     }
     
@@ -518,6 +524,8 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
         createdBy: user?.uid || "",
         updatedBy: user?.uid || "",
         estimatedResolutionTime: formattedEstimatedResolutionTime,
+        customerPhoneNumber: customerPhoneNumber || undefined,
+        alternativePhoneNumber: alternativePhoneNumber || undefined,
         // Add fuse-specific fields to the description if Replace Fuse is selected
         ...(specificFaultType === "REPLACE FUSE" && {
           description: `${outageDescription || ""} Circuit: ${fuseCircuit}, Phase: ${fusePhase}`
@@ -653,43 +661,48 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
 
     console.log("[OP5Form] Initializing with user:", {
       role: user.role,
-      districtId: user.districtId,
-      regionId: user.regionId
+      region: user.region,
+      district: user.district
     });
 
-    if (user.role === "district_engineer" || user.role === "regional_engineer" || user.role === "technician") {
-      // For district engineers and technicians, find their region through their district
-      if ((user.role === "district_engineer" || user.role === "technician") && user.districtId) {
-        const userDistrict = districts.find(d => d.id === user.districtId);
-        console.log("[OP5Form] Found user district:", userDistrict);
-        
-        if (userDistrict) {
-          setDistrictId(userDistrict.id);
-          setRegionId(userDistrict.regionId);
-          console.log("[OP5Form] Set district and region:", {
-            districtId: userDistrict.id,
-            regionId: userDistrict.regionId
-          });
-          return;
-        } else {
-          console.error("[OP5Form] Could not find district for user:", user.districtId);
-        }
-      }
+    // For district engineers, district managers and technicians
+    if ((user.role === "district_engineer" || user.role === "district_manager" || user.role === "technician") && user.district) {
+      const userDistrict = districts.find(d => d.name === user.district);
+      console.log("[OP5Form] Found user district:", userDistrict);
       
-      // For regional engineers, find region by name
-      if (user.role === "regional_engineer") {
-        const userRegion = regions.find(r => r.name === user.region);
-        console.log("[OP5Form] Found user region:", userRegion);
-        
-        if (userRegion) {
-          setRegionId(userRegion.id);
-          console.log("[OP5Form] Set region:", userRegion.id);
-        } else {
-          console.error("[OP5Form] Could not find region for user:", user.region);
-        }
+      if (userDistrict) {
+        setDistrictId(userDistrict.id);
+        setRegionId(userDistrict.regionId);
+        console.log("[OP5Form] Set district and region:", {
+          districtId: userDistrict.id,
+          regionId: userDistrict.regionId
+        });
+        return;
+      }
+    }
+    
+    // For regional engineers and regional general managers
+    if ((user.role === "regional_engineer" || user.role === "regional_general_manager") && user.region) {
+      const userRegion = regions.find(r => r.name === user.region);
+      console.log("[OP5Form] Found user region:", userRegion);
+      
+      if (userRegion) {
+        setRegionId(userRegion.id);
+        console.log("[OP5Form] Set region:", userRegion.id);
       }
     }
   }, [user, regions, districts]);
+
+  // Update region and district when props change
+  useEffect(() => {
+    if (defaultRegionId) {
+      setRegionId(defaultRegionId);
+    }
+    
+    if (defaultDistrictId) {
+      setDistrictId(defaultDistrictId);
+    }
+  }, [defaultRegionId, defaultDistrictId]);
   
   // Update MTTR calculation when repair dates change
   useEffect(() => {
@@ -717,7 +730,7 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
               <Select 
                 value={regionId} 
                 onValueChange={setRegionId}
-                disabled={user?.role === "district_engineer" || user?.role === "regional_engineer" || user?.role === "technician"}
+                disabled={user?.role === "district_engineer" || user?.role === "regional_engineer" || user?.role === "technician" || user?.role === "regional_general_manager"}
                 required
               >
                 <SelectTrigger className="h-12 text-base bg-background/50 border-muted">
@@ -1035,12 +1048,11 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
                        type="button" 
                        onClick={handleAddMaterial} 
                        disabled={!currentMaterialType}
-                       variant="outline"
-                       size="icon"
-                       className="h-10 w-10 flex-shrink-0"
+                       className="h-10 flex items-center gap-2 bg-gradient-to-r from-primary to-blue-600 text-white hover:from-primary/90 hover:to-blue-600/90 shadow-lg transition-all duration-200"
                        title="Add Material"
                    >
                       <PlusCircle className="h-5 w-5" />
+                      <span>Add Material</span>
                    </Button>
               </div>
 
@@ -1072,6 +1084,55 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
               )}
           </div>
           {/* --- End Material Use Section --- */}
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="space-y-3">
+              <Label htmlFor="customerPhoneNumber" className="text-base font-medium flex items-center gap-2">
+                <Phone className="h-4 w-4" />
+                Primary Contact Number
+              </Label>
+              <Input
+                id="customerPhoneNumber"
+                type="tel"
+                value={customerPhoneNumber}
+                onChange={(e) => {
+                  // Only allow digits and + symbol
+                  const value = e.target.value.replace(/[^\d+]/g, '');
+                  setCustomerPhoneNumber(value);
+                }}
+                placeholder="e.g., +233201234567"
+                pattern="[0-9+]*"
+                maxLength={15}
+                className="h-12 text-base bg-background/50 border-muted"
+              />
+              <p className="text-xs text-muted-foreground">
+                Enter the customer's primary contact number (digits only, with optional + prefix)
+              </p>
+            </div>
+            <div className="space-y-3">
+              <Label htmlFor="alternativePhoneNumber" className="text-base font-medium flex items-center gap-2">
+                <Phone className="h-4 w-4" />
+                Secondary Contact Number
+              </Label>
+              <Input
+                id="alternativePhoneNumber"
+                type="tel"
+                value={alternativePhoneNumber}
+                onChange={(e) => {
+                  // Only allow digits and + symbol
+                  const value = e.target.value.replace(/[^\d+]/g, '');
+                  setAlternativePhoneNumber(value);
+                }}
+                placeholder="e.g., +233201234567"
+                pattern="[0-9+]*"
+                maxLength={15}
+                className="h-12 text-base bg-background/50 border-muted"
+              />
+              <p className="text-xs text-muted-foreground">
+                Enter an alternative contact number (digits only, with optional + prefix)
+              </p>
+            </div>
+          </div>
           
           <Tabs defaultValue="affected" className="w-full">
             <TabsList className="grid grid-cols-3 w-full max-w-lg mx-auto mb-8 gap-2 bg-transparent p-0">
@@ -1189,7 +1250,7 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
                 </div>
                 
                 <div className="space-y-3">
-                  <Label htmlFor="repairDate">Repair Start Date & Time</Label>
+                  <Label htmlFor="repairDate">Repair Start Date & Time (Optional)</Label>
                   <Input
                     id="repairDate"
                     type="datetime-local"
@@ -1201,17 +1262,26 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
               </div>
               
               <div className="space-y-3">
-                <Label htmlFor="repairEndDate">Repair End Date & Time</Label>
+                <Label htmlFor="repairEndDate">
+                  Repair End Date & Time
+                  {restorationDate && <span className="text-destructive ml-1">*</span>}
+                </Label>
                 <Input
                   id="repairEndDate"
                   type="datetime-local"
                   value={repairEndDate}
                   onChange={(e) => setRepairEndDate(e.target.value)}
                   className="h-10"
+                  required={!!restorationDate}
                 />
                 {mttr !== null && (
                   <p className="text-sm text-muted-foreground">
                     MTTR: {formatDuration(mttr)}
+                  </p>
+                )}
+                {restorationDate && !repairEndDate && (
+                  <p className="text-sm text-destructive">
+                    Repair end date is required when fault is resolved
                   </p>
                 )}
               </div>

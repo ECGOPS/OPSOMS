@@ -25,15 +25,7 @@ interface EnhancedControlSystemOutage extends ControlSystemOutage {
 }
 
 interface FaultCardProps {
-  fault: {
-    id: string;
-    status: "pending" | "resolved";
-    faultType: string;
-    occurrenceDate: string;
-    restorationDate?: string;
-    regionId: string;
-    districtId: string;
-  };
+  fault: OP5Fault | ControlSystemOutage;
   type: "op5" | "control";
 }
 
@@ -184,20 +176,27 @@ export function FaultCard({ fault, type }: FaultCardProps) {
 
     // If it's an OP5 fault, check against repair dates
     if (isOP5 && op5Fault) {
-      if (op5Fault.repairDate) {
-        const repairDateTime = new Date(op5Fault.repairDate);
-        if (restorationDateTime <= repairDateTime) {
-          toast.error("Restoration date must be after repair start date");
-          return false;
-        }
+      if (!op5Fault.repairDate) {
+        toast.error("Repair start date is required before resolving the fault");
+        return false;
       }
 
-      if (op5Fault.repairEndDate) {
-        const repairEndDateTime = new Date(op5Fault.repairEndDate);
-        if (restorationDateTime <= repairEndDateTime) {
-          toast.error("Restoration date must be after repair end date");
-          return false;
-        }
+      if (!op5Fault.repairEndDate) {
+        toast.error("Repair end date is required before resolving the fault");
+        return false;
+      }
+
+      const repairDateTime = new Date(op5Fault.repairDate);
+      const repairEndDateTime = new Date(op5Fault.repairEndDate);
+
+      if (restorationDateTime <= repairDateTime) {
+        toast.error("Restoration date must be after repair start date");
+        return false;
+      }
+
+      if (restorationDateTime <= repairEndDateTime) {
+        toast.error("Restoration date must be after repair end date");
+        return false;
       }
 
       if (op5Fault.estimatedResolutionTime) {

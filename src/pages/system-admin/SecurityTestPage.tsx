@@ -24,7 +24,9 @@ export default function SecurityTestPage() {
   const roles: UserRole[] = [
     'technician',
     'district_engineer',
+    'district_manager',
     'regional_engineer',
+    'regional_general_manager',
     'global_engineer',
     'system_admin'
   ];

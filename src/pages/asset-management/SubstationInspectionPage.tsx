@@ -135,15 +135,15 @@ export default function SubstationInspectionPage() {
 
   // Initialize region and district based on user's assigned values
   useEffect(() => {
-    if (user?.role === "district_engineer" || user?.role === "regional_engineer" || user?.role === "technician") {
+    if (user?.role === "district_engineer" || user?.role === "regional_engineer" || user?.role === "technician" || user?.role === "district_manager") {
       // Find region ID based on user's assigned region name
       const userRegion = regions.find(r => r.name === user.region);
       if (userRegion) {
         setRegionId(userRegion.id);
         setFormData(prev => ({ ...prev, region: userRegion.name }));
         
-        // For district engineer and technician, also set the district
-        if ((user.role === "district_engineer" || user?.role === "technician") && user.district) {
+        // For district engineer, technician, and district manager, also set the district
+        if ((user.role === "district_engineer" || user?.role === "technician" || user?.role === "district_manager") && user.district) {
           const userDistrict = districts.find(d => 
             d.regionId === userRegion.id && d.name === user.district
           );
@@ -156,9 +156,9 @@ export default function SubstationInspectionPage() {
     }
   }, [user, regions, districts]);
 
-  // Ensure district engineer's and technician's district is always set correctly
+  // Ensure district engineer's, technician's, and district manager's district is always set correctly
   useEffect(() => {
-    if ((user?.role === "district_engineer" || user?.role === "technician") && user.district && user.region) {
+    if ((user?.role === "district_engineer" || user?.role === "technician" || user?.role === "district_manager") && user.district && user.region) {
       const userRegion = regions.find(r => r.name === user.region);
       if (userRegion) {
         const userDistrict = districts.find(d => 
@@ -187,19 +187,25 @@ export default function SubstationInspectionPage() {
         // First check if district belongs to selected region
         if (d.regionId !== regionId) return false;
         
-        // For district engineers and technicians, only show their assigned district
-        if (user?.role === "district_engineer" || user?.role === "technician") {
+        // For district engineers, technicians, and district managers, only show their assigned district
+        if (user?.role === "district_engineer" || user?.role === "technician" || user?.role === "district_manager") {
           return d.name === user.district;
         }
         
-        // For other roles, show all districts in the region
+        // For regional engineers and regional general managers, only show districts in their region
+        if (user?.role === "regional_engineer" || user?.role === "regional_general_manager") {
+          const userRegion = regions.find(r => r.name === user.region);
+          return userRegion ? d.regionId === userRegion.id : false;
+        }
+        
+        // For other roles, show all districts in the selected region
         return true;
       })
     : [];
 
-  // Handle region change - prevent district engineers and technicians from changing region
+  // Handle region change - prevent district engineers, technicians, and district managers from changing region
   const handleRegionChange = (value: string) => {
-    if (user?.role === "district_engineer" || user?.role === "technician") return; // Prevent district engineers and technicians from changing region
+    if (user?.role === "district_engineer" || user?.role === "technician" || user?.role === "district_manager" || user?.role === "regional_general_manager") return; // Prevent district engineers, technicians, district managers, and regional general managers from changing region
     
     setRegionId(value);
     const region = regions.find(r => r.id === value);
@@ -208,9 +214,9 @@ export default function SubstationInspectionPage() {
     setFormData(prev => ({ ...prev, district: "" }));
   };
 
-  // Handle district change - prevent district engineers and technicians from changing district
+  // Handle district change - prevent district engineers, technicians, and district managers from changing district
   const handleDistrictChange = (value: string) => {
-    if (user?.role === "district_engineer" || user?.role === "technician") return; // Prevent district engineers and technicians from changing district
+    if (user?.role === "district_engineer" || user?.role === "technician" || user?.role === "district_manager") return; // Prevent district engineers, technicians, and district managers from changing district
     
     setDistrictId(value);
     const district = districts.find(d => d.id === value);
@@ -403,63 +409,70 @@ export default function SubstationInspectionPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSubmitting(true);
+    
+    if (!regionId || !districtId) {
+      toast.error("Please select both region and district");
+      return;
+    }
 
+    if (!formData.substationNo) {
+      toast.error("Please enter a substation number");
+      return;
+    }
+
+    setIsSubmitting(true);
+    
     try {
-      // Get all items from categories
+      // Get the selected region and district names
+      const selectedRegionName = regions.find(r => r.id === regionId)?.name || "";
+      const selectedDistrictName = districts.find(d => d.id === districtId)?.name || "";
+      
+      // Get all inspection items from categories
       const inspectionItems = {
         generalBuilding: categories[0]?.items || [],
         controlEquipment: categories[1]?.items || [],
         powerTransformer: categories[2]?.items || [],
         outdoorEquipment: categories[3]?.items || []
       };
-
-      // Get selected region and district names
-      const selectedRegion = regions.find(r => r.id === regionId)?.name || "";
-      const selectedDistrict = districts.find(d => d.id === districtId)?.name || "";
-      
-      // Log the form data before creating inspection
-      console.log('Form data before creating inspection:', formData);
-      console.log('Categories data:', categories);
       
       const inspectionData: SubstationInspection = {
         id: uuidv4(),
-        region: selectedRegion,
+        region: selectedRegionName,
         regionId: regionId,
-        district: selectedDistrict,
+        district: selectedDistrictName,
         districtId: districtId,
         date: formData.date || new Date().toISOString().split('T')[0],
         inspectionDate: formData.inspectionDate || new Date().toISOString().split('T')[0],
-        substationNo: formData.substationNo || "",
+        substationNo: formData.substationNo,
         substationName: formData.substationName || "",
         type: formData.type || "indoor",
         items: [
           ...inspectionItems.generalBuilding.map(item => ({
             id: item.id || uuidv4(),
             name: item.name || "",
-            category: item.category || "",
-            status: item.status,
+            category: item.category || "general building",
+            status: item.status || "good",
             remarks: item.remarks || ""
           })),
           ...inspectionItems.controlEquipment.map(item => ({
             id: item.id || uuidv4(),
             name: item.name || "",
-            category: item.category || "",
-            status: item.status,
+            category: item.category || "control equipment",
+            status: item.status || "good",
             remarks: item.remarks || ""
           })),
           ...inspectionItems.powerTransformer.map(item => ({
             id: item.id || uuidv4(),
             name: item.name || "",
-            category: item.category || "",
-            status: item.status,
+            category: item.category || "power transformer",
+            status: item.status || "good",
             remarks: item.remarks || ""
           })),
           ...inspectionItems.outdoorEquipment.map(item => ({
             id: item.id || uuidv4(),
             name: item.name || "",
-            category: item.category || "",
-            status: item.status,
+            category: item.category || "outdoor equipment",
+            status: item.status || "good",
             remarks: item.remarks || ""
           }))
         ],
@@ -467,28 +480,28 @@ export default function SubstationInspectionPage() {
           id: item.id || uuidv4(),
           name: item.name || "",
           category: item.category || "general building",
-          status: item.status,
+          status: item.status || "good",
           remarks: item.remarks || ""
         })),
         controlEquipment: inspectionItems.controlEquipment.map(item => ({
           id: item.id || uuidv4(),
           name: item.name || "",
           category: item.category || "control equipment",
-          status: item.status,
+          status: item.status || "good",
           remarks: item.remarks || ""
         })),
         powerTransformer: inspectionItems.powerTransformer.map(item => ({
           id: item.id || uuidv4(),
           name: item.name || "",
           category: item.category || "power transformer",
-          status: item.status,
+          status: item.status || "good",
           remarks: item.remarks || ""
         })),
         outdoorEquipment: inspectionItems.outdoorEquipment.map(item => ({
           id: item.id || uuidv4(),
           name: item.name || "",
           category: item.category || "outdoor equipment",
-          status: item.status,
+          status: item.status || "good",
           remarks: item.remarks || ""
         })),
         remarks: formData.remarks || "",
@@ -498,7 +511,7 @@ export default function SubstationInspectionPage() {
         inspectedBy: user?.name || "Unknown",
         location: formData.location || "",
         voltageLevel: formData.voltageLevel || "",
-        status: formData.status || "Pending",
+        status: formData.status || "Pending"
       };
 
       // Log the inspection data before saving
@@ -507,9 +520,6 @@ export default function SubstationInspectionPage() {
       // Use the saveInspection function from DataContext which handles online/offline logic
       await saveInspection(inspectionData);
       
-      // The saveInspection function in DataContext will show appropriate toast messages
-      // No need for separate online/offline toast messages here
-
       navigate("/asset-management/inspection-management");
     } catch (error) {
       console.error("Error saving inspection:", error);
@@ -560,7 +570,7 @@ export default function SubstationInspectionPage() {
                     value={regionId}
                     onValueChange={handleRegionChange}
                     required
-                    disabled={user?.role === "district_engineer" || user?.role === "regional_engineer" || user?.role === "technician"}
+                    disabled={user?.role === "district_engineer" || user?.role === "regional_engineer" || user?.role === "technician" || user?.role === "district_manager" || user?.role === "regional_general_manager"}
                   >
                     <SelectTrigger id="region">
                       <SelectValue placeholder="Select Region" />
@@ -581,9 +591,9 @@ export default function SubstationInspectionPage() {
                     value={districtId}
                     onValueChange={handleDistrictChange}
                     required
-                    disabled={user?.role === "district_engineer" || user?.role === "technician" || !regionId}
+                    disabled={user?.role === "district_engineer" || user?.role === "technician" || user?.role === "district_manager" || !regionId}
                   >
-                    <SelectTrigger id="district">
+                    <SelectTrigger id="district" className={user?.role === "district_engineer" || user?.role === "district_manager" ? "bg-muted" : ""}>
                       <SelectValue placeholder="Select District" />
                     </SelectTrigger>
                     <SelectContent>

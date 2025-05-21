@@ -90,7 +90,9 @@ const roleHierarchy: { [key in Exclude<UserRole, null>]: number } = {
   system_admin: 4,
   admin: 3,
   regional_manager: 2,
+  regional_general_manager: 2,
   district_engineer: 1,
+  district_manager: 1,
   viewer: 0
 };
 

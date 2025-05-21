@@ -54,7 +54,7 @@ export default function VITInspectionPage() {
           uniqueAssets.set(asset.id, asset);
         }
       });
-    } else if (user.role === "regional_engineer") {
+    } else if (user.role === "regional_engineer" || user.role === "regional_general_manager") {
       vitAssets
         .filter(asset => asset.region === user.region)
         .forEach(asset => {
@@ -62,9 +62,9 @@ export default function VITInspectionPage() {
             uniqueAssets.set(asset.id, asset);
           }
         });
-    } else if (user.role === "district_engineer" || user.role === "technician") {
+    } else if (user.role === "district_engineer" || user.role === "technician" || user.role === "district_manager") {
       vitAssets
-        .filter(asset => asset.district === user.district)
+        .filter(asset => asset.district === user.district && asset.region === user.region)
         .forEach(asset => {
           if (!uniqueAssets.has(asset.id)) {
             uniqueAssets.set(asset.id, asset);
@@ -83,17 +83,17 @@ export default function VITInspectionPage() {
       return vitInspections;
     }
     
-    if (user.role === "regional_engineer") {
+    if (user.role === "regional_engineer" || user.role === "regional_general_manager") {
       return vitInspections.filter(inspection => {
         const asset = vitAssets.find(a => a.id === inspection.vitAssetId);
         return asset?.region === user.region;
       });
     }
     
-    if (user.role === "district_engineer" || user.role === "technician") {
+    if (user.role === "district_engineer" || user.role === "technician" || user.role === "district_manager") {
       return vitInspections.filter(inspection => {
         const asset = vitAssets.find(a => a.id === inspection.vitAssetId);
-        return asset?.district === user.district;
+        return asset?.district === user.district && asset?.region === user.region;
       });
     }
     

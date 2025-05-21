@@ -24,7 +24,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Loader2, InfoIcon, Users, Clock, ActivityIcon, FileText, Calculator, 
   PlusCircle, X, ChevronLeft, Save, Calendar, MapPin, AlertTriangle, Layers, 
-  CheckCircle, Building, Zap
+  CheckCircle, Building, Zap, Phone
 } from "lucide-react";
 import { FaultType, OP5Fault, AffectedPopulation, ReliabilityIndices, MaterialUsed } from "@/lib/types";
 import { 
@@ -128,7 +128,9 @@ export default function EditOP5FaultPage() {
     fusePhase: "",
     otherFaultType: "",
     createdBy: "",
-    updatedBy: ""
+    updatedBy: "",
+    customerPhoneNumber: "",
+    alternativePhoneNumber: "",
   });
 
   // Derived values state
@@ -192,7 +194,9 @@ export default function EditOP5FaultPage() {
           description: description,
           fuseCircuit: fuseCircuit,
           fusePhase: fusePhase,
-          otherFaultType: fetchedFault.specificFaultType === "OTHERS" ? fetchedFault.otherFaultType || "" : ""
+          otherFaultType: fetchedFault.specificFaultType === "OTHERS" ? fetchedFault.otherFaultType || "" : "",
+          customerPhoneNumber: fetchedFault.customerPhoneNumber || "",
+          alternativePhoneNumber: fetchedFault.alternativePhoneNumber || "",
         });
       } else {
         console.error(`[EditOP5FaultPage] Fault with ID ${id} not found.`);
@@ -926,6 +930,56 @@ export default function EditOP5FaultPage() {
                       placeholder="Provide a detailed description of the fault incident, including cause if known"
                       className="mt-1 h-24 resize-none"
                     />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 pt-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="customerPhoneNumber" className="text-sm font-medium flex items-center gap-2">
+                        <Phone className="h-4 w-4" />
+                        Primary Contact Number
+                      </Label>
+                      <Input
+                        id="customerPhoneNumber"
+                        type="tel"
+                        value={formData.customerPhoneNumber || ""}
+                        onChange={(e) => {
+                          // Only allow digits and + symbol
+                          const value = e.target.value.replace(/[^\d+]/g, '');
+                          setFormData(prev => ({ ...prev, customerPhoneNumber: value }));
+                        }}
+                        placeholder="e.g., +233201234567"
+                        pattern="[0-9+]*"
+                        maxLength={15}
+                        className="h-10"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Enter the customer's primary contact number (digits only, with optional + prefix)
+                      </p>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="alternativePhoneNumber" className="text-sm font-medium flex items-center gap-2">
+                        <Phone className="h-4 w-4" />
+                        Secondary Contact Number
+                      </Label>
+                      <Input
+                        id="alternativePhoneNumber"
+                        type="tel"
+                        value={formData.alternativePhoneNumber || ""}
+                        onChange={(e) => {
+                          // Only allow digits and + symbol
+                          const value = e.target.value.replace(/[^\d+]/g, '');
+                          setFormData(prev => ({ ...prev, alternativePhoneNumber: value }));
+                        }}
+                        placeholder="e.g., +233201234567"
+                        pattern="[0-9+]*"
+                        maxLength={15}
+                        className="h-10"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Enter an alternative contact number (digits only, with optional + prefix)
+                      </p>
+                    </div>
                   </div>
                 </div>
 

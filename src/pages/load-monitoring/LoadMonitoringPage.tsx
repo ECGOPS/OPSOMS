@@ -11,6 +11,12 @@ import { Label } from '@/components/ui/label';
 import { LoadMonitoringService } from '@/services/LoadMonitoringService';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
+import { DataTable } from "@/components/ui/data-table";
+import { Plus } from "lucide-react";
+import { columns } from "./columns";
+import { LoadMonitoringDialog } from "./LoadMonitoringDialog";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const { Option } = Select;
 
@@ -24,7 +30,8 @@ const LoadMonitoringPage: React.FC = () => {
     districts,
     setLoadMonitoringRecords,
     canEditLoadMonitoring,
-    canDeleteLoadMonitoring
+    canDeleteLoadMonitoring,
+    initializeLoadMonitoring
   } = useData();
   const { isAuthenticated, user } = useAuth();
 
@@ -42,8 +49,8 @@ const LoadMonitoringPage: React.FC = () => {
   const [form] = Form.useForm();
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<Date | null>(null);
-  const [selectedRegion, setSelectedRegion] = useState<string | null>(null);
-  const [selectedDistrict, setSelectedDistrict] = useState<string | null>(null);
+  const [selectedRegion, setSelectedRegion] = useState<string>("");
+  const [selectedDistrict, setSelectedDistrict] = useState<string>("");
   const [searchTerm, setSearchTerm] = useState("");
 
   // Cache for frequently accessed data
@@ -70,10 +77,10 @@ const LoadMonitoringPage: React.FC = () => {
       let q = query(loadMonitoringRef);
       
       // Apply role-based filtering
-      if (user?.role === 'regional_engineer') {
+      if (user?.role === 'regional_engineer' || user?.role === 'regional_general_manager') {
         q = query(q, where("region", "==", user.region));
-      } else if (user?.role === 'district_engineer' || user?.role === 'technician') {
-        q = query(q, where("district", "==", user.district));
+      } else if (user?.role === 'district_engineer' || user?.role === 'technician' || user?.role === 'district_manager') {
+        q = query(q, where("district", "==", user.district), where("region", "==", user.region));
       }
       
       // Apply date filter
@@ -191,10 +198,10 @@ const LoadMonitoringPage: React.FC = () => {
     let filtered = loadMonitoringRecords;
     
     // Apply role-based filtering
-    if (user?.role === 'regional_engineer') {
+    if (user?.role === 'regional_engineer' || user?.role === 'regional_general_manager') {
       filtered = filtered.filter(record => record.region === user.region);
-    } else if (user?.role === 'district_engineer' || user?.role === 'technician') {
-      filtered = filtered.filter(record => record.district === user.district);
+    } else if (user?.role === 'district_engineer' || user?.role === 'technician' || user?.role === 'district_manager') {
+      filtered = filtered.filter(record => record.district === user.district && record.region === user.region);
     }
     
     // Apply date filter
@@ -236,6 +243,12 @@ const LoadMonitoringPage: React.FC = () => {
     return filtered;
   }, [loadMonitoringRecords, user, selectedDate, selectedMonth, selectedRegion, selectedDistrict, searchTerm]);
 
+  // Get filtered districts based on selected region
+  const filteredDistricts = useMemo(() => {
+    if (!selectedRegion) return districts;
+    return districts.filter(district => district.regionId === selectedRegion);
+  }, [districts, selectedRegion]);
+
   // Handle add/edit/delete operations
   const handleAdd = () => {
     setEditingRecord(null);
@@ -244,8 +257,8 @@ const LoadMonitoringPage: React.FC = () => {
   };
 
   const handleEdit = (record: LoadMonitoringData) => {
-    if (!canEditLoadMonitoring(record)) {
-      message.error('You do not have permission to edit this record');
+    if (!canEditLoadMonitoring) {
+      toast.error('You do not have permission to edit this record');
       return;
     }
     setEditingRecord(record);
@@ -257,23 +270,20 @@ const LoadMonitoringPage: React.FC = () => {
   };
 
   const handleDelete = (record: LoadMonitoringData) => {
-    if (!canDeleteLoadMonitoring(record)) {
-      message.error('You do not have permission to delete this record');
+    if (!canDeleteLoadMonitoring) {
+      toast.error('You do not have permission to delete this record');
       return;
     }
-    Modal.confirm({
-      title: 'Are you sure you want to delete this record?',
-      content: 'This action cannot be undone.',
-      onOk: async () => {
-        try {
-          await deleteLoadMonitoringRecord(record.id);
-          message.success('Record deleted successfully');
-          loadData(); // Refresh data after deletion
-        } catch (error) {
-          message.error('Failed to delete record');
-        }
-      }
-    });
+    if (window.confirm('Are you sure you want to delete this record?')) {
+      deleteLoadMonitoringRecord(record.id)
+        .then(() => {
+          toast.success('Record deleted successfully');
+        })
+        .catch((error) => {
+          console.error('Error deleting record:', error);
+          toast.error('Failed to delete record');
+        });
+    }
   };
 
   // Add effect to handle online/offline status
@@ -325,52 +335,25 @@ const LoadMonitoringPage: React.FC = () => {
     }
   };
 
-  const columns = [
-    {
-      title: 'Date',
-      dataIndex: 'date',
-      key: 'date',
-      render: (date: string) => moment(date).format('YYYY-MM-DD')
-    },
-    {
-      title: 'Region',
-      dataIndex: 'regionId',
-      key: 'regionId',
-      render: (regionId: string) => regions.find(r => r.id === regionId)?.name
-    },
-    {
-      title: 'District',
-      dataIndex: 'districtId',
-      key: 'districtId',
-      render: (districtId: string) => districts.find(d => d.id === districtId)?.name
-    },
-    {
-      title: 'Peak Load (MW)',
-      dataIndex: 'peakLoad',
-      key: 'peakLoad'
-    },
-    {
-      title: 'Actions',
-      key: 'actions',
-      render: (_: any, record: LoadMonitoringData) => (
-        <span>
-          <Button
-            type="link"
-            icon={<EditOutlined />}
-            onClick={() => handleEdit(record)}
-            disabled={!canEditLoadMonitoring(record)}
-          />
-          <Button
-            type="link"
-            danger
-            icon={<DeleteOutlined />}
-            onClick={() => handleDelete(record)}
-            disabled={!canDeleteLoadMonitoring(record)}
-          />
-        </span>
-      )
-    }
-  ];
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [selectedRecord, setSelectedRecord] = useState<LoadMonitoringData | null>(null);
+
+  // Load data when component mounts
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setIsLoading(true);
+        await initializeLoadMonitoring();
+      } catch (error) {
+        console.error("Error loading load monitoring data:", error);
+        toast.error("Failed to load data");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadData();
+  }, [initializeLoadMonitoring]);
 
   return (
     <AccessControlWrapper type="asset">
@@ -397,103 +380,87 @@ const LoadMonitoringPage: React.FC = () => {
                 Sync Now
               </button>
             )}
-            <Link
-              to="/load-monitoring/create"
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            <Button
+              onClick={() => {
+                setSelectedRecord(null);
+                setIsDialogOpen(true);
+              }}
+              className="inline-flex items-center"
             >
-              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
+              <Plus className="w-4 h-4 mr-2" />
               Add New Record
-            </Link>
+            </Button>
           </div>
         </div>
 
-        <Table
-          dataSource={filteredRecords}
+        <div className="grid gap-4 mb-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Filters</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="region">Region</Label>
+                  <Select
+                    value={selectedRegion}
+                    onValueChange={setSelectedRegion}
+                  >
+                    <SelectTrigger id="region">
+                      <SelectValue placeholder="Select Region" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">All Regions</SelectItem>
+                      {regions.map((region) => (
+                        <SelectItem key={region.id} value={region.id}>
+                          {region.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="district">District</Label>
+                  <Select
+                    value={selectedDistrict}
+                    onValueChange={setSelectedDistrict}
+                  >
+                    <SelectTrigger id="district">
+                      <SelectValue placeholder="Select District" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">All Districts</SelectItem>
+                      {filteredDistricts.map((district) => (
+                        <SelectItem key={district.id} value={district.id}>
+                          {district.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <DataTable
           columns={columns}
-          rowKey="id"
-          loading={isLoading}
-          pagination={{
-            current: currentPage,
-            pageSize: pageSize,
-            total: totalItems,
-            onChange: (page, size) => {
-              setCurrentPage(page);
-              setPageSize(size);
-            },
-            showSizeChanger: true,
-            showTotal: (total) => `Total ${total} items`,
-            pageSizeOptions: ['10', '25', '50', '100']
-          }}
+          data={filteredRecords}
+          isLoading={isLoading}
+          onEdit={canEditLoadMonitoring ? handleEdit : undefined}
+          onDelete={canDeleteLoadMonitoring ? handleDelete : undefined}
         />
 
-        <Modal
-          title={editingRecord ? 'Edit Load Monitoring Record' : 'Add Load Monitoring Record'}
-          open={isModalVisible}
-          onOk={() => form.submit()}
-          onCancel={() => setIsModalVisible(false)}
-        >
-          <Form
-            form={form}
-            layout="vertical"
-            onFinish={async (values) => {
-              try {
-                if (editingRecord) {
-                  await updateLoadMonitoringRecord(editingRecord.id, values);
-                  message.success('Record updated successfully');
-                } else {
-                  await saveLoadMonitoringRecord(values);
-                  message.success('Record added successfully');
-                }
-                setIsModalVisible(false);
-                loadData(); // Refresh data after update
-              } catch (error) {
-                message.error('Failed to save record');
-              }
-            }}
-          >
-            <Form.Item
-              name="date"
-              label="Date"
-              rules={[{ required: true, message: 'Please select a date' }]}
-            >
-              <DatePicker style={{ width: '100%' }} />
-            </Form.Item>
-
-            <Form.Item
-              name="regionId"
-              label="Region"
-              rules={[{ required: true, message: 'Please select a region' }]}
-            >
-              <Select>
-                {regions.map(region => (
-                  <Option key={region.id} value={region.id}>{region.name}</Option>
-                ))}
-              </Select>
-            </Form.Item>
-
-            <Form.Item
-              name="districtId"
-              label="District"
-              rules={[{ required: true, message: 'Please select a district' }]}
-            >
-              <Select>
-                {districts.map(district => (
-                  <Option key={district.id} value={district.id}>{district.name}</Option>
-                ))}
-              </Select>
-            </Form.Item>
-
-            <Form.Item
-              name="peakLoad"
-              label="Peak Load (MW)"
-              rules={[{ required: true, message: 'Please input the peak load' }]}
-            >
-              <Input type="number" />
-            </Form.Item>
-          </Form>
-        </Modal>
+        <LoadMonitoringDialog
+          open={isDialogOpen}
+          onOpenChange={setIsDialogOpen}
+          record={selectedRecord}
+          onSuccess={() => {
+            setIsDialogOpen(false);
+            setSelectedRecord(null);
+          }}
+        />
       </div>
     </AccessControlWrapper>
   );

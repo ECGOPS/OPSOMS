@@ -262,7 +262,9 @@ export function SignupForm() {
                 <SelectContent>
                   <SelectItem value="system_admin">System Admin</SelectItem>
                   <SelectItem value="global_engineer">Global Engineer</SelectItem>
+                  <SelectItem value="regional_general_manager">Regional General Manager</SelectItem>
                   <SelectItem value="regional_engineer">Regional Engineer</SelectItem>
+                  <SelectItem value="district_manager">District Manager</SelectItem>
                   <SelectItem value="district_engineer">District Engineer</SelectItem>
                   <SelectItem value="technician">Technician</SelectItem>
                 </SelectContent>

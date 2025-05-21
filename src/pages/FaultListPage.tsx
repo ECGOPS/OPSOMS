@@ -57,9 +57,9 @@ export default function FaultListPage() {
       let q = query(faultsRef);
       
       // Apply role-based filtering
-      if (user?.role === 'regional_engineer') {
+      if (user?.role === 'regional_engineer' || user?.role === 'regional_general_manager') {
         q = query(q, where("regionId", "==", user.regionId));
-      } else if (user?.role === 'district_engineer' || user?.role === 'technician') {
+      } else if (user?.role === 'district_engineer' || user?.role === 'district_manager' || user?.role === 'technician') {
         q = query(q, where("districtId", "==", user.districtId));
       }
 
@@ -150,8 +150,27 @@ export default function FaultListPage() {
       return;
     }
 
+    // Set initial region and district based on user role
+    if (user) {
+      if ((user.role === 'district_engineer' || user.role === 'district_manager' || user.role === 'technician') && user.region && user.district) {
+        const userRegion = regions.find(r => r.name === user.region);
+        if (userRegion) {
+          setSelectedRegion(userRegion.id);
+          const userDistrict = districts.find(d => d.name === user.district);
+          if (userDistrict) {
+            setSelectedDistrict(userDistrict.id);
+          }
+        }
+      } else if ((user.role === 'regional_engineer' || user.role === 'regional_general_manager') && user.region) {
+        const userRegion = regions.find(r => r.name === user.region);
+        if (userRegion) {
+          setSelectedRegion(userRegion.id);
+        }
+      }
+    }
+
     loadData(true);
-  }, [isAuthenticated, navigate, user, selectedRegion, selectedDistrict, selectedStatus, searchTerm]);
+  }, [isAuthenticated, navigate, user, regions, districts, selectedRegion, selectedDistrict, selectedStatus, searchTerm]);
 
   // Load more data when scrolling
   const handleLoadMore = useCallback(() => {

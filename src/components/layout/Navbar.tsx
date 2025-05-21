@@ -67,17 +67,43 @@ export function Navbar() {
       <NavLink
         to="/"
         className={({ isActive }: { isActive: boolean }) =>
-          `${isActive ? "text-ecg-blue" : "text-gray-700"} hover:text-ecg-blue transition-colors`
+          cn(
+            "px-3 py-2 rounded-md transition-colors",
+            isActive 
+              ? "bg-primary/10 text-primary font-medium" 
+              : "text-foreground hover:text-primary hover:bg-primary/5"
+          )
         }
       >
         Home
       </NavLink>
       {isAuthenticated && (
         <>
-          <NavLink to="/dashboard" className="text-foreground hover:text-primary transition-colors">
+          <NavLink 
+            to="/dashboard"
+            end
+            className={({ isActive }) =>
+              cn(
+                "px-3 py-2 rounded-md transition-colors",
+                isActive 
+                  ? "bg-primary/20 text-primary font-medium border border-primary/30" 
+                  : "text-foreground hover:text-primary hover:bg-primary/5"
+              )
+            }
+          >
             Dashboard
           </NavLink>
-          <NavLink to="/report-fault" className="text-foreground hover:text-primary transition-colors">
+          <NavLink 
+            to="/report-fault" 
+            className={({ isActive }) =>
+              cn(
+                "px-3 py-2 rounded-md transition-colors",
+                isActive 
+                  ? "bg-primary/10 text-primary font-medium" 
+                  : "text-foreground hover:text-primary hover:bg-primary/5"
+              )
+            }
+          >
             Report Fault
           </NavLink>
           
@@ -85,10 +111,14 @@ export function Navbar() {
           {showMenuItem("district_engineer") && (
             <NavLink 
               to="/analytics" 
-              className={cn(
-                "text-foreground hover:text-primary transition-colors",
-                isActiveRoute("/analytics") && "text-primary"
-              )}
+              className={({ isActive }) =>
+                cn(
+                  "px-3 py-2 rounded-md transition-colors",
+                  isActive 
+                    ? "bg-primary/10 text-primary font-medium" 
+                    : "text-foreground hover:text-primary hover:bg-primary/5"
+                )
+              }
             >
               Analytics
             </NavLink>
@@ -184,10 +214,14 @@ export function Navbar() {
           {showMenuItem("district_engineer") && (
             <NavLink 
               to="/district-population" 
-              className={cn(
-                "text-foreground hover:text-primary transition-colors",
-                isActiveRoute("/district-population") && "text-primary"
-              )}
+              className={({ isActive }) =>
+                cn(
+                  "px-3 py-2 rounded-md transition-colors",
+                  isActive 
+                    ? "bg-primary/10 text-primary font-medium" 
+                    : "text-foreground hover:text-primary hover:bg-primary/5"
+                )
+              }
             >
               District Population
             </NavLink>
@@ -196,23 +230,73 @@ export function Navbar() {
           {/* Admin Menu Items - Only for system admin */}
           {user?.role === "system_admin" && (
             <>
-              <NavLink to="/user-management" className="text-foreground hover:text-primary transition-colors">
+              <NavLink 
+                to="/user-management" 
+                className={({ isActive }) =>
+                  cn(
+                    "px-3 py-2 rounded-md transition-colors",
+                    isActive 
+                      ? "bg-primary/10 text-primary font-medium" 
+                      : "text-foreground hover:text-primary hover:bg-primary/5"
+                  )
+                }
+              >
                 User Management
               </NavLink>
-              <NavLink to="/system-admin/permissions" className="text-foreground hover:text-primary transition-colors">
+              <NavLink 
+                to="/system-admin/permissions" 
+                className={({ isActive }) =>
+                  cn(
+                    "px-3 py-2 rounded-md transition-colors",
+                    isActive 
+                      ? "bg-primary/10 text-primary font-medium" 
+                      : "text-foreground hover:text-primary hover:bg-primary/5"
+                  )
+                }
+              >
                 Permission Management
               </NavLink>
-              <NavLink to="/system-admin/security" className="text-foreground hover:text-primary transition-colors">
+              <NavLink 
+                to="/system-admin/security" 
+                className={({ isActive }) =>
+                  cn(
+                    "px-3 py-2 rounded-md transition-colors",
+                    isActive 
+                      ? "bg-primary/10 text-primary font-medium" 
+                      : "text-foreground hover:text-primary hover:bg-primary/5"
+                  )
+                }
+              >
                 Security Monitoring
               </NavLink>
-              <NavLink to="/test/security" className="text-foreground hover:text-primary transition-colors">
+              <NavLink 
+                to="/test/security" 
+                className={({ isActive }) =>
+                  cn(
+                    "px-3 py-2 rounded-md transition-colors",
+                    isActive 
+                      ? "bg-primary/10 text-primary font-medium" 
+                      : "text-foreground hover:text-primary hover:bg-primary/5"
+                  )
+                }
+              >
                 Security Testing
               </NavLink>
             </>
           )}
 
           {user?.role === "global_engineer" && (
-            <NavLink to="/user-management" className="text-foreground hover:text-primary transition-colors">
+            <NavLink 
+              to="/user-management" 
+              className={({ isActive }) =>
+                cn(
+                  "px-3 py-2 rounded-md transition-colors",
+                  isActive 
+                    ? "bg-primary/10 text-primary font-medium" 
+                    : "text-foreground hover:text-primary hover:bg-primary/5"
+                )
+              }
+            >
               User Management
             </NavLink>
           )}

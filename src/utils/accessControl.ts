@@ -5,7 +5,9 @@ const ROLE_HIERARCHY = {
   system_admin: 5,
   global_engineer: 4,
   regional_engineer: 3,
+  regional_general_manager: 3,
   district_engineer: 2,
+  district_manager: 2,
   technician: 1
 };
 
@@ -22,7 +24,9 @@ export const hasRegionAccess = (user: User, targetRegionId: string): boolean => 
   return user.role === 'system_admin' || 
          user.role === 'global_engineer' || 
          (user.role === 'regional_engineer' && user.regionId === targetRegionId) ||
+         (user.role === 'regional_general_manager' && user.regionId === targetRegionId) ||
          (user.role === 'district_engineer' && user.regionId === targetRegionId) ||
+         (user.role === 'district_manager' && user.regionId === targetRegionId) ||
          (user.role === 'technician' && user.regionId === targetRegionId);
 };
 
@@ -33,6 +37,7 @@ export const hasDistrictAccess = (user: User, targetDistrictId: string): boolean
   return user.role === 'system_admin' || 
          user.role === 'global_engineer' || 
          (user.role === 'district_engineer' && user.districtId === targetDistrictId) ||
+         (user.role === 'district_manager' && user.districtId === targetDistrictId) ||
          (user.role === 'technician' && user.districtId === targetDistrictId);
 };
 

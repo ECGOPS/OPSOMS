@@ -1532,7 +1532,7 @@ export default function AnalyticsPage() {
               <Select
                 value={selectedRegion}
                 onValueChange={handleRegionChange}
-                disabled={user?.role === "district_engineer" || user?.role === "regional_engineer"}
+                disabled={user?.role === "district_engineer" || user?.role === "regional_engineer" || user?.role === "regional_general_manager" || user?.role === "district_manager"}
               >
                 <SelectTrigger id="region-select" className="mt-1">
                   <SelectValue placeholder="Select Region" />
@@ -1553,7 +1553,7 @@ export default function AnalyticsPage() {
               <Select
                 value={selectedDistrict}
                 onValueChange={handleDistrictChange}
-                disabled={!selectedRegion || user?.role === "district_engineer"}
+                disabled={!selectedRegion || user?.role === "district_engineer" || user?.role === "district_manager"}
               >
                 <SelectTrigger id="district-select" className="mt-1">
                   <SelectValue placeholder="Select District" />
