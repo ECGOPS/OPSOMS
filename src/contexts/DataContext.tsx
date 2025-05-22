@@ -887,6 +887,28 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return () => unsubscribe();
   }, [user, regions, districts]);
 
+  // Add this after other useEffect hooks
+  useEffect(() => {
+    if (!user) return;
+
+    const unsubscribe = onSnapshot(
+      collection(db, "overheadLineInspections"),
+      (snapshot) => {
+        const inspections = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as OverheadLineInspection[];
+        setOverheadLineInspections(inspections);
+      },
+      (error) => {
+        console.error("Error fetching overhead line inspections:", error);
+        toast.error("Failed to load overhead line inspections");
+      }
+    );
+
+    return () => unsubscribe();
+  }, [user]);
+
   // Add OP5 fault functions
   const addOP5Fault = async (fault: Omit<OP5Fault, "id">) => {
     try {
@@ -1203,6 +1225,156 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const saveInspection = async (inspection: SubstationInspection): Promise<string> => {
+    try {
+      // Get the inspection service instance
+      const inspectionService = SubstationInspectionService.getInstance();
+      
+      // Save the inspection using the service
+      await inspectionService.saveSubstationInspectionOffline(inspection, 'create');
+      
+      // If online, trigger sync immediately
+      if (navigator.onLine) {
+        await inspectionService.triggerSyncAndRefresh();
+      }
+      
+      return inspection.id;
+    } catch (error) {
+      console.error("Error saving inspection:", error);
+      toast.error("Failed to save inspection");
+      throw error;
+    }
+  };
+
+  const getSavedInspection = (id: string): SubstationInspection | undefined => {
+    if (!id) {
+      console.error('getSavedInspection: No ID provided');
+      return undefined;
+    }
+    const inspection = savedInspections.find(inspection => inspection.id === id);
+    if (!inspection) {
+      console.warn(`getSavedInspection: No inspection found with ID ${id}`);
+    }
+    return inspection;
+  };
+
+  const updateSubstationInspection = async (id: string, updates: Partial<SubstationInspection>) => {
+    if (!id) {
+      throw new Error('updateSubstationInspection: No ID provided');
+    }
+    if (!updates || Object.keys(updates).length === 0) {
+      throw new Error('updateSubstationInspection: No updates provided');
+    }
+
+    try {
+      // Get the inspection service instance
+      const inspectionService = SubstationInspectionService.getInstance();
+      
+      // Get the existing inspection
+      const existingInspection = savedInspections.find(inspection => inspection.id === id);
+      if (!existingInspection) {
+        throw new Error(`updateSubstationInspection: Inspection not found with ID ${id}`);
+      }
+      
+      // Validate updates - only ensure required fields are not removed
+      const validatedUpdates = {
+        ...updates,
+        updatedAt: new Date().toISOString(),
+        // Only ensure these required fields are not removed
+        region: updates.region || existingInspection.region,
+        district: updates.district || existingInspection.district,
+        substationName: updates.substationName || existingInspection.substationName,
+        type: updates.type || existingInspection.type,
+        // Don't set default values for checklist items
+        cleanDustFree: updates.cleanDustFree,
+        protectionButtonEnabled: updates.protectionButtonEnabled,
+        recloserButtonEnabled: updates.recloserButtonEnabled,
+        groundEarthButtonEnabled: updates.groundEarthButtonEnabled,
+        acPowerOn: updates.acPowerOn,
+        batteryPowerLow: updates.batteryPowerLow,
+        handleLockOn: updates.handleLockOn,
+        remoteButtonEnabled: updates.remoteButtonEnabled,
+        gasLevelLow: updates.gasLevelLow,
+        earthingArrangementAdequate: updates.earthingArrangementAdequate,
+        noFusesBlown: updates.noFusesBlown,
+        noDamageToBushings: updates.noDamageToBushings,
+        noDamageToHVConnections: updates.noDamageToHVConnections,
+        insulatorsClean: updates.insulatorsClean,
+        paintworkAdequate: updates.paintworkAdequate,
+        ptFuseLinkIntact: updates.ptFuseLinkIntact,
+        noCorrosion: updates.noCorrosion,
+        silicaGelCondition: updates.silicaGelCondition,
+        correctLabelling: updates.correctLabelling
+      };
+      
+      // Create updated inspection data
+      const updatedInspection: SubstationInspection = {
+        ...existingInspection,
+        ...validatedUpdates
+      };
+      
+      // Save the updated inspection
+      await inspectionService.saveSubstationInspectionOffline(updatedInspection, 'update');
+      
+      // If online, trigger sync immediately
+      if (navigator.onLine) {
+        await inspectionService.triggerSyncAndRefresh();
+      }
+      
+      toast.success('Inspection updated successfully');
+    } catch (error) {
+      console.error('Error updating inspection:', error);
+      toast.error('Failed to update inspection');
+      throw error;
+    }
+  };
+
+  const deleteInspection = async (id: string) => {
+    if (!id) {
+      throw new Error('deleteInspection: No ID provided');
+    }
+
+    try {
+      // Get the inspection service instance
+      const inspectionService = SubstationInspectionService.getInstance();
+      
+      // Get the existing inspection
+      const existingInspection = savedInspections.find(inspection => inspection.id === id);
+      if (!existingInspection) {
+        throw new Error(`deleteInspection: Inspection not found with ID ${id}`);
+      }
+
+      // If online, delete directly from Firebase
+      if (navigator.onLine) {
+        try {
+          // Delete from Firebase
+          await deleteDoc(doc(db, "substationInspections", id));
+          
+          // Update local state immediately
+          setSavedInspections(prev => prev.filter(inspection => inspection.id !== id));
+          
+          toast.success('Inspection deleted successfully');
+          return;
+        } catch (error) {
+          console.error('Error deleting from Firebase:', error);
+          throw error;
+        }
+      }
+      
+      // If offline, save deletion for sync
+      await inspectionService.saveSubstationInspectionOffline(existingInspection, 'delete');
+      
+      // Update local state immediately
+      setSavedInspections(prev => prev.filter(inspection => inspection.id !== id));
+      
+      toast.success('Inspection deleted successfully');
+    } catch (error) {
+      console.error('Error deleting inspection:', error);
+      toast.error('Failed to delete inspection');
+      throw error;
+    }
+  };
+
   // Update context value
   const contextValue: DataContextType = {
     regions,
@@ -1242,9 +1414,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     deleteVITInspection: async () => {},
     savedInspections,
     setSavedInspections: () => {},
-    saveInspection: async () => '',
-    updateSubstationInspection: async () => {},
-    deleteInspection: async () => {},
+    saveInspection,
+    updateSubstationInspection,
+    deleteInspection,
     updateDistrict,
     canEditAsset: () => true,
     canEditInspection: () => true,
@@ -1252,17 +1424,78 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     canDeleteInspection: () => true,
     setVITAssets: () => {},
     setVITInspections: () => {},
-    getSavedInspection: () => undefined,
+    getSavedInspection,
     canAddAsset: () => true,
     canAddInspection: () => true,
     getOP5FaultById: (id: string) => op5Faults.find(f => f.id === id),
     overheadLineInspections,
-    addOverheadLineInspection: async () => '',
-    updateOverheadLineInspection: async () => {},
-    deleteOverheadLineInspection: async () => {},
+    addOverheadLineInspection: async (inspection) => {
+      try {
+        const docRef = await addDoc(collection(db, "overheadLineInspections"), {
+          ...inspection,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+        return docRef.id;
+      } catch (error) {
+        console.error("Error adding overhead line inspection:", error);
+        toast.error("Failed to add inspection");
+        throw error;
+      }
+    },
+    updateOverheadLineInspection: async (id, updates) => {
+      try {
+        const docRef = doc(db, "overheadLineInspections", id);
+        await updateDoc(docRef, {
+          ...updates,
+          updatedAt: serverTimestamp()
+        });
+      } catch (error) {
+        console.error("Error updating overhead line inspection:", error);
+        toast.error("Failed to update inspection");
+        throw error;
+      }
+    },
+    deleteOverheadLineInspection: async (id) => {
+      try {
+        const docRef = doc(db, "overheadLineInspections", id);
+        await deleteDoc(docRef);
+      } catch (error) {
+        console.error("Error deleting overhead line inspection:", error);
+        toast.error("Failed to delete inspection");
+        throw error;
+      }
+    },
     canEditLoadMonitoring,
     canDeleteLoadMonitoring,
-    refreshInspections: async () => {},
+    refreshInspections: async () => {
+      try {
+        // Get the inspection service instance
+        const inspectionService = SubstationInspectionService.getInstance();
+        
+        // Trigger sync and refresh
+        await inspectionService.triggerSyncAndRefresh();
+        
+        // Get all inspections from Firestore
+        const q = query(collection(db, "substationInspections"), orderBy("createdAt", "desc"));
+        const snapshot = await getDocs(q);
+        const inspections = snapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt,
+            updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : data.updatedAt
+          } as SubstationInspection;
+        });
+        
+        // Update the state with fresh data
+        setSavedInspections(inspections);
+      } catch (error) {
+        console.error("Error refreshing inspections:", error);
+        toast.error("Failed to refresh inspections");
+      }
+    },
   };
 
   return (
