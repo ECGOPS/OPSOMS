@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useData, DataContextType } from "@/contexts/DataContext";
 import { useAuth, AuthContextType } from "@/contexts/AuthContext";
@@ -107,7 +107,6 @@ export default function EditOP5FaultPage() {
   
   // Use Partial for formData as it might not be complete initially
   const [formData, setFormData] = useState<Partial<OP5Fault>>({
-    faultType: "Planned" as FaultType, // Set a default value
     specificFaultType: undefined,
     areasAffected: "",
     restorationDate: null,
@@ -131,6 +130,7 @@ export default function EditOP5FaultPage() {
     updatedBy: "",
     customerPhoneNumber: "",
     alternativePhoneNumber: "",
+    outageType: "",
   });
 
   // Derived values state
@@ -150,11 +150,18 @@ export default function EditOP5FaultPage() {
   const [currentMaterialType, setCurrentMaterialType] = useState<string>("");
   const [currentMaterialDetails, setCurrentMaterialDetails] = useState<Partial<MaterialUsed>>({});
 
-  // Fetch fault data
+  // Add a ref to track if initial data has been loaded
+  const initialLoadDone = useRef(false);
+
+  // Update the initial data loading useEffect
   useEffect(() => {
-    if (id && typeof getOP5FaultById === 'function') {
+    if (id && typeof getOP5FaultById === 'function' && !initialLoadDone.current) {
+      console.log('[Initial Load] Starting initial load for ID:', id);
       const fetchedFault = getOP5FaultById(id);
       if (fetchedFault) {
+        console.log('[Initial Load] Raw fetched fault:', fetchedFault);
+        console.log('[Initial Load] Description:', fetchedFault.description);
+        console.log('[Initial Load] Specific Fault Type:', fetchedFault.specificFaultType);
         setFault(fetchedFault);
         
         const formattedOcc = formatDateForInput(fetchedFault.occurrenceDate);
@@ -164,25 +171,42 @@ export default function EditOP5FaultPage() {
         const formattedEstRes = formatDateForInput(fetchedFault.estimatedResolutionTime);
         
         // Parse fuse-specific information from description if it exists
-        let fuseCircuit = "";
-        let fusePhase = "";
+        let fuseCircuit = fetchedFault.fuseCircuit || "";
+        let fusePhase = fetchedFault.fusePhase || "";
         let description = fetchedFault.description || "";
         
-        if (fetchedFault.specificFaultType === "REPLACE FUSE") {
+        // Check if this is a fuse-related fault
+        if (fetchedFault.specificFaultType === "REPLACE FUSE" || fetchedFault.specificFaultType === "PHASE OFF") {
+          console.log('[Initial Load] Processing fuse/phase data for:', fetchedFault.specificFaultType);
+          
+          // If we don't have circuit/phase in dedicated fields, try to extract from description
+          if (!fuseCircuit || !fusePhase) {
+            console.log('[Initial Load] Attempting to extract from description:', description);
           const circuitMatch = description.match(/Circuit: ([^,]+)/);
           const phaseMatch = description.match(/Phase: ([^,]+)/);
           
           if (circuitMatch) {
             fuseCircuit = circuitMatch[1].trim();
+              console.log('[Initial Load] Found circuit in description:', fuseCircuit);
+              // Remove the circuit info from description
             description = description.replace(/Circuit: [^,]+,/, "").trim();
           }
+            
           if (phaseMatch) {
             fusePhase = phaseMatch[1].trim();
+              console.log('[Initial Load] Found phase in description:', fusePhase);
+              // Remove the phase info from description
             description = description.replace(/Phase: [^,]+,/, "").trim();
+            }
+          } else {
+            console.log('[Initial Load] Using existing circuit/phase data:', {
+              circuit: fuseCircuit,
+              phase: fusePhase
+            });
           }
         }
 
-        setFormData({
+        const newFormData = {
           ...fetchedFault,
           occurrenceDate: formattedOcc,
           repairDate: formattedRep,
@@ -197,16 +221,25 @@ export default function EditOP5FaultPage() {
           otherFaultType: fetchedFault.specificFaultType === "OTHERS" ? fetchedFault.otherFaultType || "" : "",
           customerPhoneNumber: fetchedFault.customerPhoneNumber || "",
           alternativePhoneNumber: fetchedFault.alternativePhoneNumber || "",
+          outageType: fetchedFault.faultType || "",
+        };
+        
+        console.log('[Initial Load] Final form data:', {
+          outageType: newFormData.outageType,
+          specificFaultType: newFormData.specificFaultType,
+          fuseCircuit: newFormData.fuseCircuit,
+          fusePhase: newFormData.fusePhase,
+          description: newFormData.description
         });
+        
+        setFormData(newFormData);
+        initialLoadDone.current = true;
       } else {
-        console.error(`[EditOP5FaultPage] Fault with ID ${id} not found.`);
+        console.error(`[Initial Load] Fault with ID ${id} not found.`);
         toast.error("Fault not found.");
         navigate("/dashboard");
       }
       setIsLoading(false);
-    } else {
-      console.error("[EditOP5FaultPage] No fault ID provided in URL.");
-      navigate("/dashboard");
     }
   }, [id, getOP5FaultById, navigate]);
 
@@ -217,6 +250,7 @@ export default function EditOP5FaultPage() {
       repairDate: repStr,
       repairEndDate: repEndStr,
       restorationDate: resStr,
+      estimatedResolutionTime: estResStr,
       affectedPopulation,
       districtId
     } = formData;
@@ -226,7 +260,8 @@ export default function EditOP5FaultPage() {
       occurrenceDate: occStr,
       repairDate: repStr,
       repairEndDate: repEndStr,
-      restorationDate: resStr
+      restorationDate: resStr,
+      estimatedResolutionTime: estResStr
     });
 
     let duration: number | null = null;
@@ -242,6 +277,7 @@ export default function EditOP5FaultPage() {
     let repDate: Date | null = null;
     let repEndDate: Date | null = null;
     let resDate: Date | null = null;
+    let estResDate: Date | null = null;
 
     // Safely parse dates with debug logging
     if (occStr) { 
@@ -256,62 +292,105 @@ export default function EditOP5FaultPage() {
         occDate = null; 
       } 
     }
-    if (repStr) { 
-      try { 
-        repDate = new Date(repStr); 
-        if(isNaN(repDate.getTime())) { 
+
+    // Validate repair date if it exists
+    if (repStr) {
+      try {
+        repDate = new Date(repStr);
+        if (isNaN(repDate.getTime())) {
           console.warn("[MTTR Debug] Invalid Repair Date:", repStr);
-          repDate = null; 
-        } 
-      } catch (error) { 
+          repDate = null;
+        } else if (occDate && repDate <= occDate) {
+          toast.error("Repair date must be after occurrence date");
+          setFormData(prev => ({ ...prev, repairDate: "" }));
+          return;
+        }
+      } catch (error) {
         console.error("[MTTR Debug] Error parsing Repair Date:", error);
-        repDate = null; 
-      } 
+        repDate = null;
+      }
     }
+
+    // Validate repair end date if it exists
     if (repEndStr) {
       try {
         repEndDate = new Date(repEndStr);
-        if(isNaN(repEndDate.getTime())) {
+        if (isNaN(repEndDate.getTime())) {
           console.warn("[MTTR Debug] Invalid Repair End Date:", repEndStr);
           repEndDate = null;
+        } else {
+          if (!repDate) {
+            toast.error("Repair start date must be set before repair end date");
+            setFormData(prev => ({ ...prev, repairEndDate: "" }));
+            return;
+          }
+          if (repEndDate <= repDate) {
+            toast.error("Repair end date must be after repair start date");
+            setFormData(prev => ({ ...prev, repairEndDate: "" }));
+            return;
+          }
         }
       } catch (error) {
         console.error("[MTTR Debug] Error parsing Repair End Date:", error);
         repEndDate = null;
       }
     }
-    if (resStr) { 
-      try { 
-        resDate = new Date(resStr); 
-        if(isNaN(resDate.getTime())) { 
-          console.warn("[MTTR Debug] Invalid Restoration Date:", resStr);
-          resDate = null; 
-        } 
-      } catch (error) { 
-        console.error("[MTTR Debug] Error parsing Restoration Date:", error);
-        resDate = null; 
-      } 
-    }
-    
-    // Debug logging for parsed dates
-    console.log("[MTTR Debug] Parsed dates:", { 
-      occurrenceDate: occDate?.toISOString(),
-      repairDate: repDate?.toISOString(),
-      repairEndDate: repEndDate?.toISOString(),
-      restorationDate: resDate?.toISOString()
-    });
 
-    // Validate repair end date if it exists
-    if (repEndDate) {
-      if (!repDate) {
-        toast.error("Repair start date must be set before repair end date");
-        setFormData(prev => ({ ...prev, repairEndDate: "" }));
-        return;
+    // Validate restoration date if it exists
+    if (resStr) {
+      try {
+        resDate = new Date(resStr);
+        if (isNaN(resDate.getTime())) {
+          console.warn("[MTTR Debug] Invalid Restoration Date:", resStr);
+          resDate = null;
+        } else {
+          if (!occDate) {
+            toast.error("Occurrence date must be set before restoration date");
+            setFormData(prev => ({ ...prev, restorationDate: "" }));
+            return;
+          }
+          if (resDate <= occDate) {
+            toast.error("Restoration date must be after occurrence date");
+            setFormData(prev => ({ ...prev, restorationDate: "" }));
+            return;
+          }
+          if (repDate && resDate <= repDate) {
+            toast.error("Restoration date must be after repair start date");
+            setFormData(prev => ({ ...prev, restorationDate: "" }));
+            return;
+          }
+          if (repEndDate && resDate <= repEndDate) {
+            toast.error("Restoration date must be after repair end date");
+            setFormData(prev => ({ ...prev, restorationDate: "" }));
+            return;
+          }
+          if (estResDate && resDate <= estResDate) {
+            toast.error("Restoration date must be after estimated resolution time");
+            setFormData(prev => ({ ...prev, restorationDate: "" }));
+            return;
+          }
+        }
+      } catch (error) {
+        console.error("[MTTR Debug] Error parsing Restoration Date:", error);
+        resDate = null;
       }
-      if (repEndDate <= repDate) {
-        toast.error("Repair end date must be after repair start date");
-        setFormData(prev => ({ ...prev, repairEndDate: "" }));
-        return;
+    }
+
+    // Validate estimated resolution time if it exists
+    if (estResStr) {
+      try {
+        estResDate = new Date(estResStr);
+        if (isNaN(estResDate.getTime())) {
+          console.warn("[MTTR Debug] Invalid Estimated Resolution Time:", estResStr);
+          estResDate = null;
+        } else if (occDate && estResDate <= occDate) {
+          toast.error("Estimated resolution time must be after occurrence date");
+          setFormData(prev => ({ ...prev, estimatedResolutionTime: "" }));
+          return;
+        }
+      } catch (error) {
+        console.error("[MTTR Debug] Error parsing Estimated Resolution Time:", error);
+        estResDate = null;
       }
     }
 
@@ -380,14 +459,79 @@ export default function EditOP5FaultPage() {
 
   // Generic handler for Select components
   const handleSelectChange = (id: keyof OP5Fault, value: string) => {
-    // Reset specificFaultType if faultType changes
-    if (id === 'faultType') {
-        // Correctly cast value to FaultType
-        setFormData(prev => ({ ...prev, faultType: value as FaultType, specificFaultType: undefined }));
+    console.log('[handleSelectChange] Called with:', { id, value });
+    console.log('[handleSelectChange] Current formData:', {
+      outageType: formData.outageType,
+      specificFaultType: formData.specificFaultType,
+      fuseCircuit: formData.fuseCircuit,
+      fusePhase: formData.fusePhase
+    });
+    
+    if (id === 'outageType') {
+      console.log('[handleSelectChange] Updating outage type to:', value);
+      setFormData(prev => {
+        const newData = {
+          ...prev,
+          outageType: value
+        };
+        console.log('[handleSelectChange] New formData:', newData);
+        return newData;
+      });
+    } else if (id === 'specificFaultType') {
+      console.log('[handleSelectChange] Updating specific fault type to:', value);
+      setFormData(prev => {
+        // Preserve circuit and phase data for fuse-related types
+        const shouldPreserveData = value === "REPLACE FUSE" || value === "PHASE OFF";
+        const newData = {
+          ...prev,
+          specificFaultType: value,
+          // Only reset circuit and phase if not a fuse-related fault
+          ...(shouldPreserveData ? {} : {
+            fuseCircuit: "",
+            fusePhase: ""
+          })
+        };
+        console.log('[handleSelectChange] New formData:', newData);
+        return newData;
+      });
+    } else if (id === 'fuseCircuit' || id === 'fusePhase') {
+      console.log('[handleSelectChange] Updating', id, 'to:', value);
+      setFormData(prev => {
+        const newData = {
+          ...prev,
+          [id]: value
+        };
+        console.log('[handleSelectChange] New formData:', newData);
+        return newData;
+      });
     } else {
         setFormData(prev => ({ ...prev, [id]: value }));
     }
   };
+
+  // Update the formData watcher useEffect
+  useEffect(() => {
+    console.log('[formData useEffect] formData changed:', {
+      outageType: formData.outageType,
+      faultType: formData.faultType,
+      specificFaultType: formData.specificFaultType,
+      fuseCircuit: formData.fuseCircuit,
+      fusePhase: formData.fusePhase
+    });
+
+    // Ensure circuit and phase data is maintained for PHASE OFF type
+    if (formData.specificFaultType === "PHASE OFF" || formData.specificFaultType === "REPLACE FUSE") {
+      const currentCircuit = formData.fuseCircuit || "";
+      const currentPhase = formData.fusePhase || "";
+      
+      if (currentCircuit || currentPhase) {
+        console.log('[formData useEffect] Maintaining circuit/phase data:', {
+          circuit: currentCircuit,
+          phase: currentPhase
+        });
+      }
+    }
+  }, [formData]);
 
   // Specific handler for affected population inputs
   const handleAffectedPopulationChange = (type: keyof AffectedPopulation, value: string) => {
@@ -424,24 +568,6 @@ export default function EditOP5FaultPage() {
       return;
     }
 
-    // Validate fuse-specific fields if Replace Fuse is selected
-    if (formData.specificFaultType === "REPLACE FUSE") {
-      if (!formData.fuseCircuit) {
-        toast.error("Circuit is required for Replace Fuse");
-        return;
-      }
-      if (!formData.fusePhase) {
-        toast.error("Phase is required for Replace Fuse");
-        return;
-      }
-    }
-
-    // Validate other fault type if Others is selected
-    if (formData.specificFaultType === "OTHERS" && !formData.otherFaultType) {
-      toast.error("Please specify the fault type");
-      return;
-    }
-
     setIsSubmitting(true);
 
     try {
@@ -459,14 +585,13 @@ export default function EditOP5FaultPage() {
         status: restorationDate ? 'resolved' as const : 'pending' as const,
         updatedAt: new Date().toISOString(),
         updatedBy: user?.uid || "",
-        // Add fuse-specific fields to the description if Replace Fuse is selected
-        description: formData.specificFaultType === "REPLACE FUSE" 
-          ? `${formData.description || ""} Circuit: ${formData.fuseCircuit}, Phase: ${formData.fusePhase}`
-          : formData.description || "",
-        // Use otherFaultType if Others is selected
-        specificFaultType: formData.specificFaultType === "OTHERS" 
-          ? formData.otherFaultType 
-          : formData.specificFaultType
+        description: formData.description || "",
+        faultType: formData.outageType as FaultType,
+        // Ensure circuit and phase data is included for both REPLACE FUSE and PHASE OFF types
+        ...((formData.specificFaultType === "REPLACE FUSE" || formData.specificFaultType === "PHASE OFF") && {
+          fuseCircuit: formData.fuseCircuit || "",
+          fusePhase: formData.fusePhase || ""
+        })
       };
 
       // Remove undefined values
@@ -474,6 +599,13 @@ export default function EditOP5FaultPage() {
         if (formDataToSubmit[key] === undefined) {
           delete formDataToSubmit[key];
         }
+      });
+
+      console.log('[Submit] Submitting form data:', {
+        specificFaultType: formDataToSubmit.specificFaultType,
+        fuseCircuit: formDataToSubmit.fuseCircuit,
+        fusePhase: formDataToSubmit.fusePhase,
+        description: formDataToSubmit.description
       });
 
       await updateOP5Fault(fault.id, formDataToSubmit);
@@ -642,11 +774,6 @@ export default function EditOP5FaultPage() {
             </div>
             <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight flex items-center gap-3">
               Edit OP5 Fault Report
-              {formData.faultType && (
-                <Badge className={`${faultTypeBadgeClass} ml-2`}>
-                  {formData.faultType}
-                </Badge>
-              )}
             </h1>
           </div>
           <div className="flex items-center gap-3">
@@ -771,6 +898,68 @@ export default function EditOP5FaultPage() {
                         className="h-10"
                       />
                     </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="substationName" className="text-sm font-medium">Substation Name</Label>
+                      <Input
+                        id="substationName"
+                        value={formData.substationName || ""} 
+                        onChange={handleInputChange}
+                        placeholder="Enter substation name"
+                        className="h-10"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="substationNo" className="text-sm font-medium">Substation Number</Label>
+                      <Input
+                        id="substationNo"
+                        value={formData.substationNo || ""} 
+                        onChange={handleInputChange}
+                        placeholder="Enter substation number"
+                        className="h-10"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="voltageLevel" className="text-sm font-medium">Voltage Level</Label>
+                      <Select
+                        value={formData.voltageLevel || ""} 
+                        onValueChange={(value) => handleSelectChange('voltageLevel', value)}
+                      >
+                        <SelectTrigger id="voltageLevel" className="h-10">
+                          <SelectValue placeholder="Select voltage level" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="0.433">0.433 kV</SelectItem>
+                          <SelectItem value="11">11 kV</SelectItem>
+                          <SelectItem value="33">33 kV</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="outageType" className="text-sm font-medium">Outage Type</Label>
+                      <Select
+                        value={formData.outageType || ""}
+                        onValueChange={(value) => {
+                          console.log('[OutageType Select] Value changed to:', value);
+                          console.log('[OutageType Select] Current formData outage type:', formData.outageType);
+                          handleSelectChange('outageType', value);
+                        }}
+                      >
+                        <SelectTrigger id="outageType" className="h-10">
+                          <SelectValue placeholder="Select outage type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Planned">Planned</SelectItem>
+                          <SelectItem value="Unplanned">Unplanned</SelectItem>
+                          <SelectItem value="Emergency">Emergency</SelectItem>
+                          <SelectItem value="Load Shedding">Load Shedding</SelectItem>
+                          <SelectItem value="GridCo Outages">GridCo Outages</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 </div>
                   
@@ -782,73 +971,21 @@ export default function EditOP5FaultPage() {
                   </div>
                   
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 pt-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="faultType" className="text-sm font-medium">Fault Type</Label>
-                      <Select
-                        value={formData.faultType || ''} 
-                        onValueChange={(value) => handleSelectChange('faultType', value as FaultType)}
-                      >
-                        <SelectTrigger id="faultType" className="h-10">
-                          <SelectValue placeholder="Select fault type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Planned">Planned</SelectItem>
-                          <SelectItem value="Unplanned">Unplanned</SelectItem>
-                          <SelectItem value="Emergency">Emergency</SelectItem>
-                          <SelectItem value="Load Shedding">Load Shedding</SelectItem>
-                          <SelectItem value="GridCo Outages">GridCo Outages</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
                     {/* Show specific fault type dropdown when Unplanned or Emergency is selected */}
-                    {(formData.faultType === "Unplanned" || formData.faultType === "Emergency") && (
-                      <div className="space-y-3">
-                        <Label htmlFor="specificFaultType" className="text-base font-medium">Specific Fault Type</Label>
-                        <Select 
-                          value={formData.specificFaultType || ""} 
-                          onValueChange={(value) => {
-                            setFormData(prev => ({
-                              ...prev,
-                              specificFaultType: value,
-                              // Reset fuse-specific fields when changing fault type
-                              ...(value !== "REPLACE FUSE" && {
-                                fuseCircuit: "",
-                                fusePhase: ""
-                              }),
-                              // Reset other fault type when not selecting Others
-                              ...(value !== "OTHERS" && {
-                                otherFaultType: ""
-                              })
-                            }));
-                          }}
+                    {(formData.outageType === "Unplanned" || formData.outageType === "Emergency") && (
+                      <div className="space-y-2">
+                        <Label htmlFor="specificFaultType" className="text-sm font-medium">Specific Fault Type</Label>
+                        <Select
+                          value={formData.specificFaultType || ""}
+                          onValueChange={(value) => handleSelectChange('specificFaultType', value)}
                         >
-                          <SelectTrigger className="h-12 text-base bg-background/50 border-muted">
+                          <SelectTrigger id="specificFaultType" className="h-10">
                             <SelectValue placeholder="Select specific fault type" />
                           </SelectTrigger>
                           <SelectContent>
-                            {formData.faultType === "Unplanned" ? (
+                            {formData.outageType === "Unplanned" ? (
                               <>
-                                <SelectItem value="JUMPER CUT">Jumper Cut</SelectItem>
-                                <SelectItem value="CONDUCTOR CUT">Conductor Cut</SelectItem>
-                                <SelectItem value="MERGED CONDUCTOR">Merged Conductor</SelectItem>
-                                <SelectItem value="HV/LV LINE CONTACT">HV/LV Line Contact</SelectItem>
-                                <SelectItem value="VEGETATION">Vegetation</SelectItem>
-                                <SelectItem value="CABLE FAULT">Cable Fault</SelectItem>
-                                <SelectItem value="TERMINATION FAILURE">Termination Failure</SelectItem>
-                                <SelectItem value="BROKEN POLES">Broken Poles</SelectItem>
-                                <SelectItem value="BURNT POLE">Burnt Pole</SelectItem>
-                                <SelectItem value="FAULTY ARRESTER/INSULATOR">Faulty Arrester/Insulator</SelectItem>
-                                <SelectItem value="EQIPMENT FAILURE">Equipment Failure</SelectItem>
-                                <SelectItem value="PUNCTURED CABLE">Punctured Cable</SelectItem>
-                                <SelectItem value="ANIMAL INTERRUPTION">Animal Interruption</SelectItem>
-                                <SelectItem value="BAD WEATHER">Bad Weather</SelectItem>
-                                <SelectItem value="TRANSIENT FAULTS">Transient Faults</SelectItem>
                                 <SelectItem value="REPLACE FUSE">Replace Fuse</SelectItem>
-                                <SelectItem value="OTHERS">Others</SelectItem>
-                              </>
-                            ) : (
-                              <>
                                 <SelectItem value="MEND CABLE">Mend Cable</SelectItem>
                                 <SelectItem value="WORK ON EQUIPMENT">Work on Equipment</SelectItem>
                                 <SelectItem value="FIRE">Fire</SelectItem>
@@ -859,64 +996,125 @@ export default function EditOP5FaultPage() {
                                 <SelectItem value="MEND TERMINATION">Mend Termination</SelectItem>
                                 <SelectItem value="BROKEN POLE">Broken Pole</SelectItem>
                                 <SelectItem value="BURNT POLE">Burnt Pole</SelectItem>
+                                <SelectItem value="BURNT PHASE">Burnt Phase</SelectItem>
                                 <SelectItem value="ANIMAL CONTACT">Animal Contact</SelectItem>
                                 <SelectItem value="VEGETATION SAFETY">Vegetation Safety</SelectItem>
                                 <SelectItem value="TRANSFER/RESTORE">Transfer/Restore</SelectItem>
                                 <SelectItem value="TROUBLE SHOOTING">Trouble Shooting</SelectItem>
                                 <SelectItem value="MEND LOOSE">Mend Loose</SelectItem>
                                 <SelectItem value="MAINTENANCE">Maintenance</SelectItem>
+                                <SelectItem value="PHASE OFF">Phase Off</SelectItem>
+                                <SelectItem value="OTHERS">Others</SelectItem>
+                              </>
+                            ) : (
+                              <>
                                 <SelectItem value="REPLACE FUSE">Replace Fuse</SelectItem>
+                                <SelectItem value="MEND CABLE">Mend Cable</SelectItem>
+                                <SelectItem value="WORK ON EQUIPMENT">Work on Equipment</SelectItem>
+                                <SelectItem value="FIRE">Fire</SelectItem>
+                                <SelectItem value="IMPROVE HV">Improve HV</SelectItem>
+                                <SelectItem value="JUMPER REPLACEMENT">Jumper Replacement</SelectItem>
+                                <SelectItem value="MEND BROKEN">Mend Broken</SelectItem>
+                                <SelectItem value="MEND JUMPER">Mend Jumper</SelectItem>
+                                <SelectItem value="MEND TERMINATION">Mend Termination</SelectItem>
+                                <SelectItem value="BROKEN POLE">Broken Pole</SelectItem>
+                                <SelectItem value="BURNT POLE">Burnt Pole</SelectItem>
+                                <SelectItem value="BURNT PHASE">Burnt Phase</SelectItem>
+                                <SelectItem value="ANIMAL CONTACT">Animal Contact</SelectItem>
+                                <SelectItem value="VEGETATION SAFETY">Vegetation Safety</SelectItem>
+                                <SelectItem value="TRANSFER/RESTORE">Transfer/Restore</SelectItem>
+                                <SelectItem value="TROUBLE SHOOTING">Trouble Shooting</SelectItem>
+                                <SelectItem value="MEND LOOSE">Mend Loose</SelectItem>
+                                <SelectItem value="MAINTENANCE">Maintenance</SelectItem>
+                                <SelectItem value="PHASE OFF">Phase Off</SelectItem>
                                 <SelectItem value="OTHERS">Others</SelectItem>
                               </>
                             )}
                           </SelectContent>
                         </Select>
+                      </div>
+                    )}
 
-                        {/* Show additional fields for Replace Fuse */}
-                        {formData.specificFaultType === "REPLACE FUSE" && (
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-4">
-                            <div className="space-y-3">
-                              <Label htmlFor="fuseCircuit" className="text-base font-medium">Circuit</Label>
-                              <Input
-                                id="fuseCircuit"
-                                value={formData.fuseCircuit || ""}
-                                onChange={(e) => setFormData(prev => ({ ...prev, fuseCircuit: e.target.value }))}
-                                placeholder="Enter circuit name/number"
-                                className="h-12 text-base bg-background/50 border-muted"
+                    {/* Show additional fields for Replace Fuse or Phase Off */}
+                    {(formData.specificFaultType === "REPLACE FUSE" || formData.specificFaultType === "PHASE OFF") && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="fuseCircuit" className="text-sm font-medium">Circuit</Label>
+                          <Input
+                            id="fuseCircuit"
+                            value={formData.fuseCircuit || ""}
+                            onChange={handleInputChange}
+                            placeholder="Enter circuit name/number"
+                            className="h-10"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="fusePhase" className="text-sm font-medium">Phase</Label>
+                          <div className="flex gap-4">
+                            <div className="flex items-center space-x-2">
+                              <input
+                                type="checkbox"
+                                id="redPhase"
+                                checked={formData.fusePhase?.includes("RED")}
+                                onChange={(e) => {
+                                  const phases = (formData.fusePhase || "").split(",").filter(p => p !== "RED");
+                                  if (e.target.checked) {
+                                    phases.push("RED");
+                                  }
+                                  handleSelectChange('fusePhase', phases.join(","));
+                                }}
+                                className="h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
                               />
+                              <label htmlFor="redPhase" className="text-sm font-medium text-red-600">Red Phase</label>
                             </div>
-                            <div className="space-y-3">
-                              <Label htmlFor="fusePhase" className="text-base font-medium">Phase</Label>
-                              <Select 
-                                value={formData.fusePhase || ""} 
-                                onValueChange={(value) => setFormData(prev => ({ ...prev, fusePhase: value }))}
-                              >
-                                <SelectTrigger className="h-12 text-base bg-background/50 border-muted">
-                                  <SelectValue placeholder="Select phase" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="RED">Red Phase</SelectItem>
-                                  <SelectItem value="YELLOW">Yellow Phase</SelectItem>
-                                  <SelectItem value="BLUE">Blue Phase</SelectItem>
-                                </SelectContent>
-                              </Select>
+                            <div className="flex items-center space-x-2">
+                              <input
+                                type="checkbox"
+                                id="yellowPhase"
+                                checked={formData.fusePhase?.includes("YELLOW")}
+                                onChange={(e) => {
+                                  const phases = (formData.fusePhase || "").split(",").filter(p => p !== "YELLOW");
+                                  if (e.target.checked) {
+                                    phases.push("YELLOW");
+                                  }
+                                  handleSelectChange('fusePhase', phases.join(","));
+                                }}
+                                className="h-4 w-4 rounded border-gray-300 text-yellow-600 focus:ring-yellow-500"
+                              />
+                              <label htmlFor="yellowPhase" className="text-sm font-medium text-yellow-600">Yellow Phase</label>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <input
+                                type="checkbox"
+                                id="bluePhase"
+                                checked={formData.fusePhase?.includes("BLUE")}
+                                onChange={(e) => {
+                                  const phases = (formData.fusePhase || "").split(",").filter(p => p !== "BLUE");
+                                  if (e.target.checked) {
+                                    phases.push("BLUE");
+                                  }
+                                  handleSelectChange('fusePhase', phases.join(","));
+                                }}
+                                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                              />
+                              <label htmlFor="bluePhase" className="text-sm font-medium text-blue-600">Blue Phase</label>
                             </div>
                           </div>
-                        )}
+                        </div>
+                      </div>
+                    )}
 
-                        {/* Show input field for Other fault type */}
-                        {formData.specificFaultType === "OTHERS" && (
-                          <div className="mt-4">
-                            <Label htmlFor="otherFaultType" className="text-base font-medium">Specify Fault Type</Label>
-                            <Input
-                              id="otherFaultType"
-                              value={formData.otherFaultType || ""}
-                              onChange={(e) => setFormData(prev => ({ ...prev, otherFaultType: e.target.value }))}
-                              placeholder="Enter the specific fault type"
-                              className="h-12 text-base bg-background/50 border-muted"
-                            />
-                          </div>
-                        )}
+                    {/* Show input field for Other fault type */}
+                    {formData.specificFaultType === "OTHERS" && (
+                      <div className="space-y-2">
+                        <Label htmlFor="otherFaultType" className="text-sm font-medium">Specify Fault Type</Label>
+                        <Input
+                          id="otherFaultType"
+                          value={formData.otherFaultType || ""}
+                          onChange={handleInputChange}
+                          placeholder="Enter the specific fault type"
+                          className="h-10"
+                        />
                       </div>
                     )}
                   </div>
@@ -928,6 +1126,17 @@ export default function EditOP5FaultPage() {
                       value={formData.description || ''}
                       onChange={handleInputChange}
                       placeholder="Provide a detailed description of the fault incident, including cause if known"
+                      className="mt-1 h-24 resize-none"
+                    />
+                  </div>
+
+                  <div className="pt-2">
+                    <Label htmlFor="remarks" className="text-sm font-medium">Remarks</Label>
+                    <Textarea
+                      id="remarks"
+                      value={formData.remarks || ''}
+                      onChange={handleInputChange}
+                      placeholder="Enter any additional remarks or notes about the fault"
                       className="mt-1 h-24 resize-none"
                     />
                   </div>
@@ -983,7 +1192,182 @@ export default function EditOP5FaultPage() {
                   </div>
                 </div>
 
-                {/* --- Section 3: Timing --- */}
+                {/* Materials Used Section */}
+                <div className="space-y-4 rounded-md">
+                  <div className="flex items-center gap-2 pb-2 border-b">
+                    <Layers className="h-5 w-5 text-primary" />
+                    <h2 className="text-lg font-semibold">Materials Used</h2>
+                  </div>
+
+                  <div className="space-y-6 pt-4">
+                    <div className="border rounded-lg p-4 space-y-4">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="bg-primary/10 border-primary/20 text-primary px-3 py-1">
+                          Add Material
+                        </Badge>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="materialType" className="text-sm font-medium">Material Type</Label>
+                          <Select
+                            value={currentMaterialType}
+                            onValueChange={handleMaterialTypeChange}
+                          >
+                            <SelectTrigger id="materialType" className="h-10">
+                              <SelectValue placeholder="Select material type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Fuse">Fuse</SelectItem>
+                              <SelectItem value="Conductor">Conductor</SelectItem>
+                              <SelectItem value="Others">Others</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {currentMaterialType === "Fuse" && (
+                          <>
+                            <div className="space-y-2">
+                              <Label htmlFor="fuseRating" className="text-sm font-medium">Fuse Rating</Label>
+                              <Input
+                                id="fuseRating"
+                                value={currentMaterialDetails.rating || ""}
+                                onChange={(e) => handleMaterialDetailChange('rating', e.target.value)}
+                                placeholder="Enter fuse rating"
+                                className="h-10"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="fuseQuantity" className="text-sm font-medium">Quantity</Label>
+                              <Input
+                                id="fuseQuantity"
+                                type="number"
+                                min="1"
+                                value={currentMaterialDetails.quantity || ""}
+                                onChange={(e) => handleMaterialDetailChange('quantity', e.target.value)}
+                                placeholder="Enter quantity"
+                                className="h-10"
+                              />
+                            </div>
+                          </>
+                        )}
+
+                        {currentMaterialType === "Conductor" && (
+                          <>
+                            <div className="space-y-2">
+                              <Label htmlFor="conductorType" className="text-sm font-medium">Conductor Type</Label>
+                              <Input
+                                id="conductorType"
+                                value={currentMaterialDetails.conductorType || ""}
+                                onChange={(e) => handleMaterialDetailChange('conductorType', e.target.value)}
+                                placeholder="Enter conductor type"
+                                className="h-10"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="conductorLength" className="text-sm font-medium">Length (meters)</Label>
+                              <Input
+                                id="conductorLength"
+                                type="number"
+                                min="1"
+                                value={currentMaterialDetails.length || ""}
+                                onChange={(e) => handleMaterialDetailChange('length', e.target.value)}
+                                placeholder="Enter length"
+                                className="h-10"
+                              />
+                            </div>
+                          </>
+                        )}
+
+                        {currentMaterialType === "Others" && (
+                          <>
+                            <div className="space-y-2">
+                              <Label htmlFor="materialDescription" className="text-sm font-medium">Description</Label>
+                              <Input
+                                id="materialDescription"
+                                value={currentMaterialDetails.description || ""}
+                                onChange={(e) => handleMaterialDetailChange('description', e.target.value)}
+                                placeholder="Enter material description"
+                                className="h-10"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="materialQuantity" className="text-sm font-medium">Quantity</Label>
+                              <Input
+                                id="materialQuantity"
+                                type="number"
+                                min="1"
+                                value={currentMaterialDetails.quantity || ""}
+                                onChange={(e) => handleMaterialDetailChange('quantity', e.target.value)}
+                                placeholder="Enter quantity"
+                                className="h-10"
+                              />
+                            </div>
+                          </>
+                        )}
+                      </div>
+
+                      <Button
+                        type="button"
+                        onClick={handleAddMaterial}
+                        className="w-full sm:w-auto"
+                        disabled={!currentMaterialType}
+                      >
+                        <PlusCircle className="h-4 w-4 mr-2" />
+                        Add Material
+                      </Button>
+                    </div>
+
+                    {formData.materialsUsed && formData.materialsUsed.length > 0 && (
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="bg-primary/10 border-primary/20 text-primary px-3 py-1">
+                            Added Materials
+                          </Badge>
+                          <p className="text-sm text-muted-foreground">
+                            {formData.materialsUsed.length} material{formData.materialsUsed.length !== 1 ? 's' : ''} added
+                          </p>
+                        </div>
+
+                        <div className="grid gap-4">
+                          {formData.materialsUsed.map((material) => (
+                            <div key={material.id} className="border rounded-lg p-4 flex justify-between items-start">
+                              <div className="space-y-1">
+                                <h4 className="font-medium">{material.type}</h4>
+                                {material.type === "Fuse" && (
+                                  <p className="text-sm text-muted-foreground">
+                                    Rating: {material.rating || ''}, Quantity: {material.quantity || ''}
+                                  </p>
+                                )}
+                                {material.type === "Conductor" && (
+                                  <p className="text-sm text-muted-foreground">
+                                    Type: {material.conductorType || ''}, Length: {material.length || ''}m
+                                  </p>
+                                )}
+                                {material.type === "Others" && (
+                                  <p className="text-sm text-muted-foreground">
+                                    {material.description || ''}, Quantity: {material.quantity || ''}
+                                  </p>
+                                )}
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleRemoveMaterial(material.id)}
+                                className="text-destructive hover:text-destructive/90"
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* --- Section 4: Timing --- */}
                 <div className="space-y-4 rounded-md">
                   <div className="flex items-center gap-2 pb-2 border-b">
                     <Clock className="h-5 w-5 text-primary" />
@@ -1078,7 +1462,7 @@ export default function EditOP5FaultPage() {
                   </div>
                 </div>
 
-                {/* --- Section 4: Impact & Calculations (Tabs) --- */} 
+                {/* --- Section 5: Impact & Calculations (Tabs) --- */} 
                 <div className="space-y-4 rounded-md">
                   <div className="flex items-center gap-2 pb-2 border-b">
                     <Users className="h-5 w-5 text-primary" />
