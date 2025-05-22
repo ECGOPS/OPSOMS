@@ -372,6 +372,12 @@ export function FaultCard({ fault, type }: FaultCardProps) {
                     <span>Description: {(fault as any).outageDescription}</span>
                   </div>
                 )}
+                {isOP5 && op5Fault?.remarks && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <FileText size={14} />
+                    <span>Remarks: {op5Fault.remarks}</span>
+                  </div>
+                )}
               </AccordionContent>
             </AccordionItem>
           </Accordion>

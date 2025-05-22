@@ -299,8 +299,8 @@ export function StaffIdManagement() {
       setError("Region is required for this role");
       return false;
     }
-    if ((entry.role === "district_engineer" || entry.role === "technician") && !entry.district) {
-      setError("District is required for district engineers and technicians");
+    if ((entry.role === "district_engineer" || entry.role === "technician" || entry.role === "district_manager") && !entry.district) {
+      setError("District is required for district engineers, technicians, and district managers");
       return false;
     }
     return true;
@@ -802,7 +802,7 @@ Admin User,system_admin,,,ECGADMIN`;
                       </SelectContent>
                     </Select>
                   </div>
-                  {(newEntry.role === "district_engineer" || newEntry.role === "technician") && newEntry.region && (
+                  {(newEntry.role === "district_engineer" || newEntry.role === "technician" || newEntry.role === "district_manager") && newEntry.region && (
                     <div>
                       <Label>District</Label>
                       <Select

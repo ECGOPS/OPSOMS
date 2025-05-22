@@ -112,6 +112,15 @@ export default function AnalyticsPage() {
   const [showAllRegions, setShowAllRegions] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string | undefined>(undefined);
   
+  // Add new state for days filter
+  const [selectedDays, setSelectedDays] = useState<number>(7);
+
+  // Add handler for days change
+  const handleDaysChange = (value: string) => {
+    setSelectedDays(parseInt(value));
+    loadData();
+  };
+  
   // Use the same logic as DashboardPage for paginatedFaults
   const paginatedFaults = useMemo(() => {
     // Get the latest filtered faults from context
@@ -139,29 +148,263 @@ export default function AnalyticsPage() {
       faultsToDisplay = faultsToDisplay.filter(fault => fault.status === filterStatus);
     }
 
+    // Apply fault type filter if needed
+    if (filterFaultType && filterFaultType !== "all") {
+      faultsToDisplay = faultsToDisplay.filter(fault => {
+        if ('faultType' in fault) {
+          return fault.faultType === filterFaultType;
+        }
+        return false;
+      });
+    }
+
+    // Apply date range filter
+    if (dateRange !== "all") {
+      const now = new Date();
+      let start: Date;
+      let end: Date = endOfDay(now);
+
+      switch (dateRange) {
+        case "days":
+          start = startOfDay(subDays(now, selectedDays - 1));
+          break;
+        case "today":
+          start = startOfDay(now);
+          break;
+        case "week":
+          start = startOfDay(subDays(now, 6));
+          break;
+        case "month":
+          start = startOfDay(subDays(now, 29));
+          break;
+        case "year":
+          start = startOfDay(subDays(now, 364));
+          break;
+        case "custom":
+          if (startDate && endDate) {
+            start = startOfDay(startDate);
+            end = endOfDay(endDate);
+          } else {
+            start = startOfYear(now);
+          }
+          break;
+        case "custom-month":
+          if (startMonth && endMonth) {
+            start = startOfMonth(startMonth);
+            end = endOfMonth(endMonth);
+          } else if (selectedMonth) {
+            start = startOfMonth(selectedMonth);
+            end = endOfMonth(selectedMonth);
+          } else {
+            start = startOfMonth(now);
+            end = endOfMonth(now);
+          }
+          break;
+        case "custom-year":
+          if (startYear && endYear) {
+            start = startOfYear(startYear);
+            end = endOfYear(endYear);
+          } else if (selectedYear) {
+            start = startOfYear(selectedYear);
+            end = endOfYear(selectedYear);
+          } else {
+            start = startOfYear(now);
+            end = endOfYear(now);
+          }
+          break;
+        case "custom-week":
+          if (startWeek && endWeek && selectedYear) {
+            start = startOfWeek(new Date(selectedYear.getFullYear(), 0, 1 + (startWeek - 1) * 7));
+            end = endOfWeek(new Date(selectedYear.getFullYear(), 0, 1 + (endWeek - 1) * 7));
+          } else {
+            start = startOfWeek(now);
+            end = endOfWeek(now);
+          }
+          break;
+        default:
+          start = startOfYear(now);
+      }
+
+      faultsToDisplay = faultsToDisplay.filter(fault => {
+        try {
+          const faultDate = new Date(fault.occurrenceDate);
+          return faultDate >= start && faultDate <= end;
+        } catch (error) {
+          console.error('[paginatedFaults] Error processing fault date:', {
+            faultId: fault.id,
+            occurrenceDate: fault.occurrenceDate,
+            error
+          });
+          return false;
+        }
+      });
+    }
+
     // Sort by occurrenceDate descending
     faultsToDisplay.sort((a, b) => new Date(b.occurrenceDate).getTime() - new Date(a.occurrenceDate).getTime());
+
     // Pagination
     const startIndex = (currentPage - 1) * pageSize;
     const endIndex = startIndex + pageSize;
     return faultsToDisplay.slice(startIndex, endIndex);
-  }, [getFilteredFaults, selectedRegion, filterRegion, selectedDistrict, filterDistrict, overviewRecentFaultsTab, currentPage, pageSize, filterStatus]);
+  }, [
+    getFilteredFaults,
+    selectedRegion,
+    filterRegion,
+    selectedDistrict,
+    filterDistrict,
+    overviewRecentFaultsTab,
+    currentPage,
+    pageSize,
+    filterStatus,
+    filterFaultType,
+    dateRange,
+    startDate,
+    endDate,
+    startMonth,
+    endMonth,
+    startYear,
+    endYear,
+    startWeek,
+    endWeek,
+    selectedYear,
+    selectedDays
+  ]);
 
-  // Calculate total pages
+  // Calculate total pages based on filtered faults
   const totalPages = useMemo(() => {
-    let totalItems = filteredFaults.length;
+    const { op5Faults: op5, controlOutages: control } = getFilteredFaults(
+      selectedRegion === "all" ? undefined : filterRegion,
+      selectedDistrict === "all" ? undefined : filterDistrict
+    );
+    let faultsToDisplay: (OP5Fault | ControlSystemOutage)[] = [];
     if (overviewRecentFaultsTab === 'op5') {
-      totalItems = filteredFaults.filter((f): f is OP5Fault => 'faultLocation' in f).length;
+      faultsToDisplay = op5;
     } else if (overviewRecentFaultsTab === 'control') {
-      totalItems = filteredFaults.filter((f): f is ControlSystemOutage => 'loadMW' in f).length;
+      faultsToDisplay = control;
+    } else {
+      const seenIds = new Set<string>();
+      faultsToDisplay = [...op5, ...control].filter(fault => {
+        if (seenIds.has(fault.id)) return false;
+        seenIds.add(fault.id);
+        return true;
+      });
     }
-    return Math.ceil(totalItems / pageSize);
-  }, [filteredFaults, overviewRecentFaultsTab, pageSize]);
 
-  // Reset pagination when filters change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [filterRegion, filterDistrict, filterFaultType, dateRange, startDate, endDate, overviewRecentFaultsTab]);
+    // Apply the same filters as paginatedFaults
+    if (filterStatus) {
+      faultsToDisplay = faultsToDisplay.filter(fault => fault.status === filterStatus);
+    }
+
+    if (filterFaultType && filterFaultType !== "all") {
+      faultsToDisplay = faultsToDisplay.filter(fault => {
+        if ('faultType' in fault) {
+          return fault.faultType === filterFaultType;
+        }
+        return false;
+      });
+    }
+
+    // Apply date range filter
+    if (dateRange !== "all") {
+      const now = new Date();
+      let start: Date;
+      let end: Date = endOfDay(now);
+
+      switch (dateRange) {
+        case "days":
+          start = startOfDay(subDays(now, selectedDays - 1));
+          break;
+        case "today":
+          start = startOfDay(now);
+          break;
+        case "week":
+          start = startOfDay(subDays(now, 6));
+          break;
+        case "month":
+          start = startOfDay(subDays(now, 29));
+          break;
+        case "year":
+          start = startOfDay(subDays(now, 364));
+          break;
+        case "custom":
+          if (startDate && endDate) {
+            start = startOfDay(startDate);
+            end = endOfDay(endDate);
+          } else {
+            start = startOfYear(now);
+          }
+          break;
+        case "custom-month":
+          if (startMonth && endMonth) {
+            start = startOfMonth(startMonth);
+            end = endOfMonth(endMonth);
+          } else if (selectedMonth) {
+            start = startOfMonth(selectedMonth);
+            end = endOfMonth(selectedMonth);
+          } else {
+            start = startOfMonth(now);
+            end = endOfMonth(now);
+          }
+          break;
+        case "custom-year":
+          if (startYear && endYear) {
+            start = startOfYear(startYear);
+            end = endOfYear(endYear);
+          } else if (selectedYear) {
+            start = startOfYear(selectedYear);
+            end = endOfYear(selectedYear);
+          } else {
+            start = startOfYear(now);
+            end = endOfYear(now);
+          }
+          break;
+        case "custom-week":
+          if (startWeek && endWeek && selectedYear) {
+            start = startOfWeek(new Date(selectedYear.getFullYear(), 0, 1 + (startWeek - 1) * 7));
+            end = endOfWeek(new Date(selectedYear.getFullYear(), 0, 1 + (endWeek - 1) * 7));
+          } else {
+            start = startOfWeek(now);
+            end = endOfWeek(now);
+          }
+          break;
+        default:
+          start = startOfYear(now);
+      }
+
+      faultsToDisplay = faultsToDisplay.filter(fault => {
+        try {
+          const faultDate = new Date(fault.occurrenceDate);
+          return faultDate >= start && faultDate <= end;
+        } catch (error) {
+          return false;
+        }
+      });
+    }
+
+    return Math.ceil(faultsToDisplay.length / pageSize);
+  }, [
+    getFilteredFaults,
+    selectedRegion,
+    filterRegion,
+    selectedDistrict,
+    filterDistrict,
+    overviewRecentFaultsTab,
+    pageSize,
+    filterStatus,
+    filterFaultType,
+    dateRange,
+    startDate,
+    endDate,
+    startMonth,
+    endMonth,
+    startYear,
+    endYear,
+    startWeek,
+    endWeek,
+    selectedYear,
+    selectedDays
+  ]);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -233,7 +476,8 @@ export default function AnalyticsPage() {
       selectedMonth,
       selectedYear,
       startWeek,
-      endWeek
+      endWeek,
+      selectedDays
     });
 
     // Get filtered faults for analytics - handle "all" case properly
@@ -267,20 +511,20 @@ export default function AnalyticsPage() {
       let end: Date = endOfDay(now);
 
       switch (dateRange) {
+        case "days":
+          start = startOfDay(subDays(now, selectedDays - 1));
+          break;
         case "today":
           start = startOfDay(now);
           break;
         case "week":
-          // Get the start of 7 days ago
-          start = startOfDay(subDays(now, 6)); // 6 because today counts as 1
+          start = startOfDay(subDays(now, 6));
           break;
         case "month":
-          // Get the start of 30 days ago
-          start = startOfDay(subDays(now, 29)); // 29 because today counts as 1
+          start = startOfDay(subDays(now, 29));
           break;
         case "year":
-          // Get the start of 365 days ago
-          start = startOfDay(subDays(now, 364)); // 364 because today counts as 1
+          start = startOfDay(subDays(now, 364));
           break;
         case "custom":
           if (startDate && endDate) {
@@ -294,17 +538,9 @@ export default function AnalyticsPage() {
           if (startMonth && endMonth) {
             start = startOfMonth(startMonth);
             end = endOfMonth(endMonth);
-            console.log('[loadData] Custom month range:', {
-              start: start.toISOString(),
-              end: end.toISOString()
-            });
           } else if (selectedMonth) {
             start = startOfMonth(selectedMonth);
             end = endOfMonth(selectedMonth);
-            console.log('[loadData] Single month:', {
-              start: start.toISOString(),
-              end: end.toISOString()
-            });
           } else {
             start = startOfMonth(now);
             end = endOfMonth(now);
@@ -1280,7 +1516,7 @@ export default function AnalyticsPage() {
     }
 
     const headers = [
-      'ID', 'Type', 'Region', 'District', 'Occurrence Date', 'Status', 'Outage Duration', 'Estimated Resolution', 'Resolution Status', 'Customers Affected', 'Fault Description'
+      'ID', 'Type', 'Region', 'District', 'Occurrence Date', 'Status', 'Outage Duration', 'Estimated Resolution', 'Resolution Status', 'Customers Affected', 'Fault Description', 'Remarks'
     ];
 
     const dataRows = paginatedFaults.map((fault: any) => {
@@ -1301,6 +1537,7 @@ export default function AnalyticsPage() {
           : 'Exceeded Estimate'
         : 'N/A';
       const faultDescription = fault.outageDescription || fault.description || 'N/A';
+      const remarks = fault.remarks || 'N/A';
       return [
         fault.id,
         type,
@@ -1316,7 +1553,8 @@ export default function AnalyticsPage() {
           : fault.customersAffected
             ? (fault.customersAffected.rural + fault.customersAffected.urban + fault.customersAffected.metro)
             : 'N/A',
-        faultDescription
+        faultDescription,
+        remarks
       ].map(value => {
         const strValue = String(value);
         if (strValue.includes(',') || strValue.includes('"')) {
@@ -1622,6 +1860,8 @@ export default function AnalyticsPage() {
                       ? `${format(startYear, "yyyy")} - ${format(endYear, "yyyy")}`
                       : dateRange === "custom-week" && startWeek && endWeek && selectedYear
                       ? `Week ${startWeek} - Week ${endWeek}, ${format(selectedYear, "yyyy")}`
+                      : dateRange === "days"
+                      ? `Last ${selectedDays} Days`
                       : dateRange === "all"
                       ? "All Time"
                       : dateRange === "week"
@@ -1631,6 +1871,7 @@ export default function AnalyticsPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Time</SelectItem>
+                  <SelectItem value="days">Last N Days</SelectItem>
                   <SelectItem value="week">Last 7 Days</SelectItem>
                   <SelectItem value="month">Last 30 Days</SelectItem>
                   <SelectItem value="year">Last Year</SelectItem>
@@ -1639,6 +1880,21 @@ export default function AnalyticsPage() {
                   <SelectItem value="custom-year">Select Year Range</SelectItem>
                 </SelectContent>
               </Select>
+
+              {dateRange === "days" && (
+                <Select value={selectedDays.toString()} onValueChange={handleDaysChange}>
+                  <SelectTrigger className="w-[100px] sm:w-[120px]">
+                    <SelectValue placeholder="Days" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[1, 2, 3, 4, 5, 6, 7, 14, 21, 30, 60, 90].map(days => (
+                      <SelectItem key={days} value={days.toString()}>
+                        {days} {days === 1 ? 'Day' : 'Days'}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
 
               {dateRange === "custom-week" && (
                 <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">

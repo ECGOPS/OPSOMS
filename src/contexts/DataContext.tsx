@@ -1181,6 +1181,28 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Add this function to actually update a district in Firestore
+  const updateDistrict = async (id: string, updates: Partial<District>) => {
+    try {
+      const districtRef = doc(db, "districts", id);
+      await updateDoc(districtRef, {
+        ...updates,
+        updatedAt: serverTimestamp(),
+      });
+      toast.success("District updated successfully");
+      // Optionally update local state immediately for responsiveness
+      setDistricts((prev) =>
+        prev.map((d) =>
+          d.id === id ? { ...d, ...updates, updatedAt: new Date().toISOString() } : d
+        )
+      );
+    } catch (error) {
+      console.error("Error updating district:", error);
+      toast.error("Failed to update district");
+      throw error;
+    }
+  };
+
   // Update context value
   const contextValue: DataContextType = {
     regions,
@@ -1223,7 +1245,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     saveInspection: async () => '',
     updateSubstationInspection: async () => {},
     deleteInspection: async () => {},
-    updateDistrict: async () => {},
+    updateDistrict,
     canEditAsset: () => true,
     canEditInspection: () => true,
     canDeleteAsset: () => true,

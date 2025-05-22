@@ -156,6 +156,7 @@ export interface BaseAsset {
 export interface OP5Fault {
   id: string;
   faultType: FaultType;
+  outageType: string;
   specificFaultType: UnplannedFaultType | EmergencyFaultType | string; // Allow string for custom fault types
   substationName: string;
   substationNo: string;
@@ -167,6 +168,7 @@ export interface OP5Fault {
   repairEndDate: string | null;
   estimatedResolutionTime: string | null;
   description: string;
+  remarks: string;
   status: 'pending' | 'resolved';
   mttr?: number;
   regionId: string;
