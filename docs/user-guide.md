@@ -31,15 +31,90 @@ ECG OMS (Outage Management System) is a comprehensive fault management system de
 - Valid user credentials
 - Required permissions
 
+### Account Creation (Sign Up)
+1. Navigate to the signup page
+2. Fill in the required information:
+   - Full Name
+   - Email Address
+   - Phone Number
+   - Region
+   - District
+   - Role (if applicable)
+3. Create a strong password that meets the following criteria:
+   - Minimum 8 characters
+   - At least one uppercase letter
+   - At least one lowercase letter
+   - At least one number
+   - At least one special character
+4. Review and accept the terms of service
+5. Click "Create Account"
+6. Verify your email address by clicking the link sent to your email
+7. Complete your profile setup if required
+
 ### Login Process
 1. Navigate to the login page
 2. Enter your credentials:
-   - Username
+   - Username (email address)
    - Password
 3. Click "Login"
 4. If 2FA is enabled:
-   - Enter the verification code
+   - Enter the verification code sent to your registered phone/email
    - Click "Verify"
+
+### Password Management
+1. To change your password:
+   - Click on your profile icon
+   - Select "Change Password"
+   - Enter current password
+   - Enter new password
+   - Confirm new password
+   - Click "Update Password"
+
+2. To reset a forgotten password:
+   - Click "Forgot Password" on the login page
+   - Enter your registered email address
+   - Click "Send Reset Link"
+   - Check your email for the reset link
+   - Click the link and follow the instructions
+   - Create a new password
+
+### Troubleshooting Login Issues
+
+#### Common Login Problems and Solutions
+
+1. **Cannot Access Login Page**
+   - Check your internet connection
+   - Clear browser cache and cookies
+   - Try using a different browser
+   - Ensure you're using the correct URL
+
+2. **Invalid Credentials**
+   - Verify your email address is correct
+   - Check for caps lock
+   - Ensure no extra spaces in username/password
+   - Try resetting your password if forgotten
+
+3. **Account Locked**
+   - Wait for the lockout period to expire (usually 30 minutes)
+   - Contact your system administrator
+   - Use the "Forgot Password" feature
+
+4. **2FA Issues**
+   - Ensure your phone/email is accessible
+   - Request a new verification code
+   - Contact support if codes aren't being received
+
+5. **Browser Compatibility**
+   - Update your browser to the latest version
+   - Enable JavaScript and cookies
+   - Try using a different browser
+
+#### Getting Help
+If you continue to experience issues:
+1. Contact your system administrator
+2. Submit a support ticket through the help desk
+3. Call the support hotline: [Support Phone Number]
+4. Email support: [Support Email]
 
 ### Dashboard Overview
 The dashboard provides a comprehensive view of system status:
@@ -87,6 +162,18 @@ The dashboard provides a comprehensive view of system status:
 - Access all features
 - Generate system reports
 
+**Daily Functions:**
+- Monitor system health and performance
+- Manage user access and permissions
+- Configure system parameters
+- Implement security updates
+- Handle system backups
+- Resolve technical issues
+- Manage system integrations
+- Review system logs
+- Update system documentation
+- Train new administrators
+
 #### 2. Regional Manager
 **Responsibilities:**
 - Regional oversight
@@ -100,6 +187,18 @@ The dashboard provides a comprehensive view of system status:
 - Generate regional reports
 - Update fault status
 - Access regional analytics
+
+**Daily Functions:**
+- Monitor regional performance metrics
+- Coordinate with district managers
+- Review and approve fault reports
+- Allocate resources for fault resolution
+- Conduct regional team meetings
+- Generate performance reports
+- Implement regional strategies
+- Handle escalated issues
+- Monitor resource utilization
+- Ensure compliance with standards
 
 #### 3. Regional General Manager
 **Responsibilities:**
@@ -117,6 +216,18 @@ The dashboard provides a comprehensive view of system status:
 - Access regional analytics
 - Manage regional resources
 
+**Daily Functions:**
+- Develop regional strategies
+- Oversee multiple districts
+- Set performance targets
+- Manage regional budget
+- Coordinate with other regions
+- Handle major incidents
+- Review regional KPIs
+- Implement improvement plans
+- Manage stakeholder relationships
+- Lead regional initiatives
+
 #### 4. District Engineer
 **Responsibilities:**
 - District-level operations
@@ -130,6 +241,18 @@ The dashboard provides a comprehensive view of system status:
 - View district data
 - Generate basic reports
 - Access district analytics
+
+**Daily Functions:**
+- Respond to fault reports
+- Conduct field inspections
+- Perform technical assessments
+- Update fault status
+- Coordinate repair teams
+- Document technical issues
+- Monitor equipment status
+- Provide technical support
+- Maintain equipment records
+- Implement safety protocols
 
 #### 5. District Manager
 **Responsibilities:**
@@ -147,6 +270,18 @@ The dashboard provides a comprehensive view of system status:
 - Access district analytics
 - Manage district resources
 
+**Daily Functions:**
+- Oversee daily operations
+- Manage district team
+- Coordinate emergency responses
+- Monitor service quality
+- Handle customer complaints
+- Manage district budget
+- Implement district policies
+- Conduct team training
+- Review performance metrics
+- Maintain stakeholder relations
+
 #### 6. Viewer
 **Responsibilities:**
 - Monitor system status
@@ -158,6 +293,91 @@ The dashboard provides a comprehensive view of system status:
 - View basic reports
 - Access public data
 - Monitor system status
+
+**Daily Functions:**
+- Monitor system dashboards
+- View performance reports
+- Track fault status
+- Access public information
+- Generate basic reports
+- Monitor system alerts
+- View historical data
+- Access documentation
+- Track maintenance schedules
+- Monitor service status
+
+### Role Hierarchy and Reporting Structure
+```
+System Administrator
+    │
+    ├── Regional General Manager
+    │       │
+    │       ├── Regional Manager
+    │       │       │
+    │       │       ├── District Manager
+    │       │       │       │
+    │       │       │       ├── District Engineer
+    │       │       │       └── Viewer
+    │       │       │
+    │       │       │
+    │       │       └── Viewer
+    │       │
+    │       └── Viewer
+    │
+    └── Viewer
+```
+
+### Role Assignment Process
+1. New user registration
+2. Role assessment by System Administrator
+3. Permission configuration
+4. Access level assignment
+5. Training provision
+6. Access verification
+7. Regular role review
+
+### Role-Specific Training Requirements
+1. **System Administrator**
+   - Advanced system management
+   - Security protocols
+   - Backup procedures
+   - User management
+   - System configuration
+
+2. **Regional General Manager**
+   - Strategic planning
+   - Resource management
+   - Performance monitoring
+   - Team leadership
+   - Budget management
+
+3. **Regional Manager**
+   - Regional operations
+   - Team management
+   - Performance analysis
+   - Resource allocation
+   - Report generation
+
+4. **District Manager**
+   - District operations
+   - Team supervision
+   - Customer service
+   - Resource coordination
+   - Performance tracking
+
+5. **District Engineer**
+   - Technical operations
+   - Fault assessment
+   - Field operations
+   - Safety protocols
+   - Equipment maintenance
+
+6. **Viewer**
+   - Basic system navigation
+   - Report viewing
+   - Dashboard monitoring
+   - Data interpretation
+   - Basic troubleshooting
 
 ## Fault Management
 
@@ -232,6 +452,114 @@ The dashboard provides a comprehensive view of system status:
 - Network problems
 - Communication issues
 - SCADA system faults
+
+### Customer Population Management
+
+#### Updating Customer Population
+1. Navigate to "Settings" > "Customer Population"
+2. Select the region and district
+3. Choose update method:
+   - Manual Update
+   - Bulk Import
+   - API Integration
+
+#### Manual Update Process
+1. Click "Update Population"
+2. Enter the following information:
+   - Total Customer Count
+   - Population Breakdown:
+     * Rural Customers
+     * Urban Customers
+     * Metro Customers
+   - Commercial Customers
+   - Industrial Customers
+   - Residential Customers
+3. Add supporting documentation
+4. Enter update reason
+5. Click "Save Update"
+
+#### Bulk Import Process
+1. Click "Bulk Import"
+2. Download the template file
+3. Fill in the required fields:
+   - Region Code
+   - District Code
+   - Customer Categories
+   - Population Numbers
+   - Update Date
+4. Upload the completed file
+5. Verify the data
+6. Confirm import
+
+#### Population Update Guidelines
+1. **Update Frequency**
+   - Monthly updates for urban areas
+   - Quarterly updates for rural areas
+   - Annual comprehensive review
+   - Emergency updates as needed
+
+2. **Data Requirements**
+   - Valid customer counts
+   - Category breakdown
+   - Geographic distribution
+   - Historical data
+   - Supporting documentation
+
+3. **Verification Process**
+   - Data validation
+   - Cross-reference checks
+   - Historical comparison
+   - Approval workflow
+   - Audit trail
+
+4. **Access Levels**
+   - District Manager: Can update district data
+   - Regional Manager: Can review and approve updates
+   - System Administrator: Full access to all data
+
+#### Population Update Workflow
+1. **Initiation**
+   - Identify need for update
+   - Gather required data
+   - Prepare documentation
+
+2. **Review**
+   - Data validation
+   - Historical comparison
+   - Impact assessment
+   - Approval process
+
+3. **Implementation**
+   - System update
+   - Data verification
+   - Documentation update
+   - Notification to stakeholders
+
+4. **Monitoring**
+   - Track changes
+   - Verify accuracy
+   - Monitor impact
+   - Address issues
+
+#### Troubleshooting Population Updates
+1. **Common Issues**
+   - Data validation errors
+   - Import failures
+   - Access permission issues
+   - Historical data conflicts
+
+2. **Solutions**
+   - Verify data format
+   - Check file integrity
+   - Confirm permissions
+   - Review historical records
+   - Contact system administrator
+
+3. **Support**
+   - Technical assistance
+   - Data verification
+   - Process guidance
+   - Emergency updates
 
 ## Analytics & Reporting
 

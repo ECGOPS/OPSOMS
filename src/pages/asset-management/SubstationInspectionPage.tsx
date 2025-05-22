@@ -49,25 +49,25 @@ export default function SubstationInspectionPage() {
     voltageLevel: "",
     status: "Pending",
     remarks: "",
-    cleanDustFree: "",
-    protectionButtonEnabled: "",
-    recloserButtonEnabled: "",
-    groundEarthButtonEnabled: "",
-    acPowerOn: "",
-    batteryPowerLow: "",
-    handleLockOn: "",
-    remoteButtonEnabled: "",
-    gasLevelLow: "",
-    earthingArrangementAdequate: "",
-    noFusesBlown: "",
-    noDamageToBushings: "",
-    noDamageToHVConnections: "",
-    insulatorsClean: "",
-    paintworkAdequate: "",
-    ptFuseLinkIntact: "",
-    noCorrosion: "",
-    silicaGelCondition: "",
-    correctLabelling: "",
+    cleanDustFree: undefined,
+    protectionButtonEnabled: undefined,
+    recloserButtonEnabled: undefined,
+    groundEarthButtonEnabled: undefined,
+    acPowerOn: undefined,
+    batteryPowerLow: undefined,
+    handleLockOn: undefined,
+    remoteButtonEnabled: undefined,
+    gasLevelLow: undefined,
+    earthingArrangementAdequate: undefined,
+    noFusesBlown: undefined,
+    noDamageToBushings: undefined,
+    noDamageToHVConnections: undefined,
+    insulatorsClean: undefined,
+    paintworkAdequate: undefined,
+    ptFuseLinkIntact: undefined,
+    noCorrosion: undefined,
+    silicaGelCondition: undefined,
+    correctLabelling: undefined,
     region: "",
     district: "",
     regionId: "",
@@ -240,33 +240,43 @@ export default function SubstationInspectionPage() {
         // Set formData without items array to avoid duplication
         const { items, id, ...formDataWithoutItems } = inspection;
         setFormData({
-          ...formDataWithoutItems,
+          date: formDataWithoutItems.date || new Date().toISOString().split('T')[0],
+          inspectionDate: formDataWithoutItems.inspectionDate || new Date().toISOString().split('T')[0],
+          substationNo: formDataWithoutItems.substationNo || "",
           substationName: formDataWithoutItems.substationName || "",
           type: formDataWithoutItems.type || "indoor",
           location: formDataWithoutItems.location || "",
           voltageLevel: formDataWithoutItems.voltageLevel || "",
           status: formDataWithoutItems.status || "Pending",
           remarks: formDataWithoutItems.remarks || "",
-          cleanDustFree: formDataWithoutItems.cleanDustFree || "",
-          protectionButtonEnabled: formDataWithoutItems.protectionButtonEnabled || "",
-          recloserButtonEnabled: formDataWithoutItems.recloserButtonEnabled || "",
-          groundEarthButtonEnabled: formDataWithoutItems.groundEarthButtonEnabled || "",
-          acPowerOn: formDataWithoutItems.acPowerOn || "",
-          batteryPowerLow: formDataWithoutItems.batteryPowerLow || "",
-          handleLockOn: formDataWithoutItems.handleLockOn || "",
-          remoteButtonEnabled: formDataWithoutItems.remoteButtonEnabled || "",
-          gasLevelLow: formDataWithoutItems.gasLevelLow || "",
-          earthingArrangementAdequate: formDataWithoutItems.earthingArrangementAdequate || "",
-          noFusesBlown: formDataWithoutItems.noFusesBlown || "",
-          noDamageToBushings: formDataWithoutItems.noDamageToBushings || "",
-          noDamageToHVConnections: formDataWithoutItems.noDamageToHVConnections || "",
-          insulatorsClean: formDataWithoutItems.insulatorsClean || "",
-          paintworkAdequate: formDataWithoutItems.paintworkAdequate || "",
-          ptFuseLinkIntact: formDataWithoutItems.ptFuseLinkIntact || "",
-          noCorrosion: formDataWithoutItems.noCorrosion || "",
-          silicaGelCondition: formDataWithoutItems.silicaGelCondition || "",
-          correctLabelling: formDataWithoutItems.correctLabelling || "",
-          items: [] // Clear items array to avoid duplication
+          cleanDustFree: formDataWithoutItems.cleanDustFree,
+          protectionButtonEnabled: formDataWithoutItems.protectionButtonEnabled,
+          recloserButtonEnabled: formDataWithoutItems.recloserButtonEnabled,
+          groundEarthButtonEnabled: formDataWithoutItems.groundEarthButtonEnabled,
+          acPowerOn: formDataWithoutItems.acPowerOn,
+          batteryPowerLow: formDataWithoutItems.batteryPowerLow,
+          handleLockOn: formDataWithoutItems.handleLockOn,
+          remoteButtonEnabled: formDataWithoutItems.remoteButtonEnabled,
+          gasLevelLow: formDataWithoutItems.gasLevelLow,
+          earthingArrangementAdequate: formDataWithoutItems.earthingArrangementAdequate,
+          noFusesBlown: formDataWithoutItems.noFusesBlown,
+          noDamageToBushings: formDataWithoutItems.noDamageToBushings,
+          noDamageToHVConnections: formDataWithoutItems.noDamageToHVConnections,
+          insulatorsClean: formDataWithoutItems.insulatorsClean,
+          paintworkAdequate: formDataWithoutItems.paintworkAdequate,
+          ptFuseLinkIntact: formDataWithoutItems.ptFuseLinkIntact,
+          noCorrosion: formDataWithoutItems.noCorrosion,
+          silicaGelCondition: formDataWithoutItems.silicaGelCondition,
+          correctLabelling: formDataWithoutItems.correctLabelling,
+          region: formDataWithoutItems.region || "",
+          district: formDataWithoutItems.district || "",
+          regionId: formDataWithoutItems.regionId || "",
+          districtId: formDataWithoutItems.districtId || "",
+          items: [],
+          generalBuilding: [],
+          controlEquipment: [],
+          powerTransformer: [],
+          outdoorEquipment: []
         });
         
         // Set categories with the items, preserving original IDs
@@ -409,19 +419,8 @@ export default function SubstationInspectionPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!regionId || !districtId) {
-      toast.error("Please select both region and district");
-      return;
-    }
-
-    if (!formData.substationNo) {
-      toast.error("Please enter a substation number");
-      return;
-    }
-
     setIsSubmitting(true);
-    
+
     try {
       // Get the selected region and district names
       const selectedRegionName = regions.find(r => r.id === regionId)?.name || "";
@@ -451,28 +450,28 @@ export default function SubstationInspectionPage() {
             id: item.id || uuidv4(),
             name: item.name || "",
             category: item.category || "general building",
-            status: item.status || "good",
+            status: item.status,
             remarks: item.remarks || ""
           })),
           ...inspectionItems.controlEquipment.map(item => ({
             id: item.id || uuidv4(),
             name: item.name || "",
             category: item.category || "control equipment",
-            status: item.status || "good",
+            status: item.status,
             remarks: item.remarks || ""
           })),
           ...inspectionItems.powerTransformer.map(item => ({
             id: item.id || uuidv4(),
             name: item.name || "",
             category: item.category || "power transformer",
-            status: item.status || "good",
+            status: item.status,
             remarks: item.remarks || ""
           })),
           ...inspectionItems.outdoorEquipment.map(item => ({
             id: item.id || uuidv4(),
             name: item.name || "",
             category: item.category || "outdoor equipment",
-            status: item.status || "good",
+            status: item.status,
             remarks: item.remarks || ""
           }))
         ],
@@ -480,28 +479,28 @@ export default function SubstationInspectionPage() {
           id: item.id || uuidv4(),
           name: item.name || "",
           category: item.category || "general building",
-          status: item.status || "good",
+          status: item.status,
           remarks: item.remarks || ""
         })),
         controlEquipment: inspectionItems.controlEquipment.map(item => ({
           id: item.id || uuidv4(),
           name: item.name || "",
           category: item.category || "control equipment",
-          status: item.status || "good",
+          status: item.status,
           remarks: item.remarks || ""
         })),
         powerTransformer: inspectionItems.powerTransformer.map(item => ({
           id: item.id || uuidv4(),
           name: item.name || "",
           category: item.category || "power transformer",
-          status: item.status || "good",
+          status: item.status,
           remarks: item.remarks || ""
         })),
         outdoorEquipment: inspectionItems.outdoorEquipment.map(item => ({
           id: item.id || uuidv4(),
           name: item.name || "",
           category: item.category || "outdoor equipment",
-          status: item.status || "good",
+          status: item.status,
           remarks: item.remarks || ""
         })),
         remarks: formData.remarks || "",
@@ -511,7 +510,27 @@ export default function SubstationInspectionPage() {
         inspectedBy: user?.name || "Unknown",
         location: formData.location || "",
         voltageLevel: formData.voltageLevel || "",
-        status: formData.status || "Pending"
+        status: formData.status || "Pending",
+        // Add checklist items without default values
+        cleanDustFree: formData.cleanDustFree,
+        protectionButtonEnabled: formData.protectionButtonEnabled,
+        recloserButtonEnabled: formData.recloserButtonEnabled,
+        groundEarthButtonEnabled: formData.groundEarthButtonEnabled,
+        acPowerOn: formData.acPowerOn,
+        batteryPowerLow: formData.batteryPowerLow,
+        handleLockOn: formData.handleLockOn,
+        remoteButtonEnabled: formData.remoteButtonEnabled,
+        gasLevelLow: formData.gasLevelLow,
+        earthingArrangementAdequate: formData.earthingArrangementAdequate,
+        noFusesBlown: formData.noFusesBlown,
+        noDamageToBushings: formData.noDamageToBushings,
+        noDamageToHVConnections: formData.noDamageToHVConnections,
+        insulatorsClean: formData.insulatorsClean,
+        paintworkAdequate: formData.paintworkAdequate,
+        ptFuseLinkIntact: formData.ptFuseLinkIntact,
+        noCorrosion: formData.noCorrosion,
+        silicaGelCondition: formData.silicaGelCondition,
+        correctLabelling: formData.correctLabelling
       };
 
       // Log the inspection data before saving

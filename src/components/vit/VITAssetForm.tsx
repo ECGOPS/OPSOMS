@@ -213,60 +213,212 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
     : [];
   
   const handleGetLocation = () => {
+    console.log("=== Geolocation Debug Logs ===");
+    console.log("Browser Info:", {
+      userAgent: navigator.userAgent,
+      platform: navigator.platform,
+      vendor: navigator.vendor,
+      language: navigator.language
+    });
+    
+    // Check if we're in a secure context
+    if (!window.isSecureContext) {
+      console.error("Geolocation requires a secure context (HTTPS)");
+      toast.error("Geolocation requires a secure connection (HTTPS). Please contact your administrator.");
+      return;
+    }
+    
+    console.log("Geolocation API Available:", !!navigator.geolocation);
+    console.log("Permissions API Available:", !!navigator.permissions);
+    
     setIsGettingLocation(true);
     
     if (!navigator.geolocation) {
+      console.error("Geolocation API not supported by browser");
       setIsGettingLocation(false);
       toast.error("Geolocation is not supported by your browser");
       return;
     }
 
-    const options = {
+    // Check if we can access the permissions API
+    if (navigator.permissions && navigator.permissions.query) {
+      console.log("Checking geolocation permission status...");
+      navigator.permissions.query({ name: 'geolocation' })
+        .then(permissionStatus => {
+          console.log("Initial permission status:", permissionStatus.state);
+          
+          // Log when permission state changes
+          permissionStatus.onchange = () => {
+            console.log("Permission state changed to:", permissionStatus.state);
+          };
+        })
+        .catch(err => {
+          console.error("Error checking permission status:", err);
+        });
+    } else {
+      console.log("Permissions API not available, cannot check permission status");
+    }
+
+    // First try with high accuracy
+    const highAccuracyOptions = {
       enableHighAccuracy: true,
       timeout: 10000,
       maximumAge: 0
     };
 
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const { latitude, longitude } = position.coords;
-        const accuracy = position.coords.accuracy;
-        
-        setGpsCoordinates(`${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
-        setIsGettingLocation(false);
-        toast.success("Location obtained successfully!");
-        
-        if (accuracy > 100) {
-          toast.warning(`Location accuracy is ${Math.round(accuracy)} meters. Consider moving to an open area for better accuracy.`);
-        }
-      },
-      (error) => {
-        setIsGettingLocation(false);
-        let errorMessage = "Could not get your location. ";
-        
-        switch (error.code) {
-          case error.PERMISSION_DENIED:
-            errorMessage = "Location access was denied. Please check your browser settings:";
-            toast.error(errorMessage, {
-              duration: 6000,
-              description: "1. Click the lock/info icon in your address bar\n2. Find 'Location' in site settings\n3. Allow access and refresh the page"
-            });
-            break;
-          case error.POSITION_UNAVAILABLE:
-            errorMessage += "Location information is unavailable. Please check your GPS settings and ensure you're not in airplane mode. On some devices, an internet connection may be required for automatic detection. You can enter coordinates manually below.";
-            toast.error(errorMessage);
-            break;
-          case error.TIMEOUT:
-            errorMessage += "Location request timed out. Please check your internet connection and try again.";
-            toast.error(errorMessage);
-            break;
-          default:
-            errorMessage += "Please try again or enter coordinates manually.";
-            toast.error(errorMessage);
-        }
-      },
-      options
-    );
+    const lowAccuracyOptions = {
+      enableHighAccuracy: false,
+      timeout: 10000,
+      maximumAge: 0
+    };
+
+    const tryGetLocation = (options: PositionOptions) => {
+      console.log("Attempting to get location with options:", JSON.stringify(options));
+      
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          console.log("Location obtained successfully:", {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy,
+            altitude: position.coords.altitude,
+            altitudeAccuracy: position.coords.altitudeAccuracy,
+            heading: position.coords.heading,
+            speed: position.coords.speed,
+            timestamp: new Date(position.timestamp).toISOString()
+          });
+          
+          const { latitude, longitude } = position.coords;
+          const accuracy = position.coords.accuracy;
+          
+          setGpsCoordinates(`${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
+          setIsGettingLocation(false);
+          toast.success("Location obtained successfully!");
+          
+          if (accuracy > 100) {
+            toast.warning(`Location accuracy is ${Math.round(accuracy)} meters. Consider moving to an open area for better accuracy.`);
+          }
+        },
+        (error) => {
+          console.error("Geolocation error details:", {
+            code: error.code,
+            message: error.message,
+            PERMISSION_DENIED: error.PERMISSION_DENIED,
+            POSITION_UNAVAILABLE: error.POSITION_UNAVAILABLE,
+            TIMEOUT: error.TIMEOUT,
+            browser: navigator.userAgent,
+            platform: navigator.platform,
+            vendor: navigator.vendor,
+            secureContext: window.isSecureContext,
+            protocol: window.location.protocol,
+            hostname: window.location.hostname
+          });
+
+          if (options.enableHighAccuracy && error.code === error.TIMEOUT) {
+            console.log("High accuracy location timed out, trying low accuracy...");
+            toast.info("High accuracy location timed out. Trying with lower accuracy...");
+            tryGetLocation(lowAccuracyOptions);
+            return;
+          }
+
+          setIsGettingLocation(false);
+          let errorMessage = "Could not get your location. ";
+          
+          switch (error.code) {
+            case error.PERMISSION_DENIED:
+              if (error.message.includes("permissions policy")) {
+                console.log("Geolocation blocked by permissions policy");
+                errorMessage = "Geolocation is blocked by your browser's permissions policy. Please follow these steps:";
+                toast.error(errorMessage, {
+                  duration: 10000,
+                  description: (
+                    <div className="space-y-2">
+                      <p>1. Open Chrome Settings</p>
+                      <p>2. Go to Privacy and Security → Site Settings</p>
+                      <p>3. Find "Location" under Permissions</p>
+                      <p>4. Make sure it's set to "Ask before accessing" or "Allowed"</p>
+                      <p>5. Refresh the page and try again</p>
+                      <p className="text-sm text-muted-foreground mt-2">
+                        If the issue persists, you may need to:
+                        <br />- Clear your browser cache
+                        <br />- Check if any extensions are blocking location access
+                        <br />- Try using a different browser
+                      </p>
+                    </div>
+                  )
+                });
+              } else {
+                console.log("Permission denied error details:", {
+                  browser: navigator.userAgent,
+                  platform: navigator.platform,
+                  vendor: navigator.vendor,
+                  secureContext: window.isSecureContext,
+                  protocol: window.location.protocol,
+                  hostname: window.location.hostname
+                });
+                errorMessage = "Location access was denied. Please follow these steps:";
+                toast.error(errorMessage, {
+                  duration: 10000,
+                  description: (
+                    <div className="space-y-2">
+                      <p>1. Click the lock/info icon in your address bar</p>
+                      <p>2. Find 'Location' in site settings</p>
+                      <p>3. Change to 'Allow'</p>
+                      <p>4. Refresh the page and try again</p>
+                      <p className="text-sm text-muted-foreground mt-2">
+                        If you're using Chrome on Android, you may also need to:
+                        <br />- Go to Settings → Site Settings → Location
+                        <br />- Find this website and set it to 'Allow'
+                      </p>
+                    </div>
+                  )
+                });
+              }
+              break;
+            case error.POSITION_UNAVAILABLE:
+              console.log("Position unavailable error details:", {
+                browser: navigator.userAgent,
+                platform: navigator.platform,
+                vendor: navigator.vendor,
+                secureContext: window.isSecureContext,
+                protocol: window.location.protocol,
+                hostname: window.location.hostname
+              });
+              errorMessage += "Location information is unavailable. Please check your GPS settings and ensure you're not in airplane mode. On some devices, an internet connection may be required for automatic detection. You can enter coordinates manually below.";
+              toast.error(errorMessage);
+              break;
+            case error.TIMEOUT:
+              console.log("Timeout error details:", {
+                browser: navigator.userAgent,
+                platform: navigator.platform,
+                vendor: navigator.vendor,
+                secureContext: window.isSecureContext,
+                protocol: window.location.protocol,
+                hostname: window.location.hostname
+              });
+              errorMessage += "Location request timed out. Please check your internet connection and try again.";
+              toast.error(errorMessage);
+              break;
+            default:
+              console.log("Unknown error details:", {
+                browser: navigator.userAgent,
+                platform: navigator.platform,
+                vendor: navigator.vendor,
+                secureContext: window.isSecureContext,
+                protocol: window.location.protocol,
+                hostname: window.location.hostname
+              });
+              errorMessage += "Please try again or enter coordinates manually.";
+              toast.error(errorMessage);
+          }
+        },
+        options
+      );
+    };
+
+    // Start with high accuracy
+    console.log("Initiating high accuracy location request...");
+    tryGetLocation(highAccuracyOptions);
   };
   
   const handleSubmit = async (e: React.FormEvent) => {

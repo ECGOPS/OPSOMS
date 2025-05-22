@@ -126,4 +126,23 @@ export interface SubstationInspection {
   inspectedBy?: string;
   syncStatus?: 'pending' | 'synced' | 'failed';
   originalOfflineId?: string;
+  cleanDustFree?: string;
+  protectionButtonEnabled?: string;
+  recloserButtonEnabled?: string;
+  groundEarthButtonEnabled?: string;
+  acPowerOn?: string;
+  batteryPowerLow?: string;
+  handleLockOn?: string;
+  remoteButtonEnabled?: string;
+  gasLevelLow?: string;
+  earthingArrangementAdequate?: string;
+  noFusesBlown?: string;
+  noDamageToBushings?: string;
+  noDamageToHVConnections?: string;
+  insulatorsClean?: string;
+  paintworkAdequate?: string;
+  ptFuseLinkIntact?: string;
+  noCorrosion?: string;
+  silicaGelCondition?: string;
+  correctLabelling?: string;
 }

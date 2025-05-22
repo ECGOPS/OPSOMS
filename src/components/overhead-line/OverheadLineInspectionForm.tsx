@@ -318,9 +318,10 @@ export function OverheadLineInspectionForm({ inspection, onSubmit, onCancel }: O
     setIsSubmitting(true);
 
     try {
+      // Only clean undefined and null values, keep empty strings and objects
       const cleanValue = (value: any): any => {
-        if (value === null || value === undefined || value === "") return undefined;
-        if (typeof value === "object" && Object.keys(value).length === 0) return undefined;
+        if (value === null || value === undefined) return undefined;
+        if (typeof value === 'object' && Object.keys(value).length === 0) return {};
         return value;
       };
 
@@ -328,7 +329,97 @@ export function OverheadLineInspectionForm({ inspection, onSubmit, onCancel }: O
         ...formData,
         date: formData.date || new Date().toISOString().split('T')[0],
         time: formData.time || new Date().toTimeString().slice(0, 5),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
+        createdAt: formData.createdAt || new Date().toISOString(),
+        // Ensure required fields are present
+        region: formData.region || '',
+        district: formData.district || '',
+        feederName: formData.feederName || '',
+        voltageLevel: formData.voltageLevel || '',
+        referencePole: formData.referencePole || '',
+        status: formData.status || 'pending',
+        inspector: {
+          id: formData.inspector?.id || user?.id || '',
+          name: formData.inspector?.name || user?.name || '',
+          email: formData.inspector?.email || user?.email || ''
+        },
+        // Ensure all condition objects are present with default values
+        poleCondition: {
+          tilted: formData.poleCondition?.tilted || false,
+          rotten: formData.poleCondition?.rotten || false,
+          burnt: formData.poleCondition?.burnt || false,
+          substandard: formData.poleCondition?.substandard || false,
+          conflictWithLV: formData.poleCondition?.conflictWithLV || false,
+          notes: formData.poleCondition?.notes || ''
+        },
+        stayCondition: {
+          requiredButNotAvailable: formData.stayCondition?.requiredButNotAvailable || false,
+          cut: formData.stayCondition?.cut || false,
+          misaligned: formData.stayCondition?.misaligned || false,
+          defectiveStay: formData.stayCondition?.defectiveStay || false,
+          notes: formData.stayCondition?.notes || ''
+        },
+        crossArmCondition: {
+          misaligned: formData.crossArmCondition?.misaligned || false,
+          bend: formData.crossArmCondition?.bend || false,
+          corroded: formData.crossArmCondition?.corroded || false,
+          substandard: formData.crossArmCondition?.substandard || false,
+          others: formData.crossArmCondition?.others || false,
+          notes: formData.crossArmCondition?.notes || ''
+        },
+        insulatorCondition: {
+          brokenOrCracked: formData.insulatorCondition?.brokenOrCracked || false,
+          burntOrFlashOver: formData.insulatorCondition?.burntOrFlashOver || false,
+          shattered: formData.insulatorCondition?.shattered || false,
+          defectiveBinding: formData.insulatorCondition?.defectiveBinding || false,
+          notes: formData.insulatorCondition?.notes || ''
+        },
+        conductorCondition: {
+          looseConnectors: formData.conductorCondition?.looseConnectors || false,
+          weakJumpers: formData.conductorCondition?.weakJumpers || false,
+          burntLugs: formData.conductorCondition?.burntLugs || false,
+          saggedLine: formData.conductorCondition?.saggedLine || false,
+          undersized: formData.conductorCondition?.undersized || false,
+          linked: formData.conductorCondition?.linked || false,
+          notes: formData.conductorCondition?.notes || ''
+        },
+        lightningArresterCondition: {
+          brokenOrCracked: formData.lightningArresterCondition?.brokenOrCracked || false,
+          flashOver: formData.lightningArresterCondition?.flashOver || false,
+          missing: formData.lightningArresterCondition?.missing || false,
+          noEarthing: formData.lightningArresterCondition?.noEarthing || false,
+          bypassed: formData.lightningArresterCondition?.bypassed || false,
+          noArrester: formData.lightningArresterCondition?.noArrester || false,
+          notes: formData.lightningArresterCondition?.notes || ''
+        },
+        dropOutFuseCondition: {
+          brokenOrCracked: formData.dropOutFuseCondition?.brokenOrCracked || false,
+          flashOver: formData.dropOutFuseCondition?.flashOver || false,
+          insufficientClearance: formData.dropOutFuseCondition?.insufficientClearance || false,
+          looseOrNoEarthing: formData.dropOutFuseCondition?.looseOrNoEarthing || false,
+          corroded: formData.dropOutFuseCondition?.corroded || false,
+          linkedHVFuses: formData.dropOutFuseCondition?.linkedHVFuses || false,
+          others: formData.dropOutFuseCondition?.others || false,
+          notes: formData.dropOutFuseCondition?.notes || ''
+        },
+        transformerCondition: {
+          leakingOil: formData.transformerCondition?.leakingOil || false,
+          missingEarthLeads: formData.transformerCondition?.missingEarthLeads || false,
+          linkedHVFuses: formData.transformerCondition?.linkedHVFuses || false,
+          rustedTank: formData.transformerCondition?.rustedTank || false,
+          crackedBushing: formData.transformerCondition?.crackedBushing || false,
+          others: formData.transformerCondition?.others || false,
+          notes: formData.transformerCondition?.notes || ''
+        },
+        recloserCondition: {
+          lowGasLevel: formData.recloserCondition?.lowGasLevel || false,
+          lowBatteryLevel: formData.recloserCondition?.lowBatteryLevel || false,
+          burntVoltageTransformers: formData.recloserCondition?.burntVoltageTransformers || false,
+          protectionDisabled: formData.recloserCondition?.protectionDisabled || false,
+          bypassed: formData.recloserCondition?.bypassed || false,
+          others: formData.recloserCondition?.others || false,
+          notes: formData.recloserCondition?.notes || ''
+        }
       };
 
       const finalData = Object.fromEntries(

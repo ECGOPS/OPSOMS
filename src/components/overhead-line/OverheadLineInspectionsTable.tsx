@@ -94,6 +94,29 @@ export function OverheadLineInspectionsTable({
     doc.setFontSize(16);
     doc.text('Overhead Line Inspection Details', 14, 15);
     
+    // Helper function to safely format dates
+    const formatDate = (date: any) => {
+      if (!date) return 'Unknown';
+      try {
+        const dateObj = new Date(date);
+        if (isNaN(dateObj.getTime())) return 'Invalid Date';
+        return format(dateObj, 'dd/MM/yyyy');
+      } catch (error) {
+        return 'Invalid Date';
+      }
+    };
+
+    const formatDateTime = (date: any) => {
+      if (!date) return 'Unknown';
+      try {
+        const dateObj = new Date(date);
+        if (isNaN(dateObj.getTime())) return 'Invalid Date';
+        return format(dateObj, 'dd/MM/yyyy HH:mm');
+      } catch (error) {
+        return 'Invalid Date';
+      }
+    };
+    
     // Basic Information
     doc.setFontSize(12);
     const basicInfo = [
@@ -103,9 +126,9 @@ export function OverheadLineInspectionsTable({
       ['Voltage Level:', inspection.voltageLevel],
       ['Reference Pole:', inspection.referencePole],
       ['Status:', inspection.status],
-      ['Date:', inspection.date || format(new Date(), 'dd/MM/yyyy')],
-      ['Created At:', inspection.createdAt ? format(new Date(inspection.createdAt), 'dd/MM/yyyy HH:mm') : 'Unknown'],
-      ['Last Updated:', inspection.updatedAt ? format(new Date(inspection.updatedAt), 'dd/MM/yyyy HH:mm') : 'Unknown'],
+      ['Date:', formatDate(inspection.date)],
+      ['Created At:', formatDateTime(inspection.createdAt)],
+      ['Last Updated:', formatDateTime(inspection.updatedAt)],
     ];
     
     autoTable(doc, {

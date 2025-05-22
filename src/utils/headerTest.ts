@@ -4,11 +4,11 @@ export const testSecurityHeaders = async (url: string = window.location.href) =>
     const headers = response.headers;
     
     const requiredHeaders = {
-      'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; connect-src 'self' https: wss:; font-src 'self' data: https:; object-src 'none'; media-src 'self'; frame-src 'none'; worker-src 'self' blob:; manifest-src 'self'; prefetch-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests",
+      'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.google.com https://*.googleapis.com; style-src 'self' 'unsafe-inline' https://*.google.com https://*.googleapis.com; img-src 'self' data: https: blob: https://*.google.com https://*.googleapis.com https://*.gstatic.com; connect-src 'self' https: wss: https://*.google.com https://*.googleapis.com; font-src 'self' data: https: https://*.google.com https://*.gstatic.com; object-src 'none'; media-src 'self'; frame-src 'self' https://www.google.com https://*.googleapis.com; worker-src 'self' blob:; manifest-src 'self'; prefetch-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests",
       'X-Frame-Options': 'DENY',
       'X-Content-Type-Options': 'nosniff',
       'Referrer-Policy': 'strict-origin-when-cross-origin',
-      'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+      'Permissions-Policy': 'camera=(), microphone=(), geolocation=(self)',
       'Strict-Transport-Security': 'max-age=31536000; includeSubDomains; preload',
       'X-XSS-Protection': '1; mode=block',
       'Cross-Origin-Embedder-Policy': 'require-corp',

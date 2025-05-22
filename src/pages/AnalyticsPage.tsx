@@ -44,13 +44,20 @@ import { LoadMonitoringData } from '@/lib/asset-types';
 // Colors for charts
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
 
-const formatSafeDate = (dateString: string | undefined | null): string => {
+const formatSafeDate = (dateString: string | undefined | null | { seconds: number; nanoseconds: number }): string => {
   if (!dateString) return 'N/A';
   try {
-    const date = new Date(dateString);
+    let date: Date;
+    // Handle Firestore timestamp
+    if (typeof dateString === 'object' && 'seconds' in dateString) {
+      date = new Date(dateString.seconds * 1000);
+    } else {
+      date = new Date(dateString);
+    }
     if (isNaN(date.getTime())) return 'N/A';
-    return format(date, 'MMM dd, yyyy');
+    return format(date, 'MMM dd, yyyy HH:mm:ss');
   } catch (error) {
+    console.error('Error formatting date:', error);
     return 'N/A';
   }
 };
@@ -192,9 +199,12 @@ export default function AnalyticsPage() {
           if (startMonth && endMonth) {
             start = startOfMonth(startMonth);
             end = endOfMonth(endMonth);
-          } else if (selectedMonth) {
-            start = startOfMonth(selectedMonth);
-            end = endOfMonth(selectedMonth);
+            console.log('[loadData] Custom month range:', {
+              start: start.toISOString(),
+              end: end.toISOString(),
+              startMonth: startMonth.toISOString(),
+              endMonth: endMonth.toISOString()
+            });
           } else {
             start = startOfMonth(now);
             end = endOfMonth(now);
@@ -220,6 +230,10 @@ export default function AnalyticsPage() {
             start = startOfWeek(now);
             end = endOfWeek(now);
           }
+          break;
+        case "yesterday":
+          start = startOfDay(subDays(now, 1));
+          end = endOfDay(subDays(now, 1));
           break;
         default:
           start = startOfYear(now);
@@ -339,9 +353,12 @@ export default function AnalyticsPage() {
           if (startMonth && endMonth) {
             start = startOfMonth(startMonth);
             end = endOfMonth(endMonth);
-          } else if (selectedMonth) {
-            start = startOfMonth(selectedMonth);
-            end = endOfMonth(selectedMonth);
+            console.log('[loadData] Custom month range:', {
+              start: start.toISOString(),
+              end: end.toISOString(),
+              startMonth: startMonth.toISOString(),
+              endMonth: endMonth.toISOString()
+            });
           } else {
             start = startOfMonth(now);
             end = endOfMonth(now);
@@ -367,6 +384,10 @@ export default function AnalyticsPage() {
             start = startOfWeek(now);
             end = endOfWeek(now);
           }
+          break;
+        case "yesterday":
+          start = startOfDay(subDays(now, 1));
+          end = endOfDay(subDays(now, 1));
           break;
         default:
           start = startOfYear(now);
@@ -538,9 +559,12 @@ export default function AnalyticsPage() {
           if (startMonth && endMonth) {
             start = startOfMonth(startMonth);
             end = endOfMonth(endMonth);
-          } else if (selectedMonth) {
-            start = startOfMonth(selectedMonth);
-            end = endOfMonth(selectedMonth);
+            console.log('[loadData] Custom month range:', {
+              start: start.toISOString(),
+              end: end.toISOString(),
+              startMonth: startMonth.toISOString(),
+              endMonth: endMonth.toISOString()
+            });
           } else {
             start = startOfMonth(now);
             end = endOfMonth(now);
@@ -550,17 +574,9 @@ export default function AnalyticsPage() {
           if (startYear && endYear) {
             start = startOfYear(startYear);
             end = endOfYear(endYear);
-            console.log('[loadData] Custom year range:', {
-              start: start.toISOString(),
-              end: end.toISOString()
-            });
           } else if (selectedYear) {
             start = startOfYear(selectedYear);
             end = endOfYear(selectedYear);
-            console.log('[loadData] Single year:', {
-              start: start.toISOString(),
-              end: end.toISOString()
-            });
           } else {
             start = startOfYear(now);
             end = endOfYear(now);
@@ -582,6 +598,10 @@ export default function AnalyticsPage() {
             start = startOfWeek(now);
             end = endOfWeek(now);
           }
+          break;
+        case "yesterday":
+          start = startOfDay(subDays(now, 1));
+          end = endOfDay(subDays(now, 1));
           break;
         default:
           start = startOfYear(now);
@@ -930,7 +950,13 @@ export default function AnalyticsPage() {
   const handleStartMonthSelect = (date: Date | undefined) => {
     setStartMonth(date);
     setIsStartMonthPickerOpen(false);
+    // Only load data if we have both start and end months
     if (date && endMonth) {
+      if (date > endMonth) {
+        // If start month is after end month, swap them
+        setStartMonth(endMonth);
+        setEndMonth(date);
+      }
       loadData();
     }
   };
@@ -938,7 +964,13 @@ export default function AnalyticsPage() {
   const handleEndMonthSelect = (date: Date | undefined) => {
     setEndMonth(date);
     setIsEndMonthPickerOpen(false);
+    // Only load data if we have both start and end months
     if (date && startMonth) {
+      if (date < startMonth) {
+        // If end month is before start month, swap them
+        setStartMonth(date);
+        setEndMonth(startMonth);
+      }
       loadData();
     }
   };
@@ -1650,6 +1682,10 @@ export default function AnalyticsPage() {
               end = endOfWeek(new Date(selectedYear.getFullYear(), 0, 1 + (endWeek - 1) * 7));
             }
             break;
+          case "yesterday":
+            start = startOfDay(subDays(now, 1));
+            end = endOfDay(subDays(now, 1));
+            break;
           default:
             start = startOfYear(now);
             end = endOfDay(now);
@@ -1871,6 +1907,7 @@ export default function AnalyticsPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Time</SelectItem>
+                  <SelectItem value="yesterday">Yesterday</SelectItem>
                   <SelectItem value="days">Last N Days</SelectItem>
                   <SelectItem value="week">Last 7 Days</SelectItem>
                   <SelectItem value="month">Last 30 Days</SelectItem>
@@ -2764,6 +2801,57 @@ export default function AnalyticsPage() {
                 </div>
 
                 <div className="mt-6">
+                  <h3 className="text-sm font-medium mb-2">Materials Used</h3>
+                  {selectedFault.materialsUsed && selectedFault.materialsUsed.length > 0 ? (
+                    <div className="space-y-4">
+                      {selectedFault.materialsUsed.map((material: any, index: number) => (
+                        <Card key={index} className="p-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <span className="text-xs text-muted-foreground">Type</span>
+                              <p className="text-sm font-medium">{material.type}</p>
+                            </div>
+                            <div>
+                              <span className="text-xs text-muted-foreground">Quantity</span>
+                              <p className="text-sm font-medium">{material.quantity || material.details?.quantity || 1}</p>
+                            </div>
+                            {material.type === 'Fuse' && (
+                              <>
+                                <div>
+                                  <span className="text-xs text-muted-foreground">Rating</span>
+                                  <p className="text-sm font-medium">{material.rating || material.details?.rating || material.details?.fuseRating || 'N/A'}A</p>
+                                </div>
+                              </>
+                            )}
+                            {material.type === 'Conductor' && (
+                              <>
+                                <div>
+                                  <span className="text-xs text-muted-foreground">Type</span>
+                                  <p className="text-sm font-medium">{material.details?.type || material.conductorType || 'N/A'}</p>
+                                </div>
+                                <div>
+                                  <span className="text-xs text-muted-foreground">Length</span>
+                                  <p className="text-sm font-medium">{material.details?.length || material.length || 'N/A'}m</p>
+                                </div>
+                              </>
+                            )}
+                            {material.type === 'Others' && (
+                              <div className="col-span-2">
+                                <span className="text-xs text-muted-foreground">Description</span>
+                                <p className="text-sm font-medium">{material.details?.description || material.description || 'N/A'}</p>
+                              </div>
+                            )}
+                          </div>
+                        </Card>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No materials used</p>
+                  )}
+                </div>
+
+                {/* Move Audit Information after Materials Used */}
+                <div className="mt-6">
                   <h3 className="text-sm font-medium mb-2">Audit Information</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
@@ -2795,7 +2883,7 @@ export default function AnalyticsPage() {
                   <h3 className="text-base sm:text-lg font-bold text-primary mb-4">All Fault Data</h3>
                   {(() => {
                     // Helper functions
-                    function formatValue(value) {
+                    function formatValue(value): React.ReactNode {
                       if (value === null || value === undefined || value === '') return '—';
                       // Firestore timestamp
                       if (typeof value === 'object' && value.seconds && value.nanoseconds) {
@@ -2816,11 +2904,18 @@ export default function AnalyticsPage() {
                           </ul>
                         );
                       }
-                      // Array
+                      // Array (like materialsUsed)
                       if (Array.isArray(value)) {
                         return value.length === 0 ? '—' : (
                           <ul className="ml-2 list-disc">
-                            {value.map((v, i) => <li key={i}>{formatValue(v)}</li>)}
+                            {value.map((v, i) => {
+                              // For materials, exclude the id field
+                              if (v && typeof v === 'object' && 'type' in v) {
+                                const { id, ...materialWithoutId } = v;
+                                return <li key={i}>{formatValue(materialWithoutId)}</li>;
+                              }
+                              return <li key={i}>{formatValue(v)}</li>;
+                            })}
                           </ul>
                         );
                       }
