@@ -716,135 +716,50 @@ export default function AnalyticsPage() {
     let affectedCustomers = { rural: 0, urban: 0, metro: 0 };
     let momentaryInterruptions = { rural: 0, urban: 0, metro: 0 };
     let sustainedInterruptions = { rural: 0, urban: 0, metro: 0 };
-    let customerInterruptions = { rural: 0, urban: 0, metro: 0 };
-    // Track unique customers by district
-    let distinctCustomersByDistrict = new Map<string, Set<string>>();
     let totalInterruptions = { rural: 0, urban: 0, metro: 0 };
-    let outageDetails: { id: string; affected: number; districtId: string }[] = [];
 
-    // Add debug logging
-    console.log('Starting CAIFI calculation with faults:', op5Faults.length);
+    // Use Maps instead of Sets for tracking distinct customers
+    const distinctCustomersByType = {
+      rural: new Map<string, number>(),
+      urban: new Map<string, number>(),
+      metro: new Map<string, number>()
+    };
 
     // Process each fault
-    op5Faults.forEach((fault, index) => {
-      if (fault.affectedPopulation) {
-        const { rural, urban, metro } = fault.affectedPopulation;
-        const duration = calculateOutageDuration(fault.occurrenceDate, fault.restorationDate);
-        const isMomentary = duration <= 5; // Consider interruptions ≤ 5 minutes as momentary
+    op5Faults.forEach(fault => {
+      if (!fault.affectedPopulation) return;
 
-        // Track total affected customers for this outage
-        const totalAffected = rural + urban + metro;
-        outageDetails.push({
-          id: fault.id,
-          affected: totalAffected,
-          districtId: fault.districtId
-        });
+      const { rural, urban, metro } = fault.affectedPopulation;
+      const duration = calculateOutageDuration(fault.occurrenceDate, fault.restorationDate);
+      const isMomentary = duration < 5; // 5 minutes threshold for momentary interruptions
 
-        console.log(`Processing fault ${index + 1}:`, {
-          faultId: fault.id,
-          districtId: fault.districtId,
-          rural,
-          urban,
-          metro,
-          totalAffected,
-          duration,
-          isMomentary
-        });
+      // Process each population type
+      ['rural', 'urban', 'metro'].forEach(type => {
+        const t = type as keyof typeof totalPopulation;
+        const affected = fault.affectedPopulation[t] || 0;
+        
+        if (affected > 0) {
+          // Update customer hours lost
+          customerHoursLost[t] += duration * affected;
+          
+          // Update affected customers count
+          affectedCustomers[t] += affected;
+          
+          // Update interruption counts
+          if (isMomentary) {
+            momentaryInterruptions[t] += affected;
+          } else {
+            sustainedInterruptions[t] += affected;
+          }
+          
+          // Update total interruptions
+          totalInterruptions[t] += affected;
 
-        // Update customer hours lost
-        customerHoursLost.rural += duration * rural;
-        customerHoursLost.urban += duration * urban;
-        customerHoursLost.metro += duration * metro;
-
-        // Update affected customers
-        affectedCustomers.rural += rural;
-        affectedCustomers.urban += urban;
-        affectedCustomers.metro += metro;
-
-        // Update total interruptions
-        totalInterruptions.rural += rural;
-        totalInterruptions.urban += urban;
-        totalInterruptions.metro += metro;
-
-        // Update momentary interruptions
-        if (isMomentary) {
-          momentaryInterruptions.rural += rural;
-          momentaryInterruptions.urban += urban;
-          momentaryInterruptions.metro += metro;
+          // Track distinct customers using Map
+          const customerKey = `${fault.id}-${t}`;
+          distinctCustomersByType[t].set(customerKey, affected);
         }
-
-        // Track distinct customers by district
-        if (!distinctCustomersByDistrict.has(fault.districtId)) {
-          distinctCustomersByDistrict.set(fault.districtId, new Set());
-        }
-        const districtCustomers = distinctCustomersByDistrict.get(fault.districtId)!;
-
-        // Add customers to the district's set
-        for (let i = 0; i < rural; i++) {
-          districtCustomers.add(`rural-${i}`);
-        }
-        for (let i = 0; i < urban; i++) {
-          districtCustomers.add(`urban-${i}`);
-        }
-        for (let i = 0; i < metro; i++) {
-          districtCustomers.add(`metro-${i}`);
-        }
-      }
-    });
-
-    // Calculate total distinct customers by type
-    let distinctCustomersByType = { rural: 0, urban: 0, metro: 0 };
-    distinctCustomersByDistrict.forEach((customers, districtId) => {
-      customers.forEach(customerId => {
-        if (customerId.startsWith('rural-')) distinctCustomersByType.rural++;
-        else if (customerId.startsWith('urban-')) distinctCustomersByType.urban++;
-        else if (customerId.startsWith('metro-')) distinctCustomersByType.metro++;
       });
-    });
-
-    // Detailed CAIFI analysis
-    console.log('=== Detailed CAIFI Analysis ===');
-    console.log('Outage Details:', outageDetails);
-    console.log('Total Interruptions:', {
-      rural: totalInterruptions.rural,
-      urban: totalInterruptions.urban,
-      metro: totalInterruptions.metro,
-      total: totalInterruptions.rural + totalInterruptions.urban + totalInterruptions.metro
-    });
-    console.log('Distinct Customers:', {
-      rural: distinctCustomersByType.rural,
-      urban: distinctCustomersByType.urban,
-      metro: distinctCustomersByType.metro,
-      total: distinctCustomersByType.rural + distinctCustomersByType.urban + distinctCustomersByType.metro
-    });
-    console.log('CAIFI Values:', {
-      rural: distinctCustomersByType.rural > 0 ? (totalInterruptions.rural / distinctCustomersByType.rural).toFixed(2) : '0.00',
-      urban: distinctCustomersByType.urban > 0 ? (totalInterruptions.urban / distinctCustomersByType.urban).toFixed(2) : '0.00',
-      metro: distinctCustomersByType.metro > 0 ? (totalInterruptions.metro / distinctCustomersByType.metro).toFixed(2) : '0.00',
-      total: ((totalInterruptions.rural + totalInterruptions.urban + totalInterruptions.metro) / 
-              (distinctCustomersByType.rural + distinctCustomersByType.urban + distinctCustomersByType.metro)).toFixed(2)
-    });
-    console.log('District-wise Analysis:', 
-      Array.from(distinctCustomersByDistrict.entries()).map(([districtId, customers]) => ({
-        districtId,
-        totalCustomers: customers.size,
-        customerTypes: {
-          rural: Array.from(customers).filter(id => id.startsWith('rural-')).length,
-          urban: Array.from(customers).filter(id => id.startsWith('urban-')).length,
-          metro: Array.from(customers).filter(id => id.startsWith('metro-')).length
-        }
-      }))
-    );
-    console.log('=============================');
-
-    // Log intermediate values
-    console.log('CAIFI calculation values:', {
-      totalInterruptions,
-      distinctCustomersByType,
-      districts: Array.from(distinctCustomersByDistrict.entries()).map(([districtId, customers]) => ({
-        districtId,
-        customerCount: customers.size
-      }))
     });
 
     // Calculate indices for each population type
@@ -862,15 +777,9 @@ export default function AnalyticsPage() {
           Number((indices[t].saidi / indices[t].saifi).toFixed(2)) : 0;
 
         // CAIFI = Total Number of Customer Interruptions / Number of Distinct Customers Interrupted
-        const distinctCount = distinctCustomersByType[t];
+        const distinctCount = distinctCustomersByType[t].size;
         const totalInterruptionCount = totalInterruptions[t];
         
-        console.log(`CAIFI calculation for ${type}:`, {
-          totalInterruptions: totalInterruptionCount,
-          distinctCount,
-          caifi: distinctCount > 0 ? Number((totalInterruptionCount / distinctCount).toFixed(2)) : 0
-        });
-
         indices[t].caifi = distinctCount > 0 ? 
           Number((totalInterruptionCount / distinctCount).toFixed(2)) : 0;
 
@@ -885,7 +794,7 @@ export default function AnalyticsPage() {
     const totalAffectedCustomers = affectedCustomers.rural + affectedCustomers.urban + affectedCustomers.metro;
     const totalMomentaryInterruptions = momentaryInterruptions.rural + momentaryInterruptions.urban + momentaryInterruptions.metro;
     const totalCustomerInterruptions = totalInterruptions.rural + totalInterruptions.urban + totalInterruptions.metro;
-    const totalDistinctCustomers = distinctCustomersByType.rural + distinctCustomersByType.urban + distinctCustomersByType.metro;
+    const totalDistinctCustomers = Object.values(distinctCustomersByType).reduce((sum, map) => sum + map.size, 0);
 
     if (totalPopulationAll > 0) {
       indices.total.saidi = Number((totalCustomerHoursLost / totalPopulationAll).toFixed(2));
