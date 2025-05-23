@@ -502,6 +502,16 @@ export const exportSubstationInspectionToPDF = async (inspection: SubstationInsp
         title: 'Outdoor Equipment', 
         key: 'outdoor equipment',
         description: 'This section covers the inspection of outdoor equipment, switchgear, and related components.'
+      },
+      { 
+        title: 'Site Condition', 
+        key: 'site condition',
+        description: 'This section covers the inspection of the substation site and surrounding area.'
+      },
+      { 
+        title: 'Basement', 
+        key: 'basement',
+        description: 'This section covers the inspection of the substation basement and related equipment.'
       }
     ];
 
@@ -611,7 +621,7 @@ export const exportSubstationInspectionToPDF = async (inspection: SubstationInsp
         currentY = height - margin;
       }
 
-      currentPage.drawText('Additional Remarks:', {
+      currentPage.drawText('Additional Notes:', {
         x: margin,
         y: currentY,
         size: 14,

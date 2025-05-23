@@ -21,6 +21,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
 import { useNavigate, useParams } from "react-router-dom";
 import { SubstationInspectionService } from "@/services/SubstationInspectionService";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 interface Category {
   id: string;
@@ -39,6 +40,7 @@ export default function SubstationInspectionPage() {
   const [isOnline, setIsOnline] = useState(inspectionService.isInternetAvailable());
   const [regionId, setRegionId] = useState<string>("");
   const [districtId, setDistrictId] = useState<string>("");
+  const [currentPage, setCurrentPage] = useState(1);
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
     inspectionDate: new Date().toISOString().split('T')[0],
@@ -75,13 +77,17 @@ export default function SubstationInspectionPage() {
     items: [],
     generalBuilding: [],
     controlEquipment: [],
+    basement: [],
     powerTransformer: [],
-    outdoorEquipment: []
+    outdoorEquipment: [],
+    siteCondition: []
   });
   const [categories, setCategories] = useState<Category[]>([]);
 
   // Update item status
   const updateItemStatus = (categoryIndex: number, itemIndex: number, status: ConditionStatus) => {
+    console.log('Updating item status:', { categoryIndex, itemIndex, status }); // Debug log
+
     const categoryName = categories[categoryIndex].name.toLowerCase().replace(" ", "");
     const categoryKey = categoryName as keyof SubstationInspection;
 
@@ -237,141 +243,250 @@ export default function SubstationInspectionPage() {
       // Edit mode - load existing inspection
       const inspection = getSavedInspection(id);
       if (inspection) {
-        // Set formData without items array to avoid duplication
-        const { items, id, ...formDataWithoutItems } = inspection;
+        console.log('Loading inspection for edit:', inspection); // Debug log
+
+        // Set formData with all inspection data
         setFormData({
-          date: formDataWithoutItems.date || new Date().toISOString().split('T')[0],
-          inspectionDate: formDataWithoutItems.inspectionDate || new Date().toISOString().split('T')[0],
-          substationNo: formDataWithoutItems.substationNo || "",
-          substationName: formDataWithoutItems.substationName || "",
-          type: formDataWithoutItems.type || "indoor",
-          location: formDataWithoutItems.location || "",
-          voltageLevel: formDataWithoutItems.voltageLevel || "",
-          status: formDataWithoutItems.status || "Pending",
-          remarks: formDataWithoutItems.remarks || "",
-          cleanDustFree: formDataWithoutItems.cleanDustFree,
-          protectionButtonEnabled: formDataWithoutItems.protectionButtonEnabled,
-          recloserButtonEnabled: formDataWithoutItems.recloserButtonEnabled,
-          groundEarthButtonEnabled: formDataWithoutItems.groundEarthButtonEnabled,
-          acPowerOn: formDataWithoutItems.acPowerOn,
-          batteryPowerLow: formDataWithoutItems.batteryPowerLow,
-          handleLockOn: formDataWithoutItems.handleLockOn,
-          remoteButtonEnabled: formDataWithoutItems.remoteButtonEnabled,
-          gasLevelLow: formDataWithoutItems.gasLevelLow,
-          earthingArrangementAdequate: formDataWithoutItems.earthingArrangementAdequate,
-          noFusesBlown: formDataWithoutItems.noFusesBlown,
-          noDamageToBushings: formDataWithoutItems.noDamageToBushings,
-          noDamageToHVConnections: formDataWithoutItems.noDamageToHVConnections,
-          insulatorsClean: formDataWithoutItems.insulatorsClean,
-          paintworkAdequate: formDataWithoutItems.paintworkAdequate,
-          ptFuseLinkIntact: formDataWithoutItems.ptFuseLinkIntact,
-          noCorrosion: formDataWithoutItems.noCorrosion,
-          silicaGelCondition: formDataWithoutItems.silicaGelCondition,
-          correctLabelling: formDataWithoutItems.correctLabelling,
-          region: formDataWithoutItems.region || "",
-          district: formDataWithoutItems.district || "",
-          regionId: formDataWithoutItems.regionId || "",
-          districtId: formDataWithoutItems.districtId || "",
-          items: [],
-          generalBuilding: [],
-          controlEquipment: [],
-          powerTransformer: [],
-          outdoorEquipment: []
+          date: inspection.date || new Date().toISOString().split('T')[0],
+          inspectionDate: inspection.inspectionDate || new Date().toISOString().split('T')[0],
+          substationNo: inspection.substationNo || "",
+          substationName: inspection.substationName || "",
+          type: inspection.type || "indoor",
+          location: inspection.location || "",
+          voltageLevel: inspection.voltageLevel || "",
+          status: inspection.status || "Pending",
+          remarks: inspection.remarks || "",
+          cleanDustFree: inspection.cleanDustFree,
+          protectionButtonEnabled: inspection.protectionButtonEnabled,
+          recloserButtonEnabled: inspection.recloserButtonEnabled,
+          groundEarthButtonEnabled: inspection.groundEarthButtonEnabled,
+          acPowerOn: inspection.acPowerOn,
+          batteryPowerLow: inspection.batteryPowerLow,
+          handleLockOn: inspection.handleLockOn,
+          remoteButtonEnabled: inspection.remoteButtonEnabled,
+          gasLevelLow: inspection.gasLevelLow,
+          earthingArrangementAdequate: inspection.earthingArrangementAdequate,
+          noFusesBlown: inspection.noFusesBlown,
+          noDamageToBushings: inspection.noDamageToBushings,
+          noDamageToHVConnections: inspection.noDamageToHVConnections,
+          insulatorsClean: inspection.insulatorsClean,
+          paintworkAdequate: inspection.paintworkAdequate,
+          ptFuseLinkIntact: inspection.ptFuseLinkIntact,
+          noCorrosion: inspection.noCorrosion,
+          silicaGelCondition: inspection.silicaGelCondition,
+          correctLabelling: inspection.correctLabelling,
+          region: inspection.region || "",
+          district: inspection.district || "",
+          regionId: inspection.regionId || "",
+          districtId: inspection.districtId || "",
+          items: inspection.items || [],
+          generalBuilding: inspection.generalBuilding || [],
+          controlEquipment: inspection.controlEquipment || [],
+          basement: inspection.basement || [],
+          powerTransformer: inspection.powerTransformer || [],
+          outdoorEquipment: inspection.outdoorEquipment || [],
+          siteCondition: inspection.siteCondition || []
         });
-        
-        // Set categories with the items, preserving original IDs
-        setCategories([
+
+        // Set region and district IDs
+        if (inspection.regionId) {
+          setRegionId(inspection.regionId);
+        }
+        if (inspection.districtId) {
+          setDistrictId(inspection.districtId);
+        }
+
+        // Create categories array directly from inspection data
+        const categoriesFromInspection: Category[] = [
           {
-            id: inspection.generalBuilding?.[0]?.category || uuidv4(),
+            id: "site-condition",
+            name: "Site Condition",
+            items: (inspection.siteCondition || []).map(item => ({
+              id: item.id,
+              name: item.name,
+              category: item.category || "site condition", // Use saved category if available
+              status: item.status,
+              remarks: item.remarks || ""
+            }))
+          },
+          {
+            id: "general-building",
             name: "General Building",
             items: (inspection.generalBuilding || []).map(item => ({
-              id: item.id,  // Preserve original ID
+              id: item.id,
               name: item.name,
-              category: "general building",
-              status: item.status || undefined,
+              category: item.category || "general building",
+              status: item.status,
               remarks: item.remarks || ""
-            })),
+            }))
           },
           {
-            id: inspection.controlEquipment?.[0]?.category || uuidv4(),
+            id: "control-equipment",
             name: "Control Equipment",
             items: (inspection.controlEquipment || []).map(item => ({
-              id: item.id,  // Preserve original ID
+              id: item.id,
               name: item.name,
-              category: "control equipment",
-              status: item.status || undefined,
+              category: item.category || "control equipment",
+              status: item.status,
               remarks: item.remarks || ""
-            })),
+            }))
           },
           {
-            id: inspection.powerTransformer?.[0]?.category || uuidv4(),
+            id: "basement",
+            name: "Basement",
+            items: (inspection.basement || []).map(item => ({
+              id: item.id,
+              name: item.name,
+              category: item.category || "basement",
+              status: item.status,
+              remarks: item.remarks || ""
+            }))
+          },
+          {
+            id: "power-transformer",
             name: "Power Transformer",
             items: (inspection.powerTransformer || []).map(item => ({
-              id: item.id,  // Preserve original ID
+              id: item.id,
               name: item.name,
-              category: "power transformer",
-              status: item.status || undefined,
+              category: item.category || "power transformer",
+              status: item.status,
               remarks: item.remarks || ""
-            })),
+            }))
           },
           {
-            id: inspection.outdoorEquipment?.[0]?.category || uuidv4(),
+            id: "outdoor-equipment",
             name: "Outdoor Equipment",
             items: (inspection.outdoorEquipment || []).map(item => ({
-              id: item.id,  // Preserve original ID
+              id: item.id,
               name: item.name,
-              category: "outdoor equipment",
-              status: item.status || undefined,
+              category: item.category || "outdoor equipment",
+              status: item.status,
               remarks: item.remarks || ""
-            })),
-          },
-        ]);
+            }))
+          }
+        ];
+
+        console.log('Setting categories from inspection:', categoriesFromInspection); // Debug log
+        setCategories(categoriesFromInspection);
+
+        // Update formData with the items from categoriesFromInspection
+        setFormData(prev => ({
+          ...prev,
+          siteCondition: categoriesFromInspection.find(c => c.id === 'site-condition')?.items || [],
+          generalBuilding: categoriesFromInspection.find(c => c.id === 'general-building')?.items || [],
+          controlEquipment: categoriesFromInspection.find(c => c.id === 'control-equipment')?.items || [],
+          basement: categoriesFromInspection.find(c => c.id === 'basement')?.items || [],
+          powerTransformer: categoriesFromInspection.find(c => c.id === 'power-transformer')?.items || [],
+          outdoorEquipment: categoriesFromInspection.find(c => c.id === 'outdoor-equipment')?.items || [],
+          remarks: inspection.remarks || ""
+        }));
       }
     } else {
       // Create mode - generate unique IDs for new items
       const defaultItems = [
         {
-          id: `general-building-${uuidv4()}`,
+          id: "site-condition",
+          name: "Site Condition",
+          items: [
+            { id: `sc-fencing-${uuidv4()}`, name: "Adequate protection against unauthorised access (Fencing)", status: undefined, remarks: "", category: "site condition" },
+            { id: `sc-gate-${uuidv4()}`, name: "Gate/Locks/Padlocks", status: undefined, remarks: "", category: "site condition" },
+            { id: `sc-gutter-${uuidv4()}`, name: "Guttering, drains", status: undefined, remarks: "", category: "site condition" },
+            { id: `sc-trench-${uuidv4()}`, name: "Trenches and Trench covered", status: undefined, remarks: "", category: "site condition" },
+            { id: `sc-lighting-${uuidv4()}`, name: "Compound/Outside Lighting", status: undefined, remarks: "", category: "site condition" },
+            { id: `sc-compound-${uuidv4()}`, name: "Compound (clean or weedy)", status: undefined, remarks: "", category: "site condition" },
+            { id: `sc-backyard-${uuidv4()}`, name: "Substation backyard (clean or weedy)", status: undefined, remarks: "", category: "site condition" },
+            { id: `sc-tagging-${uuidv4()}`, name: "Tagging/Warning plate on equipment", status: undefined, remarks: "", category: "site condition" },
+          ],
+        },
+        {
+          id: "general-building",
           name: "General Building",
           items: [
-            { id: `gb-structure-${uuidv4()}`, name: "Building Structure", status: undefined, remarks: "", category: "general building" },
-            { id: `gb-clean-${uuidv4()}`, name: "Cleanliness", status: undefined, remarks: "", category: "general building" },
-            { id: `gb-light-${uuidv4()}`, name: "Lighting", status: undefined, remarks: "", category: "general building" },
-            { id: `gb-vent-${uuidv4()}`, name: "Ventilation", status: undefined, remarks: "", category: "general building" },
-            { id: `gb-fire-${uuidv4()}`, name: "Fire Safety", status: undefined, remarks: "", category: "general building" },
+            { id: `gb-housekeeping-${uuidv4()}`, name: "House keeping", status: undefined, remarks: "", category: "general building" },
+            { id: `gb-paintwork-${uuidv4()}`, name: "Paintwork", status: undefined, remarks: "", category: "general building" },
+            { id: `gb-roof-${uuidv4()}`, name: "Roof leakage", status: undefined, remarks: "", category: "general building" },
+            { id: `gb-doors-${uuidv4()}`, name: "Doors locks/Hinges", status: undefined, remarks: "", category: "general building" },
+            { id: `gb-washroom-${uuidv4()}`, name: "Washroom Cleanliness", status: undefined, remarks: "", category: "general building" },
+            { id: `gb-toilet-${uuidv4()}`, name: "Toilet Facility condition", status: undefined, remarks: "", category: "general building" },
+            { id: `gb-water-${uuidv4()}`, name: "Water flow/ availability", status: undefined, remarks: "", category: "general building" },
+            { id: `gb-ac-${uuidv4()}`, name: "AC Unit working", status: undefined, remarks: "", category: "general building" },
+            { id: `gb-lighting-${uuidv4()}`, name: "Inside Lighting", status: undefined, remarks: "", category: "general building" },
+            { id: `gb-fire-${uuidv4()}`, name: "Fire Extinguisher available/In good condition", status: undefined, remarks: "", category: "general building" },
+            { id: `gb-logo-${uuidv4()}`, name: "Logo and signboard available and on equipment", status: undefined, remarks: "", category: "general building" },
           ],
         },
         {
-          id: `control-equipment-${uuidv4()}`,
+          id: "control-equipment",
           name: "Control Equipment",
           items: [
-            { id: `ce-panels-${uuidv4()}`, name: "Control Panels", status: undefined, remarks: "", category: "control equipment" },
-            { id: `ce-wiring-${uuidv4()}`, name: "Wiring", status: undefined, remarks: "", category: "control equipment" },
-            { id: `ce-relays-${uuidv4()}`, name: "Relays", status: undefined, remarks: "", category: "control equipment" },
-            { id: `ce-batteries-${uuidv4()}`, name: "Batteries", status: undefined, remarks: "", category: "control equipment" },
-            { id: `ce-comms-${uuidv4()}`, name: "Communication Systems", status: undefined, remarks: "", category: "control equipment" },
+            { id: `ce-cabinet-${uuidv4()}`, name: "Control Cabinet Clean", status: undefined, remarks: "", category: "control equipment" },
+            { id: `ce-cable-11kv-${uuidv4()}`, name: "General outlook of cable termination 11KV", status: undefined, remarks: "", category: "control equipment" },
+            { id: `ce-cable-33kv-${uuidv4()}`, name: "General outlook of cable termination 33KV", status: undefined, remarks: "", category: "control equipment" },
+            { id: `ce-meters-${uuidv4()}`, name: "Ammeters/Voltmeters functioning", status: undefined, remarks: "", category: "control equipment" },
+            { id: `ce-annunciators-${uuidv4()}`, name: "Annunciators functioning", status: undefined, remarks: "", category: "control equipment" },
+            { id: `ce-heaters-${uuidv4()}`, name: "Heaters operation", status: undefined, remarks: "", category: "control equipment" },
+            { id: `ce-labelling-${uuidv4()}`, name: "Labelling Clear", status: undefined, remarks: "", category: "control equipment" },
+            { id: `ce-alarm-${uuidv4()}`, name: "Alarm", status: undefined, remarks: "", category: "control equipment" },
+            { id: `ce-sf6-${uuidv4()}`, name: "SF6 gas level", status: undefined, remarks: "", category: "control equipment" },
+            { id: `ce-spring-${uuidv4()}`, name: "All closing Spring Charge motor working", status: undefined, remarks: "", category: "control equipment" },
+            { id: `ce-relay-${uuidv4()}`, name: "Relay flags/Indication", status: undefined, remarks: "", category: "control equipment" },
+            { id: `ce-semaphore-${uuidv4()}`, name: "Semaphore indications", status: undefined, remarks: "", category: "control equipment" },
+            { id: `ce-battery-outlook-${uuidv4()}`, name: "Battery bank outlook", status: undefined, remarks: "", category: "control equipment" },
+            { id: `ce-battery-level-${uuidv4()}`, name: "Battery electrolyte level", status: undefined, remarks: "", category: "control equipment" },
+            { id: `ce-battery-voltage-${uuidv4()}`, name: "Battery voltage", status: undefined, remarks: "", category: "control equipment" },
           ],
         },
         {
-          id: `power-transformer-${uuidv4()}`,
+          id: "basement",
+          name: "Basement",
+          items: [
+            { id: `bs-lighting-${uuidv4()}`, name: "Lighting", status: undefined, remarks: "", category: "basement" },
+            { id: `bs-cable-${uuidv4()}`, name: "Cable condition", status: undefined, remarks: "", category: "basement" },
+            { id: `bs-flood-${uuidv4()}`, name: "Flooded basement", status: undefined, remarks: "", category: "basement" },
+          ],
+        },
+        {
+          id: "power-transformer",
           name: "Power Transformer",
           items: [
-            { id: `pt-oil-${uuidv4()}`, name: "Oil Level", status: undefined, remarks: "", category: "power transformer" },
-            { id: `pt-bushings-${uuidv4()}`, name: "Bushings", status: undefined, remarks: "", category: "power transformer" },
-            { id: `pt-cooling-${uuidv4()}`, name: "Cooling System", status: undefined, remarks: "", category: "power transformer" },
-            { id: `pt-insulation-${uuidv4()}`, name: "Insulation", status: undefined, remarks: "", category: "power transformer" },
-            { id: `pt-tap-${uuidv4()}`, name: "Load Tap Changer", status: undefined, remarks: "", category: "power transformer" },
+            { id: `pt-outlook-${uuidv4()}`, name: "General outlook, No corrosion of fans, radiators", status: undefined, remarks: "", category: "power transformer" },
+            { id: `pt-bushing-${uuidv4()}`, name: "Transformer bushing (check for flashover or dirt)", status: undefined, remarks: "", category: "power transformer" },
+            { id: `pt-oil-level-${uuidv4()}`, name: "Oil Level gauge", status: undefined, remarks: "", category: "power transformer" },
+            { id: `pt-oil-leak-${uuidv4()}`, name: "Oil leakage", status: undefined, remarks: "", category: "power transformer" },
+            { id: `pt-thermometer-${uuidv4()}`, name: "Themometer", status: undefined, remarks: "", category: "power transformer" },
+            { id: `pt-gas-pressure-${uuidv4()}`, name: "Gas presure indicator working", status: undefined, remarks: "", category: "power transformer" },
+            { id: `pt-silica-${uuidv4()}`, name: "Silica gel OK", status: undefined, remarks: "", category: "power transformer" },
+            { id: `pt-body-ground-${uuidv4()}`, name: "Trafo body earthed/grounded", status: undefined, remarks: "", category: "power transformer" },
+            { id: `pt-neutral-ground-${uuidv4()}`, name: "Neutral point earthed/grounded", status: undefined, remarks: "", category: "power transformer" },
+            { id: `pt-fans-${uuidv4()}`, name: "Fans operating correctly", status: undefined, remarks: "", category: "power transformer" },
+            { id: `pt-oltc-oil-${uuidv4()}`, name: "OLTC Oil level", status: undefined, remarks: "", category: "power transformer" },
+            { id: `pt-oltc-leak-${uuidv4()}`, name: "Any leakage OLTC", status: undefined, remarks: "", category: "power transformer" },
+            { id: `pt-oltc-heaters-${uuidv4()}`, name: "Heaters in OLTC, Marshalling box working", status: undefined, remarks: "", category: "power transformer" },
           ],
         },
         {
-          id: `outdoor-equipment-${uuidv4()}`,
+          id: "outdoor-equipment",
           name: "Outdoor Equipment",
           items: [
-            { id: `oe-breakers-${uuidv4()}`, name: "Circuit Breakers", status: undefined, remarks: "", category: "outdoor equipment" },
-            { id: `oe-switches-${uuidv4()}`, name: "Disconnect Switches", status: undefined, remarks: "", category: "outdoor equipment" },
-            { id: `oe-arresters-${uuidv4()}`, name: "Surge Arresters", status: undefined, remarks: "", category: "outdoor equipment" },
-            { id: `oe-bushings-${uuidv4()}`, name: "Bushings", status: undefined, remarks: "", category: "outdoor equipment" },
-            { id: `oe-insulators-${uuidv4()}`, name: "Insulators", status: undefined, remarks: "", category: "outdoor equipment" },
+            { id: `oe-disconnect-status-${uuidv4()}`, name: "Disconnect switch properly closed/open", status: undefined, remarks: "", category: "outdoor equipment" },
+            { id: `oe-disconnect-latch-${uuidv4()}`, name: "Disconnect switch (check latching allignmet)", status: undefined, remarks: "", category: "outdoor equipment" },
+            { id: `oe-disconnect-porcelain-${uuidv4()}`, name: "Disconnect switch porcelain (check for dirt or flashover)", status: undefined, remarks: "", category: "outdoor equipment" },
+            { id: `oe-disconnect-motor-${uuidv4()}`, name: "Disconnect switch motor mechanism functioning", status: undefined, remarks: "", category: "outdoor equipment" },
+            { id: `oe-disconnect-handle-${uuidv4()}`, name: "Disconnect switch operating handle damage", status: undefined, remarks: "", category: "outdoor equipment" },
+            { id: `oe-disconnect-heaters-${uuidv4()}`, name: "Heaters in Disconnect switch box working", status: undefined, remarks: "", category: "outdoor equipment" },
+            { id: `oe-arrester-porcelain-${uuidv4()}`, name: "Lighting/Surge Arrestor porcelain dusty", status: undefined, remarks: "", category: "outdoor equipment" },
+            { id: `oe-arrester-counter-${uuidv4()}`, name: "Lighting/Surge Arrestor counter functioning", status: undefined, remarks: "", category: "outdoor equipment" },
+            { id: `oe-ct-bushing-${uuidv4()}`, name: "CT Bushing (check for dirt or flashover)", status: undefined, remarks: "", category: "outdoor equipment" },
+            { id: `oe-vt-bushing-${uuidv4()}`, name: "VT Bushing (check for dirt or flashover)", status: undefined, remarks: "", category: "outdoor equipment" },
+            { id: `oe-cb-sf6-${uuidv4()}`, name: "CB check for SF6 gas level", status: undefined, remarks: "", category: "outdoor equipment" },
+            { id: `oe-cb-rust-${uuidv4()}`, name: "Check CB Housing for rust", status: undefined, remarks: "", category: "outdoor equipment" },
+            { id: `oe-cb-heaters-${uuidv4()}`, name: "Heaters in CB Housing working", status: undefined, remarks: "", category: "outdoor equipment" },
+            { id: `oe-cable-term-${uuidv4()}`, name: "Check all Cable termination", status: undefined, remarks: "", category: "outdoor equipment" },
+            { id: `oe-clamps-${uuidv4()}`, name: "Inspect all Clamps", status: undefined, remarks: "", category: "outdoor equipment" },
+            { id: `oe-hissing-${uuidv4()}`, name: "Hissing Noise", status: undefined, remarks: "", category: "outdoor equipment" },
+            { id: `oe-earthing-${uuidv4()}`, name: "All equipment and system earthing secured", status: undefined, remarks: "", category: "outdoor equipment" },
+            { id: `oe-station-trans-${uuidv4()}`, name: "General condition of the station transformer", status: undefined, remarks: "", category: "outdoor equipment" },
+            { id: `oe-earthing-trans-${uuidv4()}`, name: "General condition of the NGR/Earthing transformer", status: undefined, remarks: "", category: "outdoor equipment" },
           ],
         },
       ];
@@ -380,16 +495,20 @@ export default function SubstationInspectionPage() {
       setFormData(prev => ({
         ...prev,
         items: [],
-        generalBuilding: defaultItems[0].items,
-        controlEquipment: defaultItems[1].items,
-        powerTransformer: defaultItems[2].items,
-        outdoorEquipment: defaultItems[3].items,
+        siteCondition: defaultItems[0].items,
+        generalBuilding: defaultItems[1].items,
+        controlEquipment: defaultItems[2].items,
+        basement: defaultItems[3].items,
+        powerTransformer: defaultItems[4].items,
+        outdoorEquipment: defaultItems[5].items,
       }));
     }
   }, [id, getSavedInspection]);
 
   // Update item remarks
   const updateItemRemarks = (categoryIndex: number, itemIndex: number, remarks: string) => {
+    console.log('Updating item remarks:', { categoryIndex, itemIndex, remarks }); // Debug log
+
     setCategories(prevCategories => {
       const newCategories = [...prevCategories];
       newCategories[categoryIndex] = {
@@ -400,6 +519,16 @@ export default function SubstationInspectionPage() {
       };
       return newCategories;
     });
+
+    // Also update formData
+    const categoryName = categories[categoryIndex].name.toLowerCase().replace(" ", "");
+    const categoryKey = categoryName as keyof SubstationInspection;
+    setFormData(prev => ({
+      ...prev,
+      [categoryKey]: categories[categoryIndex].items.map((item, index) =>
+        index === itemIndex ? { ...item, remarks } : item
+      ),
+    }));
   };
 
   // Add online status listener
@@ -428,10 +557,12 @@ export default function SubstationInspectionPage() {
       
       // Get all inspection items from categories
       const inspectionItems = {
-        generalBuilding: categories[0]?.items || [],
-        controlEquipment: categories[1]?.items || [],
-        powerTransformer: categories[2]?.items || [],
-        outdoorEquipment: categories[3]?.items || []
+        siteCondition: categories[0]?.items || [],
+        generalBuilding: categories[1]?.items || [],
+        controlEquipment: categories[2]?.items || [],
+        basement: categories[3]?.items || [],
+        powerTransformer: categories[4]?.items || [],
+        outdoorEquipment: categories[5]?.items || []
       };
       
       const inspectionData: SubstationInspection = {
@@ -446,6 +577,13 @@ export default function SubstationInspectionPage() {
         substationName: formData.substationName || "",
         type: formData.type || "indoor",
         items: [
+          ...inspectionItems.siteCondition.map(item => ({
+            id: item.id || uuidv4(),
+            name: item.name || "",
+            category: item.category || "site condition",
+            status: item.status,
+            remarks: item.remarks || ""
+          })),
           ...inspectionItems.generalBuilding.map(item => ({
             id: item.id || uuidv4(),
             name: item.name || "",
@@ -457,6 +595,13 @@ export default function SubstationInspectionPage() {
             id: item.id || uuidv4(),
             name: item.name || "",
             category: item.category || "control equipment",
+            status: item.status,
+            remarks: item.remarks || ""
+          })),
+          ...inspectionItems.basement.map(item => ({
+            id: item.id || uuidv4(),
+            name: item.name || "",
+            category: item.category || "basement",
             status: item.status,
             remarks: item.remarks || ""
           })),
@@ -475,6 +620,13 @@ export default function SubstationInspectionPage() {
             remarks: item.remarks || ""
           }))
         ],
+        siteCondition: inspectionItems.siteCondition.map(item => ({
+          id: item.id || uuidv4(),
+          name: item.name || "",
+          category: item.category || "site condition",
+          status: item.status,
+          remarks: item.remarks || ""
+        })),
         generalBuilding: inspectionItems.generalBuilding.map(item => ({
           id: item.id || uuidv4(),
           name: item.name || "",
@@ -486,6 +638,13 @@ export default function SubstationInspectionPage() {
           id: item.id || uuidv4(),
           name: item.name || "",
           category: item.category || "control equipment",
+          status: item.status,
+          remarks: item.remarks || ""
+        })),
+        basement: inspectionItems.basement.map(item => ({
+          id: item.id || uuidv4(),
+          name: item.name || "",
+          category: item.category || "basement",
           status: item.status,
           remarks: item.remarks || ""
         })),
@@ -558,27 +717,14 @@ export default function SubstationInspectionPage() {
     });
   }, [savedInspections, user]);
 
-  return (
-    <Layout>
-      <div className="container py-8">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">New Substation Inspection</h1>
-            <p className="text-muted-foreground mt-1">
-              Record a new inspection for a substation
-              {!isOnline && (
-                <span className="ml-2 text-yellow-600 font-medium">
-                  (Offline Mode)
-                </span>
-              )}
-            </p>
-          </div>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-6">
+  // Update the renderPage function to ensure all sections are rendered
+  const renderPage = (page: number) => {
+    switch (page) {
+      case 1:
+        return (
           <Card>
             <CardHeader>
-              <CardTitle>Inspection Details</CardTitle>
+              <CardTitle>Basic Information</CardTitle>
               <CardDescription>Enter the basic information about the inspection</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -675,81 +821,398 @@ export default function SubstationInspectionPage() {
               </div>
             </CardContent>
           </Card>
-
-          {/* Inspection Checklist */}
-          {categories.map((category, categoryIndex) => (
-            <Card key={category.id}>
-              <CardHeader>
-                <CardTitle>{category.name}</CardTitle>
-                <CardDescription>
-                  Record the condition of each item in this category
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-4">
-                {category.items.map((item, itemIndex) => (
-                  <div key={item.id} className="border rounded-lg p-4">
-                    <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-2 gap-4">
-                      <h3 className="text-base font-medium flex-1">{item.name}</h3>
-                      <div className="flex items-center space-x-6">
-                        <RadioGroup
-                          value={item.status}
-                          onValueChange={(value) => updateItemStatus(categoryIndex, itemIndex, value as "good" | "bad")}
-                          className="flex items-center space-x-4"
-                        >
-                          <div className="flex items-center space-x-2">
-                            <RadioGroupItem
-                              value="good"
-                              id={`good-${item.id}`}
-                              className="text-green-500 border-green-500 focus:ring-green-500"
-                            />
-                            <Label
-                              htmlFor={`good-${item.id}`}
-                              className="text-green-600"
-                            >
-                              Good
-                            </Label>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <RadioGroupItem
-                              value="bad"
-                              id={`bad-${item.id}`}
-                              className="text-red-500 border-red-500 focus:ring-red-500"
-                            />
-                            <Label
-                              htmlFor={`bad-${item.id}`}
-                              className="text-red-600"
-                            >
-                              Bad
-                            </Label>
-                          </div>
-                        </RadioGroup>
-                      </div>
-                    </div>
-                    <div className="mt-2">
-                      <Label htmlFor={`remarks-${item.id}`} className="text-sm">
-                        Remarks
-                      </Label>
-                      <Textarea
-                        id={`remarks-${item.id}`}
-                        value={item.remarks}
-                        onChange={(e) => updateItemRemarks(categoryIndex, itemIndex, e.target.value)}
-                        placeholder="Add any comments or observations"
-                        className="mt-1 h-20"
-                      />
+        );
+      case 2:
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle>Site Condition</CardTitle>
+              <CardDescription>Record the condition of site-related items</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4">
+              {categories[0]?.items.map((item, itemIndex) => (
+                <div key={item.id} className="border rounded-lg p-4">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-2 gap-4">
+                    <h3 className="text-base font-medium flex-1">{item.name}</h3>
+                    <div className="flex items-center space-x-6">
+                      <RadioGroup
+                        value={item.status}
+                        onValueChange={(value) => updateItemStatus(0, itemIndex, value as "good" | "bad")}
+                        className="flex items-center space-x-4"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem
+                            value="good"
+                            id={`good-${item.id}`}
+                            className="text-green-500 border-green-500 focus:ring-green-500"
+                          />
+                          <Label htmlFor={`good-${item.id}`} className="text-green-600">Good</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem
+                            value="bad"
+                            id={`bad-${item.id}`}
+                            className="text-red-500 border-red-500 focus:ring-red-500"
+                          />
+                          <Label htmlFor={`bad-${item.id}`} className="text-red-600">Bad</Label>
+                        </div>
+                      </RadioGroup>
                     </div>
                   </div>
-                ))}
-              </CardContent>
-            </Card>
-          ))}
+                  <div className="mt-2">
+                    <Label htmlFor={`remarks-${item.id}`} className="text-sm">Remarks</Label>
+                    <Textarea
+                      id={`remarks-${item.id}`}
+                      value={item.remarks}
+                      onChange={(e) => updateItemRemarks(0, itemIndex, e.target.value)}
+                      placeholder="Add any comments or observations"
+                      className="mt-1 h-20"
+                    />
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        );
+      case 3:
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle>General Building</CardTitle>
+              <CardDescription>Record the condition of general building items</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4">
+              {categories[1]?.items.map((item, itemIndex) => (
+                <div key={item.id} className="border rounded-lg p-4">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-2 gap-4">
+                    <h3 className="text-base font-medium flex-1">{item.name}</h3>
+                    <div className="flex items-center space-x-6">
+                      <RadioGroup
+                        value={item.status}
+                        onValueChange={(value) => updateItemStatus(1, itemIndex, value as "good" | "bad")}
+                        className="flex items-center space-x-4"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem
+                            value="good"
+                            id={`good-${item.id}`}
+                            className="text-green-500 border-green-500 focus:ring-green-500"
+                          />
+                          <Label htmlFor={`good-${item.id}`} className="text-green-600">Good</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem
+                            value="bad"
+                            id={`bad-${item.id}`}
+                            className="text-red-500 border-red-500 focus:ring-red-500"
+                          />
+                          <Label htmlFor={`bad-${item.id}`} className="text-red-600">Bad</Label>
+                        </div>
+                      </RadioGroup>
+                    </div>
+                  </div>
+                  <div className="mt-2">
+                    <Label htmlFor={`remarks-${item.id}`} className="text-sm">Remarks</Label>
+                    <Textarea
+                      id={`remarks-${item.id}`}
+                      value={item.remarks}
+                      onChange={(e) => updateItemRemarks(1, itemIndex, e.target.value)}
+                      placeholder="Add any comments or observations"
+                      className="mt-1 h-20"
+                    />
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        );
+      case 4:
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle>Control Equipment</CardTitle>
+              <CardDescription>Record the condition of control equipment items</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4">
+              {categories[2]?.items.map((item, itemIndex) => (
+                <div key={item.id} className="border rounded-lg p-4">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-2 gap-4">
+                    <h3 className="text-base font-medium flex-1">{item.name}</h3>
+                    <div className="flex items-center space-x-6">
+                      <RadioGroup
+                        value={item.status}
+                        onValueChange={(value) => updateItemStatus(2, itemIndex, value as "good" | "bad")}
+                        className="flex items-center space-x-4"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem
+                            value="good"
+                            id={`good-${item.id}`}
+                            className="text-green-500 border-green-500 focus:ring-green-500"
+                          />
+                          <Label htmlFor={`good-${item.id}`} className="text-green-600">Good</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem
+                            value="bad"
+                            id={`bad-${item.id}`}
+                            className="text-red-500 border-red-500 focus:ring-red-500"
+                          />
+                          <Label htmlFor={`bad-${item.id}`} className="text-red-600">Bad</Label>
+                        </div>
+                      </RadioGroup>
+                    </div>
+                  </div>
+                  <div className="mt-2">
+                    <Label htmlFor={`remarks-${item.id}`} className="text-sm">Remarks</Label>
+                    <Textarea
+                      id={`remarks-${item.id}`}
+                      value={item.remarks}
+                      onChange={(e) => updateItemRemarks(2, itemIndex, e.target.value)}
+                      placeholder="Add any comments or observations"
+                      className="mt-1 h-20"
+                    />
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        );
+      case 5:
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle>Basement</CardTitle>
+              <CardDescription>Record the condition of basement items</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4">
+              {categories[3]?.items.map((item, itemIndex) => (
+                <div key={item.id} className="border rounded-lg p-4">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-2 gap-4">
+                    <h3 className="text-base font-medium flex-1">{item.name}</h3>
+                    <div className="flex items-center space-x-6">
+                      <RadioGroup
+                        value={item.status}
+                        onValueChange={(value) => updateItemStatus(3, itemIndex, value as "good" | "bad")}
+                        className="flex items-center space-x-4"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem
+                            value="good"
+                            id={`good-${item.id}`}
+                            className="text-green-500 border-green-500 focus:ring-green-500"
+                          />
+                          <Label htmlFor={`good-${item.id}`} className="text-green-600">Good</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem
+                            value="bad"
+                            id={`bad-${item.id}`}
+                            className="text-red-500 border-red-500 focus:ring-red-500"
+                          />
+                          <Label htmlFor={`bad-${item.id}`} className="text-red-600">Bad</Label>
+                        </div>
+                      </RadioGroup>
+                    </div>
+                  </div>
+                  <div className="mt-2">
+                    <Label htmlFor={`remarks-${item.id}`} className="text-sm">Remarks</Label>
+                    <Textarea
+                      id={`remarks-${item.id}`}
+                      value={item.remarks}
+                      onChange={(e) => updateItemRemarks(3, itemIndex, e.target.value)}
+                      placeholder="Add any comments or observations"
+                      className="mt-1 h-20"
+                    />
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        );
+      case 6:
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle>Power Transformer</CardTitle>
+              <CardDescription>Record the condition of power transformer items</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4">
+              {categories[4]?.items.map((item, itemIndex) => (
+                <div key={item.id} className="border rounded-lg p-4">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-2 gap-4">
+                    <h3 className="text-base font-medium flex-1">{item.name}</h3>
+                    <div className="flex items-center space-x-6">
+                      <RadioGroup
+                        value={item.status}
+                        onValueChange={(value) => updateItemStatus(4, itemIndex, value as "good" | "bad")}
+                        className="flex items-center space-x-4"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem
+                            value="good"
+                            id={`good-${item.id}`}
+                            className="text-green-500 border-green-500 focus:ring-green-500"
+                          />
+                          <Label htmlFor={`good-${item.id}`} className="text-green-600">Good</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem
+                            value="bad"
+                            id={`bad-${item.id}`}
+                            className="text-red-500 border-red-500 focus:ring-red-500"
+                          />
+                          <Label htmlFor={`bad-${item.id}`} className="text-red-600">Bad</Label>
+                        </div>
+                      </RadioGroup>
+                    </div>
+                  </div>
+                  <div className="mt-2">
+                    <Label htmlFor={`remarks-${item.id}`} className="text-sm">Remarks</Label>
+                    <Textarea
+                      id={`remarks-${item.id}`}
+                      value={item.remarks}
+                      onChange={(e) => updateItemRemarks(4, itemIndex, e.target.value)}
+                      placeholder="Add any comments or observations"
+                      className="mt-1 h-20"
+                    />
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        );
+      case 7:
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle>Outdoor Equipment</CardTitle>
+              <CardDescription>Record the condition of outdoor equipment items</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4">
+              {categories[5]?.items.map((item, itemIndex) => (
+                <div key={item.id} className="border rounded-lg p-4">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-2 gap-4">
+                    <h3 className="text-base font-medium flex-1">{item.name}</h3>
+                    <div className="flex items-center space-x-6">
+                      <RadioGroup
+                        value={item.status}
+                        onValueChange={(value) => updateItemStatus(5, itemIndex, value as "good" | "bad")}
+                        className="flex items-center space-x-4"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem
+                            value="good"
+                            id={`good-${item.id}`}
+                            className="text-green-500 border-green-500 focus:ring-green-500"
+                          />
+                          <Label htmlFor={`good-${item.id}`} className="text-green-600">Good</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem
+                            value="bad"
+                            id={`bad-${item.id}`}
+                            className="text-red-500 border-red-500 focus:ring-red-500"
+                          />
+                          <Label htmlFor={`bad-${item.id}`} className="text-red-600">Bad</Label>
+                        </div>
+                      </RadioGroup>
+                    </div>
+                  </div>
+                  <div className="mt-2">
+                    <Label htmlFor={`remarks-${item.id}`} className="text-sm">Remarks</Label>
+                    <Textarea
+                      id={`remarks-${item.id}`}
+                      value={item.remarks}
+                      onChange={(e) => updateItemRemarks(5, itemIndex, e.target.value)}
+                      placeholder="Add any comments or observations"
+                      className="mt-1 h-20"
+                    />
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        );
+      case 8:
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle>Additional Notes</CardTitle>
+              <CardDescription>Add any additional notes or observations</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="remarks">Additional Notes</Label>
+                  <Textarea
+                    id="remarks"
+                    value={formData.remarks}
+                    onChange={(e) => handleInputChange("remarks", e.target.value)}
+                    placeholder="Add any additional notes or observations"
+                    className="h-32"
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        );
+      default:
+        return null;
+    }
+  };
 
-          <div className="flex justify-end space-x-4">
-            <Button type="button" variant="outline" onClick={() => navigate(-1)}>
-              Cancel
+  return (
+    <Layout>
+      <div className="container py-8">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">New Substation Inspection</h1>
+            <p className="text-muted-foreground mt-1">
+              Record a new inspection for a substation
+              {!isOnline && (
+                <span className="ml-2 text-yellow-600 font-medium">
+                  (Offline Mode)
+                </span>
+              )}
+            </p>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {renderPage(currentPage)}
+
+          <div className="flex justify-between items-center mt-8">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+            >
+              <ChevronLeft className="mr-2 h-4 w-4" />
+              Previous
             </Button>
-            <Button type="submit" size="lg">
-              Save Inspection
-            </Button>
+            <span className="text-sm text-muted-foreground">
+              Page {currentPage} of 8
+            </span>
+            {currentPage < 8 ? (
+              <Button
+                type="button"
+                onClick={() => setCurrentPage(prev => Math.min(8, prev + 1))}
+              >
+                Next
+                <ChevronRight className="ml-2 h-4 w-4" />
+              </Button>
+            ) : (
+              <div className="flex space-x-4">
+                <Button type="button" variant="outline" onClick={() => navigate(-1)}>
+                  Cancel
+                </Button>
+                <Button type="submit" size="lg">
+                  Save Inspection
+                </Button>
+              </div>
+            )}
           </div>
         </form>
       </div>

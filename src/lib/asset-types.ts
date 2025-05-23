@@ -102,6 +102,7 @@ export interface VITInspectionData {
 
 export interface SubstationInspection {
   id: string;
+  firestoreId?: string;
   region: string;
   regionId: string;
   district: string;
@@ -116,6 +117,8 @@ export interface SubstationInspection {
   controlEquipment: InspectionItem[];
   powerTransformer: InspectionItem[];
   outdoorEquipment: InspectionItem[];
+  siteCondition: InspectionItem[];
+  basement: InspectionItem[];
   location?: string;
   voltageLevel?: string;
   status?: string;

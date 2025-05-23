@@ -364,11 +364,6 @@ export default function EditOP5FaultPage() {
             setFormData(prev => ({ ...prev, restorationDate: "" }));
             return;
           }
-          if (estResDate && resDate <= estResDate) {
-            toast.error("Restoration date must be after estimated resolution time");
-            setFormData(prev => ({ ...prev, restorationDate: "" }));
-            return;
-          }
         }
       } catch (error) {
         console.error("[MTTR Debug] Error parsing Restoration Date:", error);

@@ -192,16 +192,6 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
       }
     }
 
-    // Validate against estimated resolution time if it exists
-    if (estimatedResolutionTime) {
-      const estimatedDateTime = new Date(estimatedResolutionTime);
-      if (restorationDateTime <= estimatedDateTime) {
-        toast.error("Restoration date must be after estimated resolution time");
-        setRestorationDate("");
-        return false;
-      }
-    }
-
     return true;
   };
 

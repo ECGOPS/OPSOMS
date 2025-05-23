@@ -100,6 +100,8 @@ export class PermissionService {
   private db = getFirestore();
   private permissionsRef = doc(this.db, 'permissions', 'feature_permissions');
 
+  private permissionCache: Map<string, boolean> = new Map();
+
   private constructor() {
     this.loadPermissions();
   }
@@ -304,16 +306,25 @@ export class PermissionService {
     }
   }
 
-  public canAccessFeature(userRole: UserRole | null, feature: string): boolean {
-    if (!userRole) return false;
-    if (!this.isInitialized) {
-      console.warn('PermissionService not initialized, using default permissions');
-      const defaultRoles = this.defaultFeaturePermissions[feature] || [];
-      return defaultRoles.includes(userRole);
+  public canAccessFeature(userRole: string, feature: string): boolean {
+    const cacheKey = `${userRole}-${feature}`;
+    
+    // Check cache first
+    if (this.permissionCache.has(cacheKey)) {
+      return this.permissionCache.get(cacheKey)!;
     }
-    const allowedRoles = this.featurePermissions[feature] || [];
+
+    // Get allowed roles for the feature
+    const allowedRoles = this.getFeatureRoles(feature);
     console.log(`Checking access for ${feature}:`, { userRole, allowedRoles });
-    return allowedRoles.includes(userRole);
+
+    // Check if user's role is in allowed roles
+    const hasAccess = allowedRoles.includes(userRole);
+    
+    // Cache the result
+    this.permissionCache.set(cacheKey, hasAccess);
+    
+    return hasAccess;
   }
 
   public hasRequiredRole(userRole: UserRole | null, requiredRole: UserRole): boolean {
@@ -400,20 +411,46 @@ export class PermissionService {
   }
 
   // Add new methods for CRUD operation permissions
-  public canUpdateFeature(userRole: UserRole | null, feature: string): boolean {
-    if (!userRole) return false;
-    const updateFeature = `${feature}_update`;
-    const allowedRoles = this.featurePermissions[updateFeature] || [];
-    console.log(`Checking update access for ${updateFeature}:`, { userRole, allowedRoles });
-    return allowedRoles.includes(userRole);
+  public canUpdateFeature(userRole: string, feature: string): boolean {
+    const cacheKey = `${userRole}-${feature}-update`;
+    
+    // Check cache first
+    if (this.permissionCache.has(cacheKey)) {
+      return this.permissionCache.get(cacheKey)!;
+    }
+
+    // Get allowed roles for the feature
+    const allowedRoles = this.getUpdateRoles(feature);
+    console.log(`Checking update access for ${feature}:`, { userRole, allowedRoles });
+
+    // Check if user's role is in allowed roles
+    const hasAccess = allowedRoles.includes(userRole);
+    
+    // Cache the result
+    this.permissionCache.set(cacheKey, hasAccess);
+    
+    return hasAccess;
   }
 
-  public canDeleteFeature(userRole: UserRole | null, feature: string): boolean {
-    if (!userRole) return false;
-    const deleteFeature = `${feature}_delete`;
-    const allowedRoles = this.featurePermissions[deleteFeature] || [];
-    console.log(`Checking delete access for ${deleteFeature}:`, { userRole, allowedRoles });
-    return allowedRoles.includes(userRole);
+  public canDeleteFeature(userRole: string, feature: string): boolean {
+    const cacheKey = `${userRole}-${feature}-delete`;
+    
+    // Check cache first
+    if (this.permissionCache.has(cacheKey)) {
+      return this.permissionCache.get(cacheKey)!;
+    }
+
+    // Get allowed roles for the feature
+    const allowedRoles = this.getDeleteRoles(feature);
+    console.log(`Checking delete access for ${feature}:`, { userRole, allowedRoles });
+
+    // Check if user's role is in allowed roles
+    const hasAccess = allowedRoles.includes(userRole);
+    
+    // Cache the result
+    this.permissionCache.set(cacheKey, hasAccess);
+    
+    return hasAccess;
   }
 
   public async updateAllPermissions(permissions: { [key: string]: UserRole[] }) {
@@ -478,5 +515,34 @@ export class PermissionService {
       return userRegion === inspectionRegion && userDistrict === inspectionDistrict;
     }
     return false;
+  }
+
+  // Add method to clear cache when needed (e.g., on role change)
+  public clearPermissionCache(): void {
+    this.permissionCache.clear();
+  }
+
+  private getFeatureRoles(feature: string): string[] {
+    if (!this.isInitialized) {
+      console.warn('PermissionService not initialized, using default permissions');
+      return this.defaultFeaturePermissions[feature] || [];
+    }
+    return this.featurePermissions[feature] || [];
+  }
+
+  private getUpdateRoles(feature: string): string[] {
+    if (!this.isInitialized) {
+      console.warn('PermissionService not initialized, using default permissions');
+      return this.defaultFeaturePermissions[`${feature}_update`] || [];
+    }
+    return this.featurePermissions[`${feature}_update`] || [];
+  }
+
+  private getDeleteRoles(feature: string): string[] {
+    if (!this.isInitialized) {
+      console.warn('PermissionService not initialized, using default permissions');
+      return this.defaultFeaturePermissions[`${feature}_delete`] || [];
+    }
+    return this.featurePermissions[`${feature}_delete`] || [];
   }
 } 

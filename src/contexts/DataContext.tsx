@@ -499,6 +499,128 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       console.error('Failed to initialize database:', error);
       toast.error('Failed to initialize offline storage');
     });
+
+    // Add event listener for offline inspection updates
+    const handleInspectionUpdate = (event: CustomEvent) => {
+      const { action, inspection } = event.detail;
+      console.log('Received inspection update:', action, inspection);
+
+      setSavedInspections(prev => {
+        let newInspections = [...prev];
+        
+        switch (action) {
+          case 'create':
+            newInspections = [...newInspections, inspection];
+            break;
+          case 'update':
+            newInspections = newInspections.map(insp => 
+              insp.id === inspection.id ? inspection : insp
+            );
+            break;
+          case 'delete':
+            newInspections = newInspections.filter(insp => insp.id !== inspection.id);
+            break;
+        }
+
+        // Sort by updatedAt
+        return newInspections.sort((a, b) => 
+          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        );
+      });
+    };
+
+    window.addEventListener('substationInspectionUpdated', handleInspectionUpdate as EventListener);
+
+    return () => {
+      window.removeEventListener('substationInspectionUpdated', handleInspectionUpdate as EventListener);
+    };
+  }, []);
+
+  useEffect(() => {
+    // Load initial data
+    const loadInitialData = async () => {
+      try {
+        const inspectionService = SubstationInspectionService.getInstance();
+        const offlineRecords = await inspectionService.getOfflineSubstationInspections();
+        console.log('Initial offline records loaded:', offlineRecords.length);
+        
+        if (navigator.onLine && user) {  // Check for user authentication
+          // If online, get Firestore data and merge
+          let q = query(collection(db, "substationInspections"), orderBy("createdAt", "desc"));
+          
+          // Apply role-based filtering
+          if (user.role !== "system_admin" && user.role !== "global_engineer") {
+            if (user.role === "district_engineer" || user.role === "technician" || user.role === "district_manager") {
+              const userDistrict = districts.find(d => d.name === user.district);
+              const userRegion = regions.find(r => r.name === user.region);
+              if (userDistrict && userRegion) {
+                q = query(
+                  collection(db, "substationInspections"),
+                  where("districtId", "==", userDistrict.id),
+                  where("regionId", "==", userRegion.id),
+                  orderBy("createdAt", "desc")
+                );
+              }
+            } else if (user.role === "regional_engineer" || user.role === "regional_general_manager") {
+              const userRegion = regions.find(r => r.name === user.region);
+              if (userRegion) {
+                q = query(
+                  collection(db, "substationInspections"),
+                  where("regionId", "==", userRegion.id),
+                  orderBy("createdAt", "desc")
+                );
+              }
+            }
+          }
+
+          const snapshot = await getDocs(q);
+          const firestoreRecords = snapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+              id: doc.id,
+              ...data,
+              createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt,
+              updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : data.updatedAt,
+              syncStatus: 'synced'
+            } as SubstationInspection;
+          });
+
+          // Create a map of all records by ID
+          const recordMap = new Map<string, SubstationInspection>();
+          
+          // Add Firestore records to map
+          firestoreRecords.forEach(record => {
+            recordMap.set(record.id, record);
+          });
+
+          // Add offline records that aren't in Firestore
+          offlineRecords.forEach(record => {
+            if (!recordMap.has(record.id)) {
+              recordMap.set(record.id, record);
+            }
+          });
+
+          // Convert map to array and sort by updatedAt
+          const allRecords = Array.from(recordMap.values()).sort(
+            (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+          );
+          
+          setSavedInspections(allRecords);
+        } else {
+          // If offline or not authenticated, just use offline records
+          setSavedInspections(offlineRecords);
+        }
+      } catch (error) {
+        console.error('Error loading initial data:', error);
+        if (error.code === 'permission-denied') {
+          toast.error('You do not have permission to access this data');
+        } else {
+          toast.error('Failed to load initial data');
+        }
+      }
+    };
+
+    loadInitialData();
   }, []);
 
   // Fetch regions and districts with retry logic
@@ -1233,7 +1355,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       // Save the inspection using the service
       await inspectionService.saveSubstationInspectionOffline(inspection, 'create');
       
-      // If online, trigger sync immediately
+      // Update local state immediately
+      setSavedInspections(prev => {
+        const newInspections = [...prev, inspection];
+        return newInspections.sort((a, b) => 
+          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        );
+      });
+      
+      // If online, trigger immediate sync
       if (navigator.onLine) {
         await inspectionService.triggerSyncAndRefresh();
       }
@@ -1276,16 +1406,28 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         throw new Error(`updateSubstationInspection: Inspection not found with ID ${id}`);
       }
       
-      // Validate updates - only ensure required fields are not removed
-      const validatedUpdates = {
+      // Create updated inspection data by merging existing data with updates
+      const updatedInspection: SubstationInspection = {
+        ...existingInspection,
         ...updates,
         updatedAt: new Date().toISOString(),
-        // Only ensure these required fields are not removed
+        // Preserve category-specific items if they exist in updates
+        siteCondition: updates.siteCondition || existingInspection.siteCondition,
+        generalBuilding: updates.generalBuilding || existingInspection.generalBuilding,
+        controlEquipment: updates.controlEquipment || existingInspection.controlEquipment,
+        basement: updates.basement || existingInspection.basement,
+        powerTransformer: updates.powerTransformer || existingInspection.powerTransformer,
+        outdoorEquipment: updates.outdoorEquipment || existingInspection.outdoorEquipment,
+        // Preserve other fields if they exist in updates
         region: updates.region || existingInspection.region,
         district: updates.district || existingInspection.district,
         substationName: updates.substationName || existingInspection.substationName,
         type: updates.type || existingInspection.type,
-        // Don't set default values for checklist items
+        location: updates.location || existingInspection.location,
+        voltageLevel: updates.voltageLevel || existingInspection.voltageLevel,
+        status: updates.status || existingInspection.status,
+        remarks: updates.remarks || existingInspection.remarks,
+        // Preserve checklist items if they exist in updates
         cleanDustFree: updates.cleanDustFree,
         protectionButtonEnabled: updates.protectionButtonEnabled,
         recloserButtonEnabled: updates.recloserButtonEnabled,
@@ -1307,16 +1449,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         correctLabelling: updates.correctLabelling
       };
       
-      // Create updated inspection data
-      const updatedInspection: SubstationInspection = {
-        ...existingInspection,
-        ...validatedUpdates
-      };
-      
       // Save the updated inspection
       await inspectionService.saveSubstationInspectionOffline(updatedInspection, 'update');
       
-      // If online, trigger sync immediately
+      // If online, trigger immediate sync
       if (navigator.onLine) {
         await inspectionService.triggerSyncAndRefresh();
       }
@@ -1337,37 +1473,58 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     try {
       // Get the inspection service instance
       const inspectionService = SubstationInspectionService.getInstance();
-      
+
       // Get the existing inspection
       const existingInspection = savedInspections.find(inspection => inspection.id === id);
       if (!existingInspection) {
         throw new Error(`deleteInspection: Inspection not found with ID ${id}`);
       }
 
-      // If online, delete directly from Firebase
+      // First try to delete from Firestore if online
       if (navigator.onLine) {
         try {
-          // Delete from Firebase
-          await deleteDoc(doc(db, "substationInspections", id));
+          // Try to find the document in Firestore first
+          const q = query(
+            collection(db, "substationInspections"),
+            where("id", "==", id)
+          );
+          const querySnapshot = await getDocs(q);
           
-          // Update local state immediately
-          setSavedInspections(prev => prev.filter(inspection => inspection.id !== id));
-          
-          toast.success('Inspection deleted successfully');
-          return;
+          if (!querySnapshot.empty) {
+            // Get the Firestore document ID
+            const docId = querySnapshot.docs[0].id;
+            const docRef = doc(db, "substationInspections", docId);
+            await deleteDoc(docRef);
+            console.log('Deleted inspection from Firebase:', docId);
+          } else {
+            console.log('Document not found in Firestore with local ID:', id);
+          }
         } catch (error) {
           console.error('Error deleting from Firebase:', error);
-          throw error;
+          // Continue with offline deletion even if Firebase deletion fails
         }
       }
-      
-      // If offline, save deletion for sync
-      await inspectionService.saveSubstationInspectionOffline(existingInspection, 'delete');
-      
-      // Update local state immediately
+
+      // Update local state
       setSavedInspections(prev => prev.filter(inspection => inspection.id !== id));
-      
-      toast.success('Inspection deleted successfully');
+
+      try {
+        // Save deletion for sync (both online and offline)
+        await inspectionService.saveSubstationInspectionOffline(existingInspection, 'delete');
+
+        // If online, trigger sync immediately
+        if (navigator.onLine) {
+          await inspectionService.triggerSyncAndRefresh();
+        }
+        
+        toast.success('Inspection deleted successfully');
+      } catch (error) {
+        console.error('Error saving deletion for sync:', error);
+        // If we fail to save for sync, restore the inspection in the UI
+        setSavedInspections(prev => [...prev, existingInspection]);
+        toast.error('Failed to save deletion for sync');
+        throw error;
+      }
     } catch (error) {
       console.error('Error deleting inspection:', error);
       toast.error('Failed to delete inspection');
@@ -1473,24 +1630,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         // Get the inspection service instance
         const inspectionService = SubstationInspectionService.getInstance();
         
-        // Trigger sync and refresh
-        await inspectionService.triggerSyncAndRefresh();
+        // Get all inspections using the service's getAllSubstationInspections method
+        const allRecords = await inspectionService.getAllSubstationInspections();
+        console.log('Retrieved all records:', allRecords.length);
         
-        // Get all inspections from Firestore
-        const q = query(collection(db, "substationInspections"), orderBy("createdAt", "desc"));
-        const snapshot = await getDocs(q);
-        const inspections = snapshot.docs.map(doc => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            ...data,
-            createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt,
-            updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : data.updatedAt
-          } as SubstationInspection;
-        });
-        
-        // Update the state with fresh data
-        setSavedInspections(inspections);
+        // Update the state with the merged data
+        setSavedInspections(allRecords);
       } catch (error) {
         console.error("Error refreshing inspections:", error);
         toast.error("Failed to refresh inspections");

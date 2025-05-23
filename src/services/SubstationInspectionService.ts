@@ -19,6 +19,16 @@ export interface PendingSubstationInspection {
   timestamp: string;
   retryCount: number;
   lastRetry?: string;
+  firestoreId?: string;
+}
+
+interface PendingSyncItem {
+  id: string;
+  action: 'create' | 'update' | 'delete';
+  record: SubstationInspection;
+  retryCount?: number;
+  lastRetry?: string;
+  firestoreId?: string;
 }
 
 export class SubstationInspectionService {
@@ -53,17 +63,35 @@ export class SubstationInspectionService {
   private async init() {
     try {
       console.log('Opening IndexedDB...');
+      if (this.db) {
+        console.log('Database already initialized');
+        return;
+      }
+
       this.db = await openDB<SubstationInspectionDB>('substation-inspection-offline', 1, {
         upgrade(db) {
+          console.log('Upgrading database...');
           if (!db.objectStoreNames.contains('substationInspections')) {
             console.log('Creating substationInspections store');
             db.createObjectStore('substationInspections', { keyPath: 'id' });
           }
         },
+        blocked() {
+          console.log('Database blocked');
+        },
+        blocking() {
+          console.log('Database blocking');
+        },
+        terminated() {
+          console.log('Database terminated');
+          this.db = null;
+        }
       });
       console.log('IndexedDB initialized successfully');
     } catch (error) {
       console.error('Error initializing SubstationInspectionService:', error);
+      this.db = null;
+      throw error;
     }
   }
 
@@ -208,49 +236,86 @@ export class SubstationInspectionService {
     }
   }
 
-  public async saveSubstationInspectionOffline(record: SubstationInspection, action: 'create' | 'update' | 'delete'): Promise<void> {
-    console.log('SubstationInspectionService: Entering saveSubstationInspectionOffline', { recordId: record.id, action });
+  private async ensureDBInitialized() {
     if (!this.db) {
-      console.error('Database not initialized');
-      throw new Error('Database not initialized');
+      console.log('Database not initialized, attempting to initialize...');
+      try {
+        await this.init();
+        if (!this.db) {
+          throw new Error('Failed to initialize database after attempt');
+        }
+      } catch (error) {
+        console.error('Failed to initialize database:', error);
+        throw new Error('Database initialization failed');
+      }
     }
 
+    // Check if the database is still open
+    if (this.db.transaction) {
+      try {
+        // Try a test transaction to verify the connection
+        const tx = this.db.transaction('substationInspections', 'readonly');
+        await tx.done;
+      } catch (error) {
+        console.log('Database connection lost, reinitializing...');
+        this.db = null;
+        await this.init();
+      }
+    }
+  }
+
+  public async saveSubstationInspectionOffline(inspection: SubstationInspection, action: 'create' | 'update' | 'delete'): Promise<void> {
     try {
-      // Check for duplicates before saving
-      const isDuplicate = await this.checkForDuplicateInspection(record);
-      let finalAction = action;
-      if (isDuplicate && action === 'create') {
-        console.log('Duplicate inspection found, updating instead');
-        finalAction = 'update';
+      await this.ensureDBInitialized();
+
+      if (!this.db) {
+        throw new Error('Database not initialized');
       }
 
-      console.log('Saving record offline:', record.id, 'Action:', finalAction);
+      const tx = this.db.transaction('substationInspections', 'readwrite');
+      const store = tx.objectStore('substationInspections');
+
+      // For delete action, use the correct ID
+      const recordId = action === 'delete' ? (inspection.firestoreId || inspection.id) : inspection.id;
+
+      // Format the data according to PendingSubstationInspection interface
       const pendingRecord: PendingSubstationInspection = {
-        id: record.id,
+        id: recordId,
         record: {
-          ...record,
+          ...inspection,
           syncStatus: 'pending',
-          createdAt: record.createdAt || new Date().toISOString(),
           updatedAt: new Date().toISOString()
         },
-        action: finalAction,
+        action,
         timestamp: Date.now().toString(),
-        retryCount: 0
+        retryCount: 0,
+        firestoreId: inspection.firestoreId
       };
 
-      await this.db.put('substationInspections', pendingRecord);
-      console.log('SubstationInspectionService: Record saved offline successfully', { recordId: record.id });
+      // Store the record in IndexedDB
+      await store.put(pendingRecord);
+      await tx.done;
 
       // Dispatch event for UI update
-      window.dispatchEvent(new CustomEvent('substationInspectionRecordAdded', {
+      const event = new CustomEvent('substationInspectionUpdated', {
         detail: {
-          record: pendingRecord.record,
-          action: finalAction,
-          status: 'pending'
+          action,
+          inspection: pendingRecord.record
         }
-      }));
+      });
+      window.dispatchEvent(event);
+
+      // Log for debugging
+      console.log(`Saved inspection offline (${action}):`, pendingRecord);
     } catch (error) {
-      console.error('Error saving offline record:', error);
+      console.error('Error saving inspection offline:', error);
+      // If we get a database error, try to reinitialize
+      if (error.name === 'InvalidStateError') {
+        this.db = null;
+        await this.init();
+        // Retry the operation once
+        return this.saveSubstationInspectionOffline(inspection, action);
+      }
       throw error;
     }
   }
@@ -314,121 +379,181 @@ export class SubstationInspectionService {
     }
 
     if (Array.isArray(data)) {
-      return data.map(item => this.cleanDataForFirestore(item));
+      return data.map(item => this.cleanDataForFirestore(item)).filter(item => item !== null);
     }
 
     if (typeof data === 'object') {
       const cleaned: any = {};
       for (const [key, value] of Object.entries(data)) {
-        if (value !== undefined) {
-          cleaned[key] = this.cleanDataForFirestore(value);
+        const cleanedValue = this.cleanDataForFirestore(value);
+        if (cleanedValue !== null && cleanedValue !== undefined) {
+          cleaned[key] = cleanedValue;
         }
       }
-      return cleaned;
+      return Object.keys(cleaned).length > 0 ? cleaned : null;
     }
 
     return data;
   }
 
-  public async syncSubstationInspectionRecords(): Promise<{ successCount: number; failureCount: number }> {
-    if (!navigator.onLine) {
-      console.log('Device is offline, skipping sync');
-      return { successCount: 0, failureCount: 0 };
-    }
-
-    if (!this.db) {
-      console.error('Database not initialized during sync');
-      await this.init();
+  private async syncSubstationInspectionRecords(): Promise<{ successCount: number; failureCount: number }> {
+    let pendingRecords: PendingSyncItem[] = [];
+    
+    try {
       if (!this.db) {
-        throw new Error('Failed to initialize database');
+        console.error('Database not initialized');
+        return { successCount: 0, failureCount: 0 };
       }
-    }
 
-    console.log('Starting sync process...');
-    const pendingRecords = await this.getPendingSubstationInspectionRecords();
-    console.log('Found pending records:', pendingRecords.length);
+      // Get all pending records
+      pendingRecords = await this.getPendingSubstationInspectionRecords();
+      console.log('SubstationInspectionService: Retrieved pending records:', pendingRecords.length, pendingRecords);
 
-    if (pendingRecords.length === 0) {
-      console.log('No pending records to sync');
-      return { successCount: 0, failureCount: 0 };
-    }
-
-    let successCount = 0;
-    let failureCount = 0;
-
-    for (const pending of pendingRecords) {
-      try {
-        console.log('Processing record:', pending.id, 'Action:', pending.action);
-        const { record, action } = pending;
-        
-        // Clean the data before syncing
-        const recordToSync = this.cleanDataForFirestore(record);
-        console.log('Cleaned record for sync:', recordToSync);
-
-        // Find existing document by ID or originalOfflineId
-        let docRef = doc(getFirestore(), "substationInspections", recordToSync.id);
-        let docSnap = await getDoc(docRef);
-        
-        if (!docSnap.exists() && recordToSync.originalOfflineId) {
-          const existingQuery = query(
-            collection(getFirestore(), "substationInspections"),
-            where("originalOfflineId", "==", recordToSync.originalOfflineId)
-          );
-          const existingSnapshot = await getDocs(existingQuery);
-          if (!existingSnapshot.empty) {
-            docRef = doc(getFirestore(), "substationInspections", existingSnapshot.docs[0].id);
-            docSnap = await getDoc(docRef);
-          }
-        }
-
-        // Determine if this is a create or update operation
-        const isCreate = action === 'create' && !docSnap.exists();
-        
-        if (isCreate) {
-          console.log('Creating new record in Firestore');
-          await setDoc(docRef, {
-            ...recordToSync,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-            syncStatus: 'synced'
-          });
-        } else {
-          console.log('Updating existing record in Firestore');
-          await updateDoc(docRef, {
-            ...recordToSync,
-            updatedAt: serverTimestamp(),
-            syncStatus: 'synced'
-          });
-        }
-
-        // Remove the offline record after successful sync
-        await this.removePendingSubstationInspection(pending.id);
-
-        // Dispatch event for UI update
-        window.dispatchEvent(new CustomEvent('substationInspectionRecordAdded', {
-          detail: {
-            record: { ...recordToSync, syncStatus: 'synced' },
-            action: isCreate ? 'create' : 'update',
-            status: 'success'
-          }
-        }));
-
-        successCount++;
-      } catch (error) {
-        console.error('Error syncing record:', error);
-        failureCount++;
-        
-        // Update retry count and timestamp
-        await this.updatePendingSyncItem(pending.id, {
-          ...pending,
-          retryCount: (pending.retryCount || 0) + 1,
-          lastRetry: new Date().toISOString()
-        });
+      if (pendingRecords.length === 0) {
+        console.log('No pending records to sync');
+        return { successCount: 0, failureCount: 0 };
       }
-    }
 
-    console.log('Sync process completed. Success:', successCount, 'Failures:', failureCount);
-    return { successCount, failureCount };
+      let successCount = 0;
+      let failureCount = 0;
+
+      // Process each pending record
+      for (const record of pendingRecords) {
+        try {
+          console.log('Processing pending record:', record);
+          
+          if (!record || !record.id) {
+            console.error('Invalid record:', record);
+            failureCount++;
+            continue;
+          }
+
+          // Handle different actions
+          switch (record.action) {
+            case 'create':
+              try {
+                if (!record.record) {
+                  console.error('Create action missing record data');
+                  failureCount++;
+                  break;
+                }
+                // Clean the data before sending to Firestore
+                const cleanedData = this.cleanDataForFirestore({
+                  ...record.record,
+                  createdAt: serverTimestamp(),
+                  updatedAt: serverTimestamp(),
+                  syncStatus: 'synced'
+                });
+                
+                // Create new document in Firestore
+                const docRef = await addDoc(collection(getFirestore(), "substationInspections"), cleanedData);
+                console.log('Created new inspection in Firestore:', docRef.id);
+                successCount++;
+              } catch (error) {
+                console.error('Error creating inspection in Firestore:', error);
+                failureCount++;
+              }
+              break;
+
+            case 'update':
+              try {
+                if (!record.record) {
+                  console.error('Update action missing record data');
+                  failureCount++;
+                  break;
+                }
+                // Clean the data before sending to Firestore
+                const cleanedUpdateData = this.cleanDataForFirestore({
+                  ...record.record,
+                  updatedAt: serverTimestamp(),
+                  syncStatus: 'synced'
+                });
+                
+                // Update existing document in Firestore
+                const docRef = doc(getFirestore(), "substationInspections", record.record.id);
+                await updateDoc(docRef, cleanedUpdateData);
+                console.log('Updated inspection in Firestore:', record.record.id);
+                successCount++;
+              } catch (error) {
+                console.error('Error updating inspection in Firestore:', error);
+                failureCount++;
+              }
+              break;
+
+            case 'delete':
+              try {
+                // For delete action, we need the record ID
+                const recordId = record.record?.id || record.id;
+                if (!recordId) {
+                  console.error('Delete action missing record ID');
+                  failureCount++;
+                  break;
+                }
+
+                console.log('Attempting to delete record with ID:', recordId);
+
+                // Always attempt to delete from Firestore when online
+                if (this.isOnline) {
+                  const docRef = doc(getFirestore(), "substationInspections", recordId);
+                  const docSnap = await getDoc(docRef);
+                  
+                  if (docSnap.exists()) {
+                    await deleteDoc(docRef);
+                    console.log('Deleted inspection from Firestore:', recordId);
+                  } else {
+                    console.log('Document does not exist in Firestore, skipping delete:', recordId);
+                  }
+                }
+
+                // Remove from IndexedDB regardless of Firestore status
+                await this.removePendingSubstationInspection(record.id);
+                successCount++;
+              } catch (error) {
+                console.error('Error deleting inspection from Firestore:', error);
+                failureCount++;
+              }
+              break;
+
+            default:
+              console.error('Unknown action:', record.action);
+              failureCount++;
+          }
+
+          // Only remove non-delete records from pending sync here
+          // Delete records are handled in the delete case
+          if (record.action !== 'delete') {
+            await this.removePendingSubstationInspection(record.id);
+          }
+          
+          // Dispatch event for UI update
+          window.dispatchEvent(new CustomEvent('substationInspectionRecordAdded', {
+            detail: {
+              record: record.record ? { ...record.record, syncStatus: 'synced' } : { id: record.id, syncStatus: 'synced' },
+              action: record.action,
+              status: 'success'
+            }
+          }));
+
+          console.log('Processed inspection:', record.record || { id: record.id });
+        } catch (error) {
+          console.error('Error processing pending record:', error);
+          failureCount++;
+          
+          // Update retry count and timestamp
+          await this.updatePendingSyncItem(record.id, {
+            ...record,
+            retryCount: (record.retryCount || 0) + 1,
+            lastRetry: new Date().toISOString()
+          });
+        }
+      }
+
+      console.log('Sync completed:', { successCount, failureCount });
+      return { successCount, failureCount };
+    } catch (error) {
+      console.error('Error in syncSubstationInspectionRecords:', error);
+      return { successCount: 0, failureCount: pendingRecords.length };
+    }
   }
 
   private async updateOfflineRecord(id: string, updates: Partial<SubstationInspection>): Promise<void> {
@@ -464,22 +589,58 @@ export class SubstationInspectionService {
   }
 
   public async getOfflineSubstationInspections(): Promise<SubstationInspection[]> {
-    console.log('SubstationInspectionService: Entering getOfflineSubstationInspections');
-    if (!this.db) {
-      console.error('Database not initialized');
-      throw new Error('Database not initialized');
-    }
+    await this.ensureDBInitialized();
 
     try {
-      const records = await this.db.getAll('substationInspections');
+      const records = await this.db!.getAll('substationInspections');
       console.log('SubstationInspectionService: Retrieved pending records:', records.length, records);
-      // Map PendingSubstationInspection to SubstationInspection
-      return records.map(record => ({
-        ...record.record,
-        syncStatus: 'pending',
-        createdAt: record.record.createdAt || new Date().toISOString(),
-        updatedAt: record.record.updatedAt || new Date().toISOString()
-      }));
+      
+      // Map records to SubstationInspection with defensive checks
+      return records.map(pendingRecord => {
+        console.log('Processing pending record:', pendingRecord);
+        
+        if (!pendingRecord) {
+          console.error('Null or undefined pending record');
+          return null;
+        }
+
+        const now = new Date().toISOString();
+        let record: SubstationInspection;
+
+        // Handle both old and new data structures
+        if ('record' in pendingRecord) {
+          // New structure with record property
+          record = pendingRecord.record;
+        } else {
+          // Old structure where the record is the pendingRecord itself
+          record = pendingRecord as unknown as SubstationInspection;
+        }
+
+        // Ensure all required fields are present
+        const inspection: SubstationInspection = {
+          id: record.id || pendingRecord.id,
+          region: record.region || '',
+          regionId: record.regionId || '',
+          district: record.district || '',
+          districtId: record.districtId || '',
+          date: record.date || now,
+          substationNo: record.substationNo || '',
+          substationName: record.substationName || '',
+          type: record.type || '',
+          location: record.location || '',
+          voltageLevel: record.voltageLevel || '',
+          status: record.status || '',
+          remarks: record.remarks || '',
+          syncStatus: 'pending',
+          createdAt: record.createdAt || now,
+          updatedAt: record.updatedAt || now,
+          // Add any other required fields with default values
+          ...record
+        };
+
+        console.log('Processed inspection:', inspection);
+        return inspection;
+      }).filter((inspection): inspection is SubstationInspection => inspection !== null);
     } catch (error) {
       console.error('Error getting offline inspections:', error);
       return [];
@@ -490,6 +651,7 @@ export class SubstationInspectionService {
     try {
       // Always get offline data first
       const offlineRecords = await this.getOfflineSubstationInspections();
+      console.log('Retrieved offline records:', offlineRecords.length);
       
       // If we're online, get Firestore data
       if (this.isOnline) {
@@ -506,26 +668,38 @@ export class SubstationInspectionService {
               syncStatus: 'synced'
             } as SubstationInspection;
           });
+          console.log('Retrieved Firestore records:', firestoreRecords.length);
 
           // Create a map of all records by ID
           const recordMap = new Map<string, SubstationInspection>();
           
-          // Add Firestore records to map
+          // Add Firestore records to map first (they take precedence)
           firestoreRecords.forEach(record => {
-            recordMap.set(record.id, record);
+            if (record.id) {
+              recordMap.set(record.id, record);
+            }
           });
 
-          // Add offline records that aren't in Firestore
+          // Add offline records that aren't in Firestore or have a different syncStatus
           offlineRecords.forEach(record => {
-            if (!recordMap.has(record.id)) {
+            if (!record.id) {
+              console.warn('Offline record missing ID:', record);
+              return;
+            }
+
+            const existingRecord = recordMap.get(record.id);
+            if (!existingRecord || existingRecord.syncStatus !== 'synced') {
               recordMap.set(record.id, record);
             }
           });
 
           // Convert map to array and sort by updatedAt
-          return Array.from(recordMap.values()).sort(
+          const allRecords = Array.from(recordMap.values()).sort(
             (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
           );
+          
+          console.log('Final merged records:', allRecords.length);
+          return allRecords;
         } catch (error) {
           console.error('Error fetching Firestore data:', error);
           // If there's an error fetching Firestore data, return offline records

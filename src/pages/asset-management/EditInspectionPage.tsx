@@ -16,7 +16,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
-import { SubstationInspection, ConditionStatus, InspectionItem } from "@/lib/types";
+import { ConditionStatus, InspectionItem } from "@/lib/types";
+import { SubstationInspection } from "@/lib/asset-types";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
 import { ChevronLeft } from "lucide-react";
@@ -41,32 +42,30 @@ export default function EditInspectionPage() {
     if (id) {
       const inspection = getSavedInspection(id);
       if (inspection) {
-        // Combine items from all potential sources
-        const combinedItems = [
-          ...(inspection.items || []),
-          ...(inspection.generalBuilding || []),
-          ...(inspection.controlEquipment || []),
-          ...(inspection.powerTransformer || []),
-          ...(inspection.outdoorEquipment || [])
-        ];
-        
-        // Deduplicate items based on their ID
-        const uniqueItemsMap = new Map<string, InspectionItem>();
-        combinedItems.forEach(item => {
-          if (item && item.id) { // Ensure item and item.id exist
-            uniqueItemsMap.set(item.id, item);
-          }
-        });
-        const allItems = Array.from(uniqueItemsMap.values());
-
-        // Ensure all required fields are properly initialized
+        // Set form data with all category-specific arrays preserved
         setFormData({
           ...inspection,
           region: inspection.region || "",
           district: inspection.district || "",
           date: inspection.date || new Date().toISOString().split('T')[0],
           type: inspection.type || "indoor",
-          items: allItems
+          // Preserve all category-specific arrays
+          siteCondition: inspection.siteCondition || [],
+          generalBuilding: inspection.generalBuilding || [],
+          controlEquipment: inspection.controlEquipment || [],
+          powerTransformer: inspection.powerTransformer || [],
+          outdoorEquipment: inspection.outdoorEquipment || [],
+          basement: inspection.basement || [],
+          remarks: inspection.remarks || "", // This is used for additional notes
+          // Combine items for backward compatibility
+          items: [
+            ...(inspection.siteCondition || []),
+            ...(inspection.generalBuilding || []),
+            ...(inspection.controlEquipment || []),
+            ...(inspection.powerTransformer || []),
+            ...(inspection.outdoorEquipment || []),
+            ...(inspection.basement || [])
+          ]
         });
         setLoading(false);
       } else {
@@ -161,12 +160,43 @@ export default function EditInspectionPage() {
 
   // Update inspection item
   const updateInspectionItem = (id: string, field: keyof InspectionItem, value: any) => {
-    setFormData(prev => ({
-      ...prev,
-      items: prev.items?.map(item => 
+    setFormData(prev => {
+      // Find which category the item belongs to
+      const categoryMap: { [key: string]: string } = {
+        "general building": "generalBuilding",
+        "control equipment": "controlEquipment",
+        "power transformer": "powerTransformer",
+        "outdoor equipment": "outdoorEquipment",
+        "site condition": "siteCondition",
+        "basement": "basement"
+      };
+
+      // Find the item and its category
+      const item = prev.items?.find(item => item.id === id);
+      const categoryKey = item?.category ? categoryMap[item.category.toLowerCase()] : null;
+
+      if (!categoryKey) {
+        console.error('Could not find category for item:', id);
+        return prev;
+      }
+
+      // Update the category-specific array
+      const categoryArray = prev[categoryKey as keyof SubstationInspection] as InspectionItem[] | undefined;
+      const updatedCategoryItems = categoryArray?.map(item => 
         item.id === id ? { ...item, [field]: value } : item
-      ) || []
-    }));
+      ) || [];
+
+      // Update the combined items array
+      const updatedItems = prev.items?.map(item => 
+        item.id === id ? { ...item, [field]: value } : item
+      ) || [];
+
+      return {
+        ...prev,
+        [categoryKey]: updatedCategoryItems,
+        items: updatedItems
+      };
+    });
   };
 
   // Filter items by category
@@ -175,7 +205,9 @@ export default function EditInspectionPage() {
       "general": "general building",
       "control": "control equipment",
       "transformer": "power transformer",
-      "outdoor": "outdoor equipment"
+      "outdoor": "outdoor equipment",
+      "site": "site condition",
+      "basement": "basement"
     };
     return formData.items?.filter(item => item.category.toLowerCase() === categoryMap[category].toLowerCase()) || [];
   };
@@ -190,15 +222,38 @@ export default function EditInspectionPage() {
     }
     
     if (id) {
+      // Ensure all category-specific arrays are properly set
       const updatedData: Partial<SubstationInspection> = {
-        ...formData
+        ...formData,
+        siteCondition: formData.siteCondition || [],
+        generalBuilding: formData.generalBuilding || [],
+        controlEquipment: formData.controlEquipment || [],
+        powerTransformer: formData.powerTransformer || [],
+        outdoorEquipment: formData.outdoorEquipment || [],
+        basement: formData.basement || [],
+        remarks: formData.remarks || "",
+        // Update the combined items array to match category-specific arrays
+        items: [
+          ...(formData.siteCondition || []),
+          ...(formData.generalBuilding || []),
+          ...(formData.controlEquipment || []),
+          ...(formData.powerTransformer || []),
+          ...(formData.outdoorEquipment || []),
+          ...(formData.basement || [])
+        ]
       };
       
-      // Update the inspection data
-      updateSubstationInspection(id, updatedData);
+      console.log('Submitting inspection data:', updatedData);
       
-      // Navigate to the details page
-      navigate(`/asset-management/inspection-details/${id}`);
+      updateSubstationInspection(id, updatedData)
+        .then(() => {
+          toast.success("Inspection updated successfully");
+          navigate("/asset-management/inspection-management");
+        })
+        .catch((error) => {
+          console.error("Error updating inspection:", error);
+          toast.error("Failed to update inspection");
+        });
     }
   };
 
@@ -343,51 +398,50 @@ export default function EditInspectionPage() {
                   onValueChange={setActiveTab}
                   className="w-full"
                 >
-                  <TabsList className="mb-4 grid grid-cols-2 md:grid-cols-4">
-                    <TabsTrigger value="general">1. General Building</TabsTrigger>
-                    <TabsTrigger value="control">2. Control Equipment</TabsTrigger>
-                    <TabsTrigger value="transformer">3. Power Transformer</TabsTrigger>
-                    <TabsTrigger value="outdoor">4. Outdoor Equipment</TabsTrigger>
+                  <TabsList className="grid grid-cols-6 gap-4">
+                    <TabsTrigger value="general">General Building</TabsTrigger>
+                    <TabsTrigger value="control">Control Equipment</TabsTrigger>
+                    <TabsTrigger value="transformer">Power Transformer</TabsTrigger>
+                    <TabsTrigger value="outdoor">Outdoor Equipment</TabsTrigger>
+                    <TabsTrigger value="site">Site Condition</TabsTrigger>
+                    <TabsTrigger value="basement">Basement</TabsTrigger>
                   </TabsList>
                   
                   {/* General Building */}
                   <TabsContent value="general" className="space-y-4">
-                    {getItemsByCategory("general").map((item) => {
-                      console.log(`Rendering item ${item.id} (${item.name}) with status:`, item.status);
-                      return (
-                        <div key={item.id} className="border rounded-lg p-4">
-                          <div className="flex justify-between items-start">
-                            <div className="space-y-1">
-                              <h4 className="font-medium">{item.name}</h4>
+                    {getItemsByCategory("general").map((item) => (
+                      <div key={item.id} className="border rounded-lg p-4">
+                        <div className="flex justify-between items-start">
+                          <div className="space-y-1">
+                            <h4 className="font-medium">{item.name}</h4>
+                          </div>
+                          <RadioGroup
+                            value={item.status}
+                            onValueChange={(value) => updateInspectionItem(item.id, 'status', value as ConditionStatus)}
+                            className="flex items-center space-x-4"
+                          >
+                            <div className="flex items-center space-x-2">
+                              <RadioGroupItem value="good" id={`${item.id}-good`} />
+                              <Label htmlFor={`${item.id}-good`}>Good</Label>
                             </div>
-                            <RadioGroup
-                              value={item.status}
-                              onValueChange={(value) => updateInspectionItem(item.id, 'status', value as ConditionStatus)}
-                              className="flex items-center space-x-4"
-                            >
-                              <div className="flex items-center space-x-2">
-                                <RadioGroupItem value="good" id={`${item.id}-good`} />
-                                <Label htmlFor={`${item.id}-good`}>Good</Label>
-                              </div>
-                              <div className="flex items-center space-x-2">
-                                <RadioGroupItem value="bad" id={`${item.id}-bad`} />
-                                <Label htmlFor={`${item.id}-bad`}>Bad</Label>
-                              </div>
-                            </RadioGroup>
-                          </div>
-                          <div className="mt-4">
-                            <Label htmlFor={`remarks-${item.id}`}>Remarks</Label>
-                            <Textarea
-                              id={`remarks-${item.id}`}
-                              value={item.remarks || ''}
-                              onChange={(e) => updateInspectionItem(item.id, 'remarks', e.target.value)}
-                              placeholder="Add remarks about this item"
-                              className="mt-1"
-                            />
-                          </div>
+                            <div className="flex items-center space-x-2">
+                              <RadioGroupItem value="bad" id={`${item.id}-bad`} />
+                              <Label htmlFor={`${item.id}-bad`}>Bad</Label>
+                            </div>
+                          </RadioGroup>
                         </div>
-                      );
-                    })}
+                        <div className="mt-4">
+                          <Label htmlFor={`remarks-${item.id}`}>Remarks</Label>
+                          <Textarea
+                            id={`remarks-${item.id}`}
+                            value={item.remarks || ''}
+                            onChange={(e) => updateInspectionItem(item.id, 'remarks', e.target.value)}
+                            placeholder="Add remarks about this item"
+                            className="mt-1"
+                          />
+                        </div>
+                      </div>
+                    ))}
                   </TabsContent>
 
                   {/* Control Equipment */}
@@ -500,7 +554,102 @@ export default function EditInspectionPage() {
                       </div>
                     ))}
                   </TabsContent>
+
+                  {/* Site Condition */}
+                  <TabsContent value="site" className="space-y-4">
+                    {getItemsByCategory("site").map((item) => (
+                      <div key={item.id} className="border rounded-lg p-4">
+                        <div className="flex justify-between items-start">
+                          <div className="space-y-1">
+                            <h4 className="font-medium">{item.name}</h4>
+                          </div>
+                          <RadioGroup
+                            value={item.status}
+                            onValueChange={(value) => updateInspectionItem(item.id, 'status', value as ConditionStatus)}
+                            className="flex items-center space-x-4"
+                          >
+                            <div className="flex items-center space-x-2">
+                              <RadioGroupItem value="good" id={`${item.id}-good`} />
+                              <Label htmlFor={`${item.id}-good`}>Good</Label>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <RadioGroupItem value="bad" id={`${item.id}-bad`} />
+                              <Label htmlFor={`${item.id}-bad`}>Bad</Label>
+                            </div>
+                          </RadioGroup>
+                        </div>
+                        <div className="mt-4">
+                          <Label htmlFor={`remarks-${item.id}`}>Remarks</Label>
+                          <Textarea
+                            id={`remarks-${item.id}`}
+                            value={item.remarks || ''}
+                            onChange={(e) => updateInspectionItem(item.id, 'remarks', e.target.value)}
+                            placeholder="Add remarks about this item"
+                            className="mt-1"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </TabsContent>
+
+                  {/* Basement */}
+                  <TabsContent value="basement" className="space-y-4">
+                    {getItemsByCategory("basement").map((item) => (
+                      <div key={item.id} className="border rounded-lg p-4">
+                        <div className="flex justify-between items-start">
+                          <div className="space-y-1">
+                            <h4 className="font-medium">{item.name}</h4>
+                          </div>
+                          <RadioGroup
+                            value={item.status}
+                            onValueChange={(value) => updateInspectionItem(item.id, 'status', value as ConditionStatus)}
+                            className="flex items-center space-x-4"
+                          >
+                            <div className="flex items-center space-x-2">
+                              <RadioGroupItem value="good" id={`${item.id}-good`} />
+                              <Label htmlFor={`${item.id}-good`}>Good</Label>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <RadioGroupItem value="bad" id={`${item.id}-bad`} />
+                              <Label htmlFor={`${item.id}-bad`}>Bad</Label>
+                            </div>
+                          </RadioGroup>
+                        </div>
+                        <div className="mt-4">
+                          <Label htmlFor={`remarks-${item.id}`}>Remarks</Label>
+                          <Textarea
+                            id={`remarks-${item.id}`}
+                            value={item.remarks || ''}
+                            onChange={(e) => updateInspectionItem(item.id, 'remarks', e.target.value)}
+                            placeholder="Add remarks about this item"
+                            className="mt-1"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </TabsContent>
                 </Tabs>
+              </CardContent>
+            </Card>
+
+            {/* Additional Notes */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Additional Notes</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="remarks">Additional Notes</Label>
+                    <Textarea
+                      id="remarks"
+                      value={formData.remarks || ''}
+                      onChange={(e) => handleInputChange('remarks', e.target.value)}
+                      placeholder="Add any additional notes or observations"
+                      className="h-32"
+                    />
+                  </div>
+                </div>
               </CardContent>
             </Card>
 

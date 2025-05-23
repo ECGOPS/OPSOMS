@@ -198,14 +198,6 @@ export function FaultCard({ fault, type }: FaultCardProps) {
         toast.error("Restoration date must be after repair end date");
         return false;
       }
-
-      if (op5Fault.estimatedResolutionTime) {
-        const estimatedDateTime = new Date(op5Fault.estimatedResolutionTime);
-        if (restorationDateTime <= estimatedDateTime) {
-          toast.error("Restoration date must be after estimated resolution time");
-          return false;
-        }
-      }
     }
 
     return true;
