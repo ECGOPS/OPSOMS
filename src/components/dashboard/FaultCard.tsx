@@ -112,13 +112,13 @@ export function FaultCard({ fault, type }: FaultCardProps) {
       return user.district === district?.name;
     }
     
-    // District engineers for their district or higher roles can resolve
-    if (user.role === "district_engineer") {
+    // District engineers and managers for their district or higher roles can resolve
+    if (user.role === "district_engineer" || user.role === "district_manager") {
       return user.district === district?.name;
     }
     
-    // Regional engineers can resolve in their region
-    if (user.role === "regional_engineer") {
+    // Regional engineers and managers can resolve in their region
+    if (user.role === "regional_engineer" || user.role === "regional_general_manager") {
       return user.region === region?.name;
     }
     
@@ -142,13 +142,13 @@ export function FaultCard({ fault, type }: FaultCardProps) {
       return user.district === district?.name;
     }
     
-    // District engineers for their district or higher roles can delete
-    if (user.role === "district_engineer") {
+    // District engineers and managers for their district or higher roles can delete
+    if (user.role === "district_engineer" || user.role === "district_manager") {
       return user.district === district?.name;
     }
     
-    // Regional engineers can delete in their region
-    if (user.role === "regional_engineer") {
+    // Regional engineers and managers can delete in their region
+    if (user.role === "regional_engineer" || user.role === "regional_general_manager") {
       return user.region === region?.name;
     }
     

@@ -5,50 +5,39 @@ export const securityConfig = {
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://*.google.com", "https://*.googleapis.com", "https://*.gstatic.com"],
-        styleSrc: ["'self'", "'unsafe-inline'", "https://*.google.com", "https://*.googleapis.com", "https://*.gstatic.com"],
-        imgSrc: ["'self'", "data:", "https:", "blob:", "https://*.google.com", "https://*.googleapis.com", "https://*.gstatic.com"],
-        connectSrc: ["'self'", "https:", "wss:", "https://*.google.com", "https://*.googleapis.com", "https://www.google.com"],
-        fontSrc: ["'self'", "data:", "https:", "https://*.google.com", "https://*.gstatic.com"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://apis.google.com"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        imgSrc: ["'self'", "data:", "https:"],
+        connectSrc: ["'self'", "https://*.firebaseio.com", "https://*.googleapis.com"],
+        fontSrc: ["'self'", "https://fonts.gstatic.com"],
         objectSrc: ["'none'"],
         mediaSrc: ["'self'"],
-        frameSrc: ["'self'", "https://www.google.com", "https://www.google.com/maps/", "https://*.googleapis.com", "https://*.gstatic.com"],
-        workerSrc: ["'self'", "blob:"],
-        manifestSrc: ["'self'"],
-        prefetchSrc: ["'self'"],
-        baseUri: ["'self'"],
+        frameSrc: ["'self'", "https://*.firebaseapp.com"],
+        workerSrc: ["'self'"],
+        childSrc: ["'self'", "blob:"],
         formAction: ["'self'"],
+        baseUri: ["'self'"],
         frameAncestors: ["'none'"],
-        upgradeInsecureRequests: [],
-      },
+        upgradeInsecureRequests: []
+      }
     },
-    xssFilter: true,
-    noSniff: true,
-    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+    crossOriginEmbedderPolicy: true,
+    crossOriginOpenerPolicy: true,
+    crossOriginResourcePolicy: { policy: "same-site" },
+    dnsPrefetchControl: true,
+    frameguard: { action: "deny" },
+    hidePoweredBy: true,
     hsts: {
       maxAge: 31536000,
       includeSubDomains: true,
       preload: true
     },
-    frameguard: {
-      action: 'deny'
-    },
-    dnsPrefetchControl: {
-      allow: false
-    },
     ieNoOpen: true,
-    permittedCrossDomainPolicies: {
-      permittedPolicies: 'none'
-    },
-    hidePoweredBy: true,
-    crossOriginEmbedderPolicy: true,
-    crossOriginOpenerPolicy: {
-      policy: 'same-origin'
-    },
-    crossOriginResourcePolicy: {
-      policy: 'same-site'
-    },
-    originAgentCluster: true
+    noSniff: true,
+    originAgentCluster: true,
+    permittedCrossDomainPolicies: { permittedPolicies: "none" },
+    referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+    xssFilter: true
   }),
   cors: {
     origin: process.env.VITE_APP_URL || 'http://localhost:3000',

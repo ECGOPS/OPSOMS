@@ -169,34 +169,55 @@ async function mergeFirestoreAndOffline<T extends BaseRecord & { id: string; cli
     
     // Get pending sync items
     const pendingItems = await getPendingSyncItems();
-    const syncedIds = new Set(
+    const pendingDeletes = new Set(
       pendingItems
-        .filter(item => item.type === storeName)
+        .filter(item => item.type === storeName && item.action === 'delete')
         .map(item => item.data.id)
+    );
+    
+    const pendingUpdates = new Map(
+      pendingItems
+        .filter(item => item.type === storeName && item.action === 'update')
+        .map(item => [item.data.id, item.data])
     );
 
     const recordMap = new Map<string, T & { isOnline: boolean; synced: boolean }>();
 
-    // Add Firestore records
+    // First add Firestore records
     firestoreData.forEach(item => {
-      const key = item.clientId || item.id;
-      recordMap.set(key, {
-        ...item,
-        isOnline: true,
-        synced: true
-      });
+      // Skip if this record is pending deletion
+      if (pendingDeletes.has(item.id)) {
+        return;
+      }
+
+      // Check if there's a pending update for this record
+      const pendingUpdate = pendingUpdates.get(item.id);
+      if (pendingUpdate) {
+        // Use the pending update instead of the Firestore record
+        recordMap.set(`offline_${item.id}`, {
+          ...pendingUpdate as T,
+          isOnline: false,
+          synced: false
+        });
+      } else {
+        recordMap.set(`online_${item.id}`, {
+          ...item,
+          isOnline: true,
+          synced: true
+        });
+      }
     });
 
-    // Add offline records
+    // Then add offline records that aren't in Firestore
     offlineData.forEach(item => {
-      const key = item.clientId || item.id;
-      const existing = recordMap.get(key);
-      const isPending = syncedIds.has(item.id);
-      const itemDate = new Date(item.updatedAt);
-      const existingDate = existing ? new Date(existing.updatedAt) : null;
+      // Skip if this record is pending deletion
+      if (pendingDeletes.has(item.id)) {
+        return;
+      }
 
-      if (!existing || (!isPending && existingDate && itemDate > existingDate)) {
-        recordMap.set(key, {
+      // If the record isn't in the map yet, add it
+      if (!recordMap.has(`online_${item.id}`)) {
+        recordMap.set(`offline_${item.id}`, {
           ...item,
           isOnline: false,
           synced: false
@@ -328,12 +349,80 @@ export const DataContext = createContext<DataContextType>({
   initializeLoadMonitoring: async () => {},
   vitAssets: [],
   vitInspections: [],
-  addVITAsset: async () => '',
-  updateVITAsset: async () => {},
-  deleteVITAsset: async () => {},
-  addVITInspection: async () => '',
-  updateVITInspection: async () => {},
-  deleteVITInspection: async () => {},
+  addVITAsset: async (asset: Omit<VITAsset, "id">) => {
+    try {
+      const docRef = await addDoc(collection(db, "vitAssets"), {
+        ...asset,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      return docRef.id;
+    } catch (error) {
+      console.error("Error adding VIT asset:", error);
+      toast.error("Failed to add asset");
+      throw error;
+    }
+  },
+  updateVITAsset: async (id: string, updates: Partial<VITAsset>) => {
+    try {
+      const docRef = doc(db, "vitAssets", id);
+      await updateDoc(docRef, {
+        ...updates,
+        updatedAt: serverTimestamp()
+      });
+    } catch (error) {
+      console.error("Error updating VIT asset:", error);
+      toast.error("Failed to update asset");
+      throw error;
+    }
+  },
+  deleteVITAsset: async (id: string) => {
+    try {
+      const docRef = doc(db, "vitAssets", id);
+      await deleteDoc(docRef);
+    } catch (error) {
+      console.error("Error deleting VIT asset:", error);
+      toast.error("Failed to delete asset");
+      throw error;
+    }
+  },
+  addVITInspection: async (inspection: Omit<VITInspectionChecklist, "id">) => {
+    try {
+      const docRef = await addDoc(collection(db, "vitInspections"), {
+        ...inspection,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      return docRef.id;
+    } catch (error) {
+      console.error("Error adding VIT inspection:", error);
+      toast.error("Failed to add inspection");
+      throw error;
+    }
+  },
+  updateVITInspection: async (id: string, updates: Partial<VITInspectionChecklist>) => {
+    try {
+      const docRef = doc(db, "vitInspections", id);
+      await updateDoc(docRef, {
+        ...updates,
+        updatedAt: serverTimestamp()
+      });
+    } catch (error) {
+      console.error("Error updating VIT inspection:", error);
+      toast.error("Failed to update inspection");
+      throw error;
+    }
+  },
+  deleteVITInspection: async (id: string) => {
+    try {
+      const docRef = doc(db, "vitInspections", id);
+      await deleteDoc(docRef);
+    } catch (error) {
+      console.error("Error deleting VIT inspection:", error);
+      toast.error("Failed to delete inspection");
+      throw error;
+    }
+  },
   savedInspections: [],
   setSavedInspections: () => {},
   saveInspection: async () => '',
@@ -491,14 +580,28 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [overheadLineInspections, setOverheadLineInspections] = useState<OverheadLineInspection[]>([]);
   const [canEditLoadMonitoring, setCanEditLoadMonitoring] = useState(false);
   const [canDeleteLoadMonitoring, setCanDeleteLoadMonitoring] = useState(false);
+  const [isDBInitialized, setIsDBInitialized] = useState(false);
   const inspectionService = SubstationInspectionService.getInstance();
 
   useEffect(() => {
     // Initialize the database when the component mounts
-    initDB().catch(error => {
-      console.error('Failed to initialize database:', error);
-      toast.error('Failed to initialize offline storage');
-    });
+    const initializeDatabase = async () => {
+      try {
+        await initDB();
+        setIsDBInitialized(true);
+        console.log('Database initialized successfully');
+      } catch (error) {
+        console.error('Failed to initialize database:', error);
+        toast.error('Failed to initialize offline storage');
+      }
+    };
+
+    initializeDatabase();
+  }, []);
+
+  // Only proceed with data operations after DB is initialized
+  useEffect(() => {
+    if (!isDBInitialized) return;
 
     // Add event listener for offline inspection updates
     const handleInspectionUpdate = (event: CustomEvent) => {
@@ -534,10 +637,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return () => {
       window.removeEventListener('substationInspectionUpdated', handleInspectionUpdate as EventListener);
     };
-  }, []);
+  }, [isDBInitialized]);
 
+  // Load initial data only after DB is initialized
   useEffect(() => {
-    // Load initial data
+    if (!isDBInitialized) return;
+
     const loadInitialData = async () => {
       try {
         const inspectionService = SubstationInspectionService.getInstance();
@@ -621,7 +726,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     };
 
     loadInitialData();
-  }, []);
+  }, [isDBInitialized, user, districts, regions]);
 
   // Fetch regions and districts with retry logic
   const fetchRegionsAndDistricts = async (retryAttempt = 0) => {
@@ -1355,13 +1460,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       // Save the inspection using the service
       await inspectionService.saveSubstationInspectionOffline(inspection, 'create');
       
-      // Update local state immediately
-      setSavedInspections(prev => {
-        const newInspections = [...prev, inspection];
-        return newInspections.sort((a, b) => 
-          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-        );
-      });
+      // Get all records after saving to ensure we have the latest state
+      const allRecords = await inspectionService.getAllSubstationInspections();
+      setSavedInspections(allRecords);
       
       // If online, trigger immediate sync
       if (navigator.onLine) {
@@ -1514,7 +1615,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
         // If online, trigger sync immediately
         if (navigator.onLine) {
-          await inspectionService.triggerSyncAndRefresh();
+          // Get all inspections to refresh the state
+          const allRecords = await inspectionService.getAllSubstationInspections();
+          setSavedInspections(allRecords);
         }
         
         toast.success('Inspection deleted successfully');
@@ -1563,12 +1666,80 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     initializeLoadMonitoring,
     vitAssets,
     vitInspections,
-    addVITAsset: async () => '',
-    updateVITAsset: async () => {},
-    deleteVITAsset: async () => {},
-    addVITInspection: async () => '',
-    updateVITInspection: async () => {},
-    deleteVITInspection: async () => {},
+    addVITAsset: async (asset: Omit<VITAsset, "id">) => {
+      try {
+        const docRef = await addDoc(collection(db, "vitAssets"), {
+          ...asset,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+        return docRef.id;
+      } catch (error) {
+        console.error("Error adding VIT asset:", error);
+        toast.error("Failed to add asset");
+        throw error;
+      }
+    },
+    updateVITAsset: async (id: string, updates: Partial<VITAsset>) => {
+      try {
+        const docRef = doc(db, "vitAssets", id);
+        await updateDoc(docRef, {
+          ...updates,
+          updatedAt: serverTimestamp()
+        });
+      } catch (error) {
+        console.error("Error updating VIT asset:", error);
+        toast.error("Failed to update asset");
+        throw error;
+      }
+    },
+    deleteVITAsset: async (id: string) => {
+      try {
+        const docRef = doc(db, "vitAssets", id);
+        await deleteDoc(docRef);
+      } catch (error) {
+        console.error("Error deleting VIT asset:", error);
+        toast.error("Failed to delete asset");
+        throw error;
+      }
+    },
+    addVITInspection: async (inspection: Omit<VITInspectionChecklist, "id">) => {
+      try {
+        const docRef = await addDoc(collection(db, "vitInspections"), {
+          ...inspection,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+        return docRef.id;
+      } catch (error) {
+        console.error("Error adding VIT inspection:", error);
+        toast.error("Failed to add inspection");
+        throw error;
+      }
+    },
+    updateVITInspection: async (id: string, updates: Partial<VITInspectionChecklist>) => {
+      try {
+        const docRef = doc(db, "vitInspections", id);
+        await updateDoc(docRef, {
+          ...updates,
+          updatedAt: serverTimestamp()
+        });
+      } catch (error) {
+        console.error("Error updating VIT inspection:", error);
+        toast.error("Failed to update inspection");
+        throw error;
+      }
+    },
+    deleteVITInspection: async (id: string) => {
+      try {
+        const docRef = doc(db, "vitInspections", id);
+        await deleteDoc(docRef);
+      } catch (error) {
+        console.error("Error deleting VIT inspection:", error);
+        toast.error("Failed to delete inspection");
+        throw error;
+      }
+    },
     savedInspections,
     setSavedInspections: () => {},
     saveInspection,

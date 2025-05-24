@@ -17,8 +17,43 @@ window.addEventListener('offline', () => {
   isOnline = false;
 });
 
+// Secure logging function that only logs in development
+const secureLog = (message: string, data?: any) => {
+  if (process.env.NODE_ENV === 'development') {
+    if (data) {
+      console.log(message, data);
+    } else {
+      console.log(message);
+    }
+  }
+};
+
+// Secure error logging that sanitizes sensitive data
+const secureErrorLog = (message: string, error: any) => {
+  if (process.env.NODE_ENV === 'development') {
+    // Sanitize error object to remove sensitive data
+    const sanitizedError = {
+      message: error.message,
+      code: error.code,
+      name: error.name
+    };
+    console.error(message, sanitizedError);
+  }
+};
+
 export async function syncPendingChanges() {
+  if (syncInProgress) {
+    secureLog('Sync already in progress');
+    return;
+  }
+
+  if (!isOnline) {
+    secureLog('Device is offline');
+    return;
+  }
+
   try {
+    syncInProgress = true;
     const pendingItems = await getPendingSyncItems();
     const firestore = getFirestore();
     let successCount = 0;
@@ -60,15 +95,15 @@ export async function syncPendingChanges() {
               break;
           }
         } else {
-          // Handle other types as before
+          // Handle other types
           const docRef = doc(firestore, item.type, item.data.id);
 
           switch (item.action) {
             case 'create':
               await setDoc(docRef, {
                 ...item.data,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
                 syncStatus: 'synced'
               });
               break;
@@ -78,7 +113,7 @@ export async function syncPendingChanges() {
               const updateRef = doc(firestore, item.type, docId);
               await updateDoc(updateRef, {
                 ...item.data,
-                updatedAt: new Date().toISOString(),
+                updatedAt: serverTimestamp(),
                 syncStatus: 'synced'
               });
               break;
@@ -95,19 +130,19 @@ export async function syncPendingChanges() {
         await clearPendingSyncItem(item);
         successCount++;
       } catch (error) {
-        console.error(`Failed to sync item ${item.id}:`, error);
+        secureErrorLog(`Sync failed for item`, error);
         failureCount++;
         
-        // Update sync status to failed
+        // Update sync status to failed without exposing error details
         if (item.data.id) {
           const docRef = doc(firestore, item.type, item.data.id);
           try {
             await updateDoc(docRef, {
               syncStatus: 'failed',
-              syncError: error.message
+              syncError: 'Operation failed'
             });
           } catch (updateError) {
-            console.error('Failed to update sync status:', updateError);
+            secureErrorLog('Failed to update sync status', updateError);
           }
         }
       }
@@ -122,9 +157,11 @@ export async function syncPendingChanges() {
 
     return { successCount, failureCount };
   } catch (error) {
-    console.error('Error syncing pending changes:', error);
-    toast.error('Failed to sync pending changes');
-    throw error;
+    secureErrorLog('Sync operation failed', error);
+    toast.error('Failed to sync changes');
+    return { successCount: 0, failureCount: 0 };
+  } finally {
+    syncInProgress = false;
   }
 }
 

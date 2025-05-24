@@ -108,10 +108,19 @@ export const AssetInfoCard = ({ asset, getRegionName, getDistrictName }: AssetIn
             </div>
           </div>
 
-          {asset.gpsCoordinates && (
+          {asset.gpsCoordinates && asset.gpsCoordinates.trim() !== '' && (
             <div className="mt-6">
               <p className="text-sm font-medium text-muted-foreground mb-2">Location Map</p>
-              <LocationMap coordinates={asset.gpsCoordinates} assetName={`${asset.typeOfUnit} - ${asset.serialNumber}`} />
+              <LocationMap 
+                coordinates={asset.gpsCoordinates} 
+                assetName={`${asset.typeOfUnit} - ${asset.serialNumber}`} 
+              />
+            </div>
+          )}
+          
+          {!asset.gpsCoordinates && (
+            <div className="mt-6 p-4 bg-muted/50 rounded-md">
+              <p className="text-sm text-muted-foreground">No location data available for this asset.</p>
             </div>
           )}
           

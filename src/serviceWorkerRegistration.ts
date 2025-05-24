@@ -7,6 +7,9 @@
 // existing tabs open on the page have been closed, since previously cached
 // resources are updated in the background.
 
+// To learn more about the benefits of this model and instructions on how to
+// opt-in, read https://cra.link/PWA
+
 const isLocalhost = Boolean(
   window.location.hostname === 'localhost' ||
     // [::1] is the IPv6 localhost address.
@@ -20,78 +23,57 @@ type Config = {
   onUpdate?: (registration: ServiceWorkerRegistration) => void;
 };
 
+// Helper function to log only in development
+const devLog = (...args: any[]) => {
+  if (process.env.NODE_ENV === 'development') {
+    console.log(...args);
+  }
+};
+
 export function register(config?: Config) {
-  // More reliable service worker detection
-  const hasServiceWorker = typeof navigator !== 'undefined' && 
-    'serviceWorker' in navigator && 
-    typeof window !== 'undefined' && 
-    'caches' in window;
-
-  console.log('Service Worker Support Check:', {
-    hasNavigator: typeof navigator !== 'undefined',
-    hasServiceWorker: 'serviceWorker' in navigator,
-    hasWindow: typeof window !== 'undefined',
-    hasCaches: 'caches' in window,
-    finalResult: hasServiceWorker,
-    isLocalhost: isLocalhost,
-    protocol: window.location.protocol,
-    hostname: window.location.hostname
-  });
-
-  if (!hasServiceWorker) {
-    console.error('Service workers are not supported or available in this context. Details:', {
-      browser: navigator.userAgent,
-      platform: navigator.platform,
-      vendor: navigator.vendor,
-      isSecureContext: window.isSecureContext,
-      protocol: window.location.protocol,
-      hostname: window.location.hostname
-    });
-    return;
-  }
-
-  // Check if the browser is in a secure context (HTTPS or localhost)
-  if (!window.isSecureContext) {
-    console.error(
-      'Service workers require a secure context (HTTPS or localhost).\n' +
-      'Current protocol: ' + window.location.protocol + '\n' +
-      'Current hostname: ' + window.location.hostname + '\n\n' +
-      'To fix this:\n' +
-      '1. Use localhost instead of IP address: http://localhost:3000\n' +
-      '2. Or use HTTPS in production\n' +
-      '3. Or enable secure context for your development environment'
-    );
-    return;
-  }
-
-  // The URL constructor is available in all browsers that support SW.
-  const publicUrl = new URL(process.env.BASE_URL || '', window.location.href);
-  if (publicUrl.origin !== window.location.origin) {
-    console.error('Service worker registration failed: Different origins', {
-      publicUrl: publicUrl.origin,
-      windowLocation: window.location.origin
-    });
-    return;
-  }
-
-  window.addEventListener('load', () => {
-    const swUrl = `${process.env.BASE_URL || ''}/sw.js`;
-    console.log('Attempting to register service worker at:', swUrl);
-
-    if (isLocalhost) {
-      checkValidServiceWorker(swUrl, config);
-    } else {
-      registerValidSW(swUrl, config);
+  if (process.env.NODE_ENV === 'production' && 'serviceWorker' in navigator) {
+    // The URL constructor is available in all browsers that support SW.
+    const publicUrl = new URL(process.env.PUBLIC_URL, window.location.href);
+    if (publicUrl.origin !== window.location.origin) {
+      // Our service worker won't work if PUBLIC_URL is on a different origin
+      // from what our page is served on. This might happen if a CDN is used to
+      // serve assets; see https://github.com/facebook/create-react-app/issues/2374
+      return;
     }
-  });
+
+    window.addEventListener('load', () => {
+      const swUrl = `${process.env.PUBLIC_URL}/service-worker.js`;
+
+      if (isLocalhost) {
+        // This is running on localhost. Let's check if a service worker still exists or not.
+        checkValidServiceWorker(swUrl, config);
+
+        // Add some additional logging to localhost, pointing developers to the
+        // service worker/PWA documentation.
+        navigator.serviceWorker.ready.then(() => {
+          devLog(
+            'This web app is being served cache-first by a service ' +
+              'worker. To learn more, visit https://cra.link/PWA'
+          );
+        });
+      } else {
+        // Is not localhost. Just register service worker
+        registerValidSW(swUrl, config);
+      }
+    });
+  }
 }
 
 function registerValidSW(swUrl: string, config?: Config) {
   navigator.serviceWorker
     .register(swUrl)
     .then((registration) => {
-      console.log('Service worker registered successfully:', registration);
-      
+      // Disable Workbox logs in production
+      if (process.env.NODE_ENV === 'production') {
+        // @ts-ignore
+        self.__WB_DISABLE_DEV_LOGS = true;
+      }
+
       registration.onupdatefound = () => {
         const installingWorker = registration.installing;
         if (installingWorker == null) {
@@ -103,7 +85,7 @@ function registerValidSW(swUrl: string, config?: Config) {
               // At this point, the updated precached content has been fetched,
               // but the previous service worker will still serve the older
               // content until all client tabs are closed.
-              console.log(
+              devLog(
                 'New content is available and will be used when all ' +
                   'tabs for this page are closed. See https://cra.link/PWA.'
               );
@@ -116,7 +98,7 @@ function registerValidSW(swUrl: string, config?: Config) {
               // At this point, everything has been precached.
               // It's the perfect time to display a
               // "Content is cached for offline use." message.
-              console.log('Content is cached for offline use.');
+              devLog('Content is cached for offline use.');
 
               // Execute callback
               if (config && config.onSuccess) {
@@ -128,7 +110,9 @@ function registerValidSW(swUrl: string, config?: Config) {
       };
     })
     .catch((error) => {
-      console.error('Error during service worker registration:', error);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Error during service worker registration:', error);
+      }
     });
 }
 
@@ -156,9 +140,7 @@ function checkValidServiceWorker(swUrl: string, config?: Config) {
       }
     })
     .catch(() => {
-      console.log(
-        'No internet connection found. App is running in offline mode.'
-      );
+      devLog('No internet connection found. App is running in offline mode.');
     });
 }
 
@@ -169,7 +151,9 @@ export function unregister() {
         registration.unregister();
       })
       .catch((error) => {
-        console.error(error.message);
+        if (process.env.NODE_ENV === 'development') {
+          console.error(error.message);
+        }
       });
   }
 } 

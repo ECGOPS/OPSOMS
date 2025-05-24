@@ -21,72 +21,234 @@ interface BulkSMSResponse {
   status: string;
 }
 
-export const adminResetPassword = functions.https.onCall(async (data: ResetPasswordRequest, context) => {
-  // Check if the caller is authenticated and is a system admin
-  if (!context.auth) {
-    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+// export const adminResetPassword = functions.https.onRequest(async (req, res) => {
+//   // Set CORS headers
+//   res.set('Access-Control-Allow-Origin', '*');
+//   res.set('Access-Control-Allow-Methods', 'POST');
+//   res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+// 
+//   // Handle preflight requests
+//   if (req.method === 'OPTIONS') {
+//     res.status(204).send('');
+//     return;
+//   }
+// 
+//   // Only allow POST requests
+//   if (req.method !== 'POST') {
+//     res.status(405).send('Method Not Allowed');
+//     return;
+//   }
+// 
+//   try {
+//     // Get the authorization token
+//     const authHeader = req.headers.authorization;
+//     if (!authHeader) {
+//       res.status(401).send('Unauthorized');
+//       return;
+//     }
+// 
+//     const token = authHeader.split('Bearer ')[1];
+//     if (!token) {
+//       res.status(401).send('Invalid authorization header');
+//       return;
+//     }
+// 
+//     // Verify the token and get the user
+//     const decodedToken = await admin.auth().verifyIdToken(token);
+//     const adminUser = await admin.firestore().collection('users').doc(decodedToken.uid).get();
+//     
+//     if (!adminUser.exists || adminUser.data()?.role !== 'system_admin') {
+//       res.status(403).send('Only system administrators can reset passwords');
+//       return;
+//     }
+// 
+//     const { userId } = req.body;
+//     if (!userId) {
+//       res.status(400).send('User ID is required');
+//       return;
+//     }
+// 
+//     // Get the user document
+//     const userDoc = await admin.firestore().collection('users').doc(userId).get();
+//     if (!userDoc.exists) {
+//       res.status(404).send('User not found');
+//       return;
+//     }
+// 
+//     const userData = userDoc.data();
+//     const userEmail = userData?.email;
+// 
+//     if (!userEmail) {
+//       res.status(404).send('User email not found');
+//       return;
+//     }
+// 
+//     // Generate a temporary password
+//     const tempPassword = Math.random().toString(36).slice(-8);
+// 
+//     // Update the user's password using the Admin SDK
+//     await admin.auth().updateUser(userId, {
+//       password: tempPassword
+//     });
+// 
+//     res.status(200).json({ tempPassword });
+//   } catch (error: any) {
+//     console.error('Error resetting password:', error);
+//     res.status(500).json({
+//       error: 'Failed to reset password',
+//       details: error.message
+//     });
+//   }
+// });
+
+export const adminResetPasswordLegacy = functions.https.onRequest(async (req, res) => {
+  // Set CORS headers
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Methods', 'POST');
+  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('');
+    return;
   }
 
-  const adminUser = await admin.firestore().collection('users').doc(context.auth.uid).get();
-  if (!adminUser.exists || adminUser.data()?.role !== 'system_admin') {
-    throw new functions.https.HttpsError('permission-denied', 'Only system administrators can reset passwords');
+  // Only allow POST requests
+  if (req.method !== 'POST') {
+    res.status(405).send('Method Not Allowed');
+    return;
   }
-
-  const { userId } = data;
-  if (!userId) {
-    throw new functions.https.HttpsError('invalid-argument', 'User ID is required');
-  }
-
-  // Get the user document
-  const userDoc = await admin.firestore().collection('users').doc(userId).get();
-  if (!userDoc.exists) {
-    throw new functions.https.HttpsError('not-found', 'User not found');
-  }
-
-  const userData = userDoc.data();
-  const userEmail = userData?.email;
-
-  if (!userEmail) {
-    throw new functions.https.HttpsError('not-found', 'User email not found');
-  }
-
-  // Generate a temporary password
-  const tempPassword = Math.random().toString(36).slice(-8);
 
   try {
+    // Get the authorization token
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      res.status(401).send('Unauthorized');
+      return;
+    }
+
+    const token = authHeader.split('Bearer ')[1];
+    if (!token) {
+      res.status(401).send('Invalid authorization header');
+      return;
+    }
+
+    // Verify the token and get the user
+    const decodedToken = await admin.auth().verifyIdToken(token);
+    const adminUser = await admin.firestore().collection('users').doc(decodedToken.uid).get();
+    
+    if (!adminUser.exists || adminUser.data()?.role !== 'system_admin') {
+      res.status(403).send('Only system administrators can reset passwords');
+      return;
+    }
+
+    const { userId } = req.body;
+    if (!userId) {
+      res.status(400).send('User ID is required');
+      return;
+    }
+
+    // Get the user document
+    const userDoc = await admin.firestore().collection('users').doc(userId).get();
+    if (!userDoc.exists) {
+      res.status(404).send('User not found');
+      return;
+    }
+
+    const userData = userDoc.data();
+    const userEmail = userData?.email;
+
+    if (!userEmail) {
+      res.status(404).send('User email not found');
+      return;
+    }
+
+    // Generate a temporary password
+    const tempPassword = Math.random().toString(36).slice(-8);
+
     // Update the user's password using the Admin SDK
     await admin.auth().updateUser(userId, {
       password: tempPassword
     });
 
-    return { tempPassword };
-  } catch (error) {
+    res.status(200).json({ tempPassword });
+  } catch (error: any) {
     console.error('Error resetting password:', error);
-    throw new functions.https.HttpsError('internal', 'Failed to reset password');
+    res.status(500).json({
+      error: 'Failed to reset password',
+      details: error.message
+    });
   }
 });
 
-export const getIpAddress = functions.https.onCall((data: any, context: functions.https.CallableContext) => {
-  // Get the IP address from the context
-  const ipAddress = context.rawRequest?.ip || 'unknown';
+export const getIpAddress = functions.https.onRequest((req, res) => {
+  // Set CORS headers
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Methods', 'GET');
+  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('');
+    return;
+  }
+
+  // Only allow GET requests
+  if (req.method !== 'GET') {
+    res.status(405).send('Method Not Allowed');
+    return;
+  }
+
+  // Get the IP address from the request
+  const ipAddress = req.ip || 'unknown';
   
-  return {
+  res.status(200).json({
     ip: ipAddress
-  };
+  });
 });
 
-export const sendSMS = functions.https.onCall(async (data, context) => {
-  // Verify authentication
-  if (!context.auth) {
-    throw new functions.https.HttpsError(
-      'unauthenticated',
-      'The function must be called while authenticated.'
-    );
+export const sendSMS = functions.https.onRequest(async (req, res) => {
+  // Set CORS headers
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Methods', 'POST');
+  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('');
+    return;
   }
 
-  const { phoneNumber, message, faultId, faultType } = data;
+  // Only allow POST requests
+  if (req.method !== 'POST') {
+    res.status(405).send('Method Not Allowed');
+    return;
+  }
 
   try {
+    // Get the authorization token
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      res.status(401).send('Unauthorized');
+      return;
+    }
+
+    const token = authHeader.split('Bearer ')[1];
+    if (!token) {
+      res.status(401).send('Invalid authorization header');
+      return;
+    }
+
+    // Verify the token
+    await admin.auth().verifyIdToken(token);
+
+    const { phoneNumber, message, faultId, faultType } = req.body;
+
+    if (!phoneNumber || !message) {
+      res.status(400).send('Phone number and message are required');
+      return;
+    }
+
     // Format phone number to ensure it's in the correct format (e.g., +233XXXXXXXXX)
     const formattedPhoneNumber = formatPhoneNumber(phoneNumber);
 
@@ -122,41 +284,70 @@ export const sendSMS = functions.https.onCall(async (data, context) => {
       timestamp: admin.firestore.FieldValue.serverTimestamp()
     });
 
-    return { success: true, messageId: response.data.id };
+    res.status(200).json({ success: true, messageId: response.data.id });
   } catch (error: any) {
     // Log failed SMS
     await admin.firestore().collection('sms_logs').add({
-      phoneNumber,
-      message,
-      faultId,
-      faultType,
+      phoneNumber: req.body.phoneNumber,
+      message: req.body.message,
+      faultId: req.body.faultId,
+      faultType: req.body.faultType,
       status: 'failed',
       error: error.response?.data?.message || error.message,
       timestamp: admin.firestore.FieldValue.serverTimestamp()
     });
 
-    throw new functions.https.HttpsError(
-      'internal',
-      'Failed to send SMS',
-      error.response?.data || error
-    );
+    res.status(500).json({
+      error: 'Failed to send SMS',
+      details: error.response?.data || error.message
+    });
   }
 });
 
 // Test function to send SMS
-export const testSMS = functions.https.onCall(async (data, context) => {
-  // Verify authentication
-  if (!context.auth) {
-    throw new functions.https.HttpsError(
-      'unauthenticated',
-      'The function must be called while authenticated.'
-    );
+export const testSMS = functions.https.onRequest(async (req, res) => {
+  // Set CORS headers
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Methods', 'POST');
+  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('');
+    return;
   }
 
-  const { phoneNumber } = data;
-  const testMessage = "This is a test message from ECG Fault Master. Your fault has been resolved.";
+  // Only allow POST requests
+  if (req.method !== 'POST') {
+    res.status(405).send('Method Not Allowed');
+    return;
+  }
 
   try {
+    // Get the authorization token
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      res.status(401).send('Unauthorized');
+      return;
+    }
+
+    const token = authHeader.split('Bearer ')[1];
+    if (!token) {
+      res.status(401).send('Invalid authorization header');
+      return;
+    }
+
+    // Verify the token
+    await admin.auth().verifyIdToken(token);
+
+    const { phoneNumber } = req.body;
+    if (!phoneNumber) {
+      res.status(400).send('Phone number is required');
+      return;
+    }
+
+    const testMessage = "This is a test message from ECG Fault Master. Your fault has been resolved.";
+
     // Format phone number
     const formattedPhoneNumber = formatPhoneNumber(phoneNumber);
 
@@ -192,18 +383,18 @@ export const testSMS = functions.https.onCall(async (data, context) => {
       timestamp: admin.firestore.FieldValue.serverTimestamp()
     });
 
-    return { 
+    res.status(200).json({ 
       success: true, 
       messageId: response.data.id,
       message: 'Test SMS sent successfully'
-    };
+    });
   } catch (error: any) {
     console.error('Test SMS Error:', error.response?.data || error);
     
     // Log failed test SMS
     await admin.firestore().collection('sms_logs').add({
-      phoneNumber,
-      message: testMessage,
+      phoneNumber: req.body.phoneNumber,
+      message: "This is a test message from ECG Fault Master. Your fault has been resolved.",
       faultId: 'TEST',
       faultType: 'TEST',
       status: 'failed',
@@ -211,11 +402,10 @@ export const testSMS = functions.https.onCall(async (data, context) => {
       timestamp: admin.firestore.FieldValue.serverTimestamp()
     });
 
-    throw new functions.https.HttpsError(
-      'internal',
-      'Failed to send test SMS',
-      error.response?.data || error
-    );
+    res.status(500).json({
+      error: 'Failed to send test SMS',
+      details: error.response?.data || error.message
+    });
   }
 });
 

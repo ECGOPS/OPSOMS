@@ -1,11 +1,32 @@
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { VitePWA } from 'vite-plugin-pwa';
 import { securityConfig } from './src/config/security';
+import fs from 'fs';
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
+  // Load env file based on `mode` in the current directory.
+  // Set the third parameter to '' to load all env regardless of the `VITE_` prefix.
+  const env = loadEnv(mode, process.cwd(), '');
+  
+  // Check if .env file exists and its format
+  const envPath = path.resolve(process.cwd(), '.env');
+  if (fs.existsSync(envPath)) {
+    const envContent = fs.readFileSync(envPath, 'utf-8');
+    const envLines = envContent.split('\n');
+    envLines.forEach(line => {
+      if (line.trim() && !line.startsWith('#')) {
+        const hasVitePrefix = line.startsWith('VITE_');
+        const hasEquals = line.includes('=');
+        if (!hasVitePrefix || !hasEquals) {
+          console.warn(`Warning: Environment variable "${line.split('=')[0]}" is not properly formatted. It should start with VITE_ and contain a value.`);
+        }
+      }
+    });
+  }
+
   return {
     server: {
       host: true,
@@ -93,6 +114,18 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),
+      },
+    },
+    optimizeDeps: {
+      exclude: ['crypto'],
+    },
+    build: {
+      commonjsOptions: {
+        include: [/node_modules/],
+        transformMixedEsModules: true,
+      },
+      rollupOptions: {
+        external: ['crypto'],
       },
     },
   };

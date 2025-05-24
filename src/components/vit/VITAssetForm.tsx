@@ -291,7 +291,8 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
           const { latitude, longitude } = position.coords;
           const accuracy = position.coords.accuracy;
           
-          setGpsCoordinates(`${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
+          // Format coordinates without spaces
+          setGpsCoordinates(`${latitude.toFixed(6)},${longitude.toFixed(6)}`);
           setIsGettingLocation(false);
           toast.success("Location obtained successfully!");
           
@@ -745,11 +746,14 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
                 )}
               </Button>
             </div>
-            {gpsCoordinates && (
-              <div className="mt-4">
-                <LocationMap coordinates={gpsCoordinates} assetName={`VIT Asset ${serialNumber}`} />
-              </div>
-            )}
+            <div className="mt-4">
+              <LocationMap 
+                coordinates={gpsCoordinates} 
+                assetName={`VIT Asset ${serialNumber}`}
+                onLocationChange={(lat, lng) => setGpsCoordinates(`${lat.toFixed(6)},${lng.toFixed(6)}`)}
+                isEditable={true}
+              />
+            </div>
           </div>
           
           <div className="space-y-2">

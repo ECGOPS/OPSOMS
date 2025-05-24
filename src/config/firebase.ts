@@ -16,6 +16,7 @@ const requiredEnvVars = [
   'VITE_FIREBASE_MEASUREMENT_ID'
 ];
 
+// Validate all required environment variables are present
 for (const envVar of requiredEnvVars) {
   if (!import.meta.env[envVar]) {
     throw new Error(`Missing required environment variable: ${envVar}`);
@@ -43,19 +44,15 @@ const firebaseConfig = {
 // Initialize Firebase only if it hasn't been initialized
 let app;
 if (!getApps().length) {
-  console.log('[Firebase] Initializing Firebase app');
   app = initializeApp(firebaseConfig);
 } else {
-  console.log('[Firebase] Using existing Firebase app');
   app = getApps()[0];
 }
 
 // Initialize Auth first
-console.log('[Firebase] Initializing Auth');
 const auth = getAuth(app);
 
 // Initialize Firestore with memory-only cache to prevent state issues
-console.log('[Firebase] Initializing Firestore with memory-only cache');
 const db = initializeFirestore(app, {
   cacheSizeBytes: CACHE_SIZE_UNLIMITED,
   experimentalForceLongPolling: true, // Use long polling to avoid WebSocket issues
@@ -75,54 +72,41 @@ if (typeof window !== 'undefined') {
 // Reset Firestore connection to ensure clean state
 const resetFirestoreConnection = async () => {
   try {
-    console.log('[Firebase] Resetting Firestore connection');
-    
-    // Check if we're already offline
     if (!navigator.onLine) {
-      console.log('[Firebase] Already offline, skipping network reset');
       return;
     }
 
-    // Wait for any pending operations to complete
     await new Promise(resolve => setTimeout(resolve, 100));
     
     try {
-    await disableNetwork(db);
-    console.log('[Firebase] Network disabled');
+      await disableNetwork(db);
     } catch (disableError) {
       console.warn('[Firebase] Error disabling network:', disableError);
-      // Continue anyway as the network might already be disabled
     }
     
-    // Wait a moment before re-enabling
     await new Promise(resolve => setTimeout(resolve, 1000));
     
     try {
-    await enableNetwork(db);
-    console.log('[Firebase] Network re-enabled');
+      await enableNetwork(db);
     } catch (enableError) {
       console.error('[Firebase] Error enabling network:', enableError);
-      // If we can't re-enable the network, we should probably reload the page
       if (typeof window !== 'undefined') {
         window.location.reload();
       }
     }
   } catch (error) {
     console.error('[Firebase] Error resetting Firestore connection:', error);
-    // If we get a critical error, reload the page
     if (typeof window !== 'undefined' && error.message?.includes('INTERNAL ASSERTION FAILED')) {
       window.location.reload();
     }
   }
-};
+}
 
 // Add error handler for Firestore
 const handleFirestoreError = (error: any) => {
   console.error('[Firebase] Firestore error detected:', error);
   
-  // If we detect the "Unexpected state" error, reset the connection
   if (error.message && error.message.includes('INTERNAL ASSERTION FAILED: Unexpected state')) {
-    console.log('[Firebase] Detected "Unexpected state" error, resetting connection');
     resetFirestoreConnection();
   }
 };
@@ -131,40 +115,35 @@ const handleFirestoreError = (error: any) => {
 const functions = getFunctions(app);
 
 // Initialize Storage
-console.log('[Firebase] Initializing Storage');
 const storage = getStorage(app);
 
 // Configure auth persistence
 if (typeof window !== 'undefined') {
-  console.log('[Firebase] Configuring auth persistence');
-  
-  // Set auth persistence
   setPersistence(auth, browserLocalPersistence).catch((error) => {
     console.error('[Firebase] Error setting auth persistence:', error);
   });
 
-  // Initialize analytics only in browser context and if supported
   const analytics = isSupported().then(yes => yes ? getAnalytics(app) : null);
   
-  // Add global error handler for Firestore
   window.addEventListener('unhandledrejection', (event) => {
     if (event.reason && event.reason.message && 
         event.reason.message.includes('INTERNAL ASSERTION FAILED: Unexpected state')) {
-      console.log('[Firebase] Caught unhandled Firestore error, resetting connection');
       resetFirestoreConnection();
-      event.preventDefault(); // Prevent the error from propagating
+      event.preventDefault();
     }
   });
 }
 
 // Add auth state listener for debugging
 auth.onAuthStateChanged((user) => {
-  console.log('[Firebase] Auth state changed:', { 
-    hasUser: !!user, 
-    uid: user?.uid,
-    email: user?.email,
-    emailVerified: user?.emailVerified
-  });
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[Firebase] Auth state changed:', { 
+      hasUser: !!user, 
+      uid: user?.uid,
+      email: user?.email,
+      emailVerified: user?.emailVerified
+    });
+  }
 });
 
 export { auth, db, functions, storage, securityConfig, resetFirestoreConnection, handleFirestoreError }; 

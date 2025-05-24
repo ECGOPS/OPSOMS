@@ -3,6 +3,7 @@ import { OP5Fault, ControlSystemOutage } from '@/lib/types';
 import { FaultService } from './FaultService';
 import { getAuth } from 'firebase/auth';
 import { signInWithEmailAndPassword } from 'firebase/auth';
+import { setPersistence, browserLocalPersistence } from 'firebase/auth';
 
 interface FaultDB extends DBSchema {
   pendingFaults: {
@@ -118,19 +119,13 @@ export class OfflineStorageService {
     if (!user) {
       // Only try to re-authenticate if we're online
       if (this.isOnline) {
-        // Try to get stored credentials from localStorage
-        const storedEmail = localStorage.getItem('userEmail');
-        const storedPassword = localStorage.getItem('userPassword');
-        
-        if (storedEmail && storedPassword) {
-          try {
-            await signInWithEmailAndPassword(auth, storedEmail, storedPassword);
-          } catch (error) {
-            console.error('Error re-authenticating:', error);
-            throw new Error('Authentication failed');
-          }
-        } else {
-          throw new Error('User not authenticated');
+        // Instead of storing credentials, use Firebase's persistence
+        try {
+          // Firebase will handle re-authentication automatically
+          await setPersistence(auth, browserLocalPersistence);
+        } catch (error) {
+          console.error('Error re-authenticating:', error);
+          throw new Error('Authentication failed');
         }
       } else {
         // If we're offline and have no user, we can't proceed
@@ -372,19 +367,12 @@ export class OfflineStorageService {
       
       if (!currentUser) {
         console.error('[OfflineStorage] No authenticated user found during sync');
-        // Try to re-authenticate using stored credentials
-        const storedEmail = localStorage.getItem('userEmail');
-        const storedPassword = localStorage.getItem('userPassword');
-        
-        if (storedEmail && storedPassword) {
-          try {
-            await signInWithEmailAndPassword(auth, storedEmail, storedPassword);
-          } catch (error) {
-            console.error('[OfflineStorage] Failed to re-authenticate:', error);
-            throw new Error('Authentication failed');
-          }
-        } else {
-          throw new Error('Authentication required for syncing');
+        // Use Firebase's built-in persistence instead of stored credentials
+        try {
+          await setPersistence(auth, browserLocalPersistence);
+        } catch (error) {
+          console.error('[OfflineStorage] Failed to re-authenticate:', error);
+          throw new Error('Authentication failed');
         }
       }
 
@@ -394,19 +382,12 @@ export class OfflineStorageService {
         console.log('[OfflineStorage] Successfully refreshed token');
       } catch (error) {
         console.error('[OfflineStorage] Failed to refresh token:', error);
-        // If token refresh fails, try to re-authenticate
-        const storedEmail = localStorage.getItem('userEmail');
-        const storedPassword = localStorage.getItem('userPassword');
-        
-        if (storedEmail && storedPassword) {
-          try {
-            await signInWithEmailAndPassword(auth, storedEmail, storedPassword);
-            console.log('[OfflineStorage] Successfully re-authenticated');
-          } catch (error) {
-            console.error('[OfflineStorage] Failed to re-authenticate:', error);
-            throw new Error('Authentication failed');
-          }
-        } else {
+        // If token refresh fails, try to re-authenticate using Firebase persistence
+        try {
+          await setPersistence(auth, browserLocalPersistence);
+          console.log('[OfflineStorage] Successfully re-authenticated');
+        } catch (error) {
+          console.error('[OfflineStorage] Failed to re-authenticate:', error);
           throw new Error('Authentication token expired');
         }
       }

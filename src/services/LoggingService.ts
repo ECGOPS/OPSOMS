@@ -1,9 +1,11 @@
 class LoggingService {
   private static instance: LoggingService;
   private isDevelopment: boolean;
+  private isLoggingEnabled: boolean;
 
   private constructor() {
     this.isDevelopment = process.env.NODE_ENV === 'development';
+    this.isLoggingEnabled = this.isDevelopment;
   }
 
   public static getInstance(): LoggingService {
@@ -13,29 +15,41 @@ class LoggingService {
     return LoggingService.instance;
   }
 
+  public disableLogging(): void {
+    this.isLoggingEnabled = false;
+  }
+
+  public enableLogging(): void {
+    this.isLoggingEnabled = this.isDevelopment;
+  }
+
   private formatMessage(component: string, message: string, data?: any): string {
     const timestamp = new Date().toISOString();
     return `[${timestamp}] [${component}] ${message}`;
   }
 
   public log(component: string, message: string, data?: any): void {
-    if (this.isDevelopment) {
+    if (this.isLoggingEnabled) {
       console.log(this.formatMessage(component, message), data || '');
     }
-    // In production, you could send logs to a logging service
   }
 
   public error(component: string, message: string, error?: any): void {
-    console.error(this.formatMessage(component, message), error || '');
-    // In production, you could send errors to an error tracking service
+    if (this.isLoggingEnabled) {
+      console.error(this.formatMessage(component, message), error || '');
+    }
   }
 
   public warn(component: string, message: string, data?: any): void {
-    console.warn(this.formatMessage(component, message), data || '');
+    if (this.isLoggingEnabled) {
+      console.warn(this.formatMessage(component, message), data || '');
+    }
   }
 
   public info(component: string, message: string, data?: any): void {
-    console.info(this.formatMessage(component, message), data || '');
+    if (this.isLoggingEnabled) {
+      console.info(this.formatMessage(component, message), data || '');
+    }
   }
 }
 

@@ -173,7 +173,19 @@ export default function AnalyticsPage() {
 
       switch (dateRange) {
         case "days":
-          start = startOfDay(subDays(now, selectedDays - 1));
+          // For "Last N Days", we want to show data from N days ago until today
+          // For example, if today is March 15 and N=2:
+          // - Start: March 13 00:00:00 (2 days ago)
+          // - End: March 15 23:59:59 (today)
+          start = startOfDay(subDays(now, selectedDays));
+          end = endOfDay(now);
+          console.log('[loadData] Last N Days range:', {
+            selectedDays,
+            start: start.toISOString(),
+            end: end.toISOString(),
+            daysIncluded: selectedDays + 1, // +1 because we include today
+            example: `If today is ${format(now, 'MMMM d')}, this will show data from ${format(start, 'MMMM d')} to ${format(end, 'MMMM d')}`
+          });
           break;
         case "today":
           start = startOfDay(now);
@@ -185,7 +197,10 @@ export default function AnalyticsPage() {
           start = startOfDay(subDays(now, 29));
           break;
         case "year":
-          start = startOfDay(subDays(now, 364));
+          // Set start date to the beginning of last year
+          start = startOfYear(subYears(now, 1));
+          // Set end date to the end of last year
+          end = endOfYear(subYears(now, 1));
           break;
         case "custom":
           if (startDate && endDate) {
@@ -197,8 +212,8 @@ export default function AnalyticsPage() {
           break;
         case "custom-month":
           if (startMonth && endMonth) {
-            start = startOfMonth(startMonth);
-            end = endOfMonth(endMonth);
+            start = startOfDay(startMonth);
+            end = endOfDay(endMonth);
             console.log('[loadData] Custom month range:', {
               start: start.toISOString(),
               end: end.toISOString(),
@@ -339,7 +354,10 @@ export default function AnalyticsPage() {
           start = startOfDay(subDays(now, 29));
           break;
         case "year":
-          start = startOfDay(subDays(now, 364));
+          // Set start date to the beginning of last year
+          start = startOfYear(subYears(now, 1));
+          // Set end date to the end of last year
+          end = endOfYear(subYears(now, 1));
           break;
         case "custom":
           if (startDate && endDate) {
@@ -351,8 +369,8 @@ export default function AnalyticsPage() {
           break;
         case "custom-month":
           if (startMonth && endMonth) {
-            start = startOfMonth(startMonth);
-            end = endOfMonth(endMonth);
+            start = startOfDay(startMonth);
+            end = endOfDay(endMonth);
             console.log('[loadData] Custom month range:', {
               start: start.toISOString(),
               end: end.toISOString(),
@@ -533,7 +551,18 @@ export default function AnalyticsPage() {
 
       switch (dateRange) {
         case "days":
+          // For "Last N Days", we want to show data from N-1 days ago until today
+          // For example, if today is March 15 and N=2:
+          // - Start: March 14 00:00:00
+          // - End: March 15 23:59:59
           start = startOfDay(subDays(now, selectedDays - 1));
+          end = endOfDay(now);
+          console.log('[loadData] Last N Days range:', {
+            selectedDays,
+            start: start.toISOString(),
+            end: end.toISOString(),
+            daysIncluded: selectedDays
+          });
           break;
         case "today":
           start = startOfDay(now);
@@ -545,7 +574,10 @@ export default function AnalyticsPage() {
           start = startOfDay(subDays(now, 29));
           break;
         case "year":
-          start = startOfDay(subDays(now, 364));
+          // Set start date to the beginning of last year
+          start = startOfYear(subYears(now, 1));
+          // Set end date to the end of last year
+          end = endOfYear(subYears(now, 1));
           break;
         case "custom":
           if (startDate && endDate) {
@@ -557,8 +589,8 @@ export default function AnalyticsPage() {
           break;
         case "custom-month":
           if (startMonth && endMonth) {
-            start = startOfMonth(startMonth);
-            end = endOfMonth(endMonth);
+            start = startOfDay(startMonth);
+            end = endOfDay(endMonth);
             console.log('[loadData] Custom month range:', {
               start: start.toISOString(),
               end: end.toISOString(),
@@ -1564,8 +1596,10 @@ export default function AnalyticsPage() {
             end = endOfDay(now);
             break;
           case "year":
-            start = startOfDay(subDays(now, 364));
-            end = endOfDay(now);
+            // Set start date to the beginning of last year
+            start = startOfYear(subYears(now, 1));
+            // Set end date to the end of last year
+            end = endOfYear(subYears(now, 1));
             break;
           case "custom":
             if (startDate && endDate) {
@@ -1809,13 +1843,22 @@ export default function AnalyticsPage() {
                       ? `Last ${selectedDays} Days`
                       : dateRange === "all"
                       ? "All Time"
+                      : dateRange === "today"
+                      ? "Today"
+                      : dateRange === "yesterday"
+                      ? "Yesterday"
                       : dateRange === "week"
                       ? "Last 7 Days"
-                      : "Last Year"}
+                      : dateRange === "month"
+                      ? "Last 30 Days"
+                      : dateRange === "year"
+                      ? "Last Year"
+                      : "Select Date Range"}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Time</SelectItem>
+                  <SelectItem value="today">Today</SelectItem>
                   <SelectItem value="yesterday">Yesterday</SelectItem>
                   <SelectItem value="days">Last N Days</SelectItem>
                   <SelectItem value="week">Last 7 Days</SelectItem>
@@ -1984,11 +2027,25 @@ export default function AnalyticsPage() {
         </Card>
 
         {/* Showing data range info - kept subtle */}
-        {dateRange !== "all" && startDate && endDate && (
+        {dateRange !== "all" && (
           <div className="mb-4 sm:mb-6 text-sm text-muted-foreground flex items-center gap-2">
             <Calendar className="h-4 w-4" />
             <span>
-              Showing data from {format(startDate, 'MMM dd, yyyy')} to {format(endDate, 'MMM dd, yyyy')}
+              {dateRange === "today" 
+                ? `Showing data for today (${format(new Date(), 'MMM dd, yyyy')})`
+                : dateRange === "yesterday"
+                ? `Showing data for yesterday (${format(subDays(new Date(), 1), 'MMM dd, yyyy')})`
+                : startDate && endDate
+                ? `Showing data from ${format(startDate, 'MMM dd, yyyy')} to ${format(endDate, 'MMM dd, yyyy')}`
+                : dateRange === "days"
+                ? `Showing data for the last ${selectedDays} days (${format(subDays(new Date(), selectedDays), 'MMM dd')} to ${format(new Date(), 'MMM dd, yyyy')})`
+                : dateRange === "week"
+                ? `Showing data for the last 7 days`
+                : dateRange === "month"
+                ? `Showing data for the last 30 days`
+                : dateRange === "year"
+                ? `Showing data for the last year`
+                : ""}
             </span>
           </div>
         )}

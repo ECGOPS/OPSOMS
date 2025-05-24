@@ -13,6 +13,7 @@ dev-dist/
 
 # Misc
 .DS_Store
+
 .env
 .env.local
 .env.development.local
@@ -37,7 +38,6 @@ firebase-debug.*.log*
 
 # Environment variables
 .env
-.env.*
 !.env.example
 
 # Keys and secrets
