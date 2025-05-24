@@ -1,37 +1,73 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
-import { OP5Fault, ControlSystemOutage } from '@/lib/types';
+import { OP5Fault, ControlSystemOutage, VITAsset, VITInspectionChecklist } from '@/lib/types';
 import { FaultService } from './FaultService';
 import { getAuth } from 'firebase/auth';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { setPersistence, browserLocalPersistence } from 'firebase/auth';
-
-interface FaultDB extends DBSchema {
-  pendingFaults: {
-    key: string;
-    value: {
-      fault: Omit<OP5Fault, 'id'> | Omit<ControlSystemOutage, 'id'>;
-      timestamp: number;
-      type: 'op5' | 'control';
-    };
-  };
-}
 
 interface PendingFault {
   key: string;
   fault: Omit<OP5Fault, 'id'> | Omit<ControlSystemOutage, 'id'>;
   timestamp: number;
   type: 'op5' | 'control';
+  data: {
+    fault: Omit<OP5Fault, 'id'> | Omit<ControlSystemOutage, 'id'>;
+    timestamp: number;
+    type: 'op5' | 'control';
+  };
+}
+
+interface FaultDB extends DBSchema {
+  pendingFaults: {
+    key: string;
+    value: PendingFault;
+  };
+}
+
+type VITAssetData = VITAsset & {
+  type: 'VIT';
+  syncStatus: 'created' | 'updated' | 'deleted';
+  createdAt: string;
+  updatedAt: string;
+};
+
+type VITInspectionData = VITInspectionChecklist & {
+  type: 'VIT';
+  syncStatus: 'created' | 'updated' | 'deleted';
+  createdAt: string;
+  updatedAt: string;
+};
+
+interface VITDB extends DBSchema {
+  pendingAssets: {
+    key: string;
+    value: {
+      id: string;
+      data: VITAssetData;
+    };
+  };
+  pendingInspections: {
+    key: string;
+    value: {
+      id: string;
+      data: VITInspectionData;
+    };
+  };
 }
 
 export class OfflineStorageService {
   private static instance: OfflineStorageService;
-  private db: IDBPDatabase<FaultDB> | null = null;
+  private faultDB: IDBPDatabase<FaultDB> | null = null;
+  private vitDB: IDBPDatabase<VITDB> | null = null;
+  private faultDBName = 'faultStorage';
+  private vitDBName = 'vitStorage';
+  private version = 1;
+  private isSyncing: boolean = false;
+  private syncQueue: Promise<void> = Promise.resolve();
   private isOnline: boolean = navigator.onLine;
   private syncInProgress: boolean = false;
   private faultService: FaultService;
   private dbInitialized: boolean = false;
-  private isSyncing: boolean = false;
-  private syncQueue: Promise<void> = Promise.resolve();
 
   private constructor() {
     this.initializeDB();
@@ -51,7 +87,7 @@ export class OfflineStorageService {
   private async initializeDB() {
     try {
       console.log('[OfflineStorage] Initializing IndexedDB...');
-      this.db = await openDB<FaultDB>('faultmaster-offline', 1, {
+      this.faultDB = await openDB<FaultDB>(this.faultDBName, this.version, {
         upgrade(db) {
           console.log('[OfflineStorage] Upgrading database...');
           if (!db.objectStoreNames.contains('pendingFaults')) {
@@ -60,11 +96,21 @@ export class OfflineStorageService {
           }
         },
       });
+      this.vitDB = await openDB<VITDB>(this.vitDBName, this.version, {
+        upgrade(db) {
+          if (!db.objectStoreNames.contains('pendingAssets')) {
+            db.createObjectStore('pendingAssets', { keyPath: 'id' });
+          }
+          if (!db.objectStoreNames.contains('pendingInspections')) {
+            db.createObjectStore('pendingInspections', { keyPath: 'id' });
+          }
+        },
+      });
       this.dbInitialized = true;
       console.log('[OfflineStorage] Database initialized successfully');
     } catch (error) {
-      console.error('[OfflineStorage] Failed to initialize IndexedDB:', error);
-      this.dbInitialized = false;
+      console.error('[OfflineStorage] Error initializing database:', error);
+      throw error;
     }
   }
 
@@ -135,14 +181,14 @@ export class OfflineStorageService {
   }
 
   public async saveFaultOffline(fault: Omit<OP5Fault, 'id'> | Omit<ControlSystemOutage, 'id'>, type: 'op5' | 'control'): Promise<void> {
-    console.log('[OfflineStorage] Attempting to save fault offline...');
+    console.log('[OfflineStorage] Attempting to save fault offline...', { fault, type });
     
     if (!this.dbInitialized) {
       console.log('[OfflineStorage] Database not initialized, retrying initialization...');
       await this.initializeDB();
     }
 
-    if (!this.db) {
+    if (!this.faultDB) {
       console.error('[OfflineStorage] Database not available after initialization');
       throw new Error('Database not initialized');
     }
@@ -150,24 +196,24 @@ export class OfflineStorageService {
     const key = `fault_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const pendingFault: PendingFault = {
       key,
-      fault: {
-        ...fault,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        isOffline: true
-      },
+      fault,
       timestamp: Date.now(),
-      type
+      type,
+      data: {
+        fault,
+        timestamp: Date.now(),
+        type
+      }
     };
 
     try {
       console.log('[OfflineStorage] Saving fault with key:', key);
-      await this.db.add('pendingFaults', pendingFault);
+      await this.faultDB.add('pendingFaults', pendingFault);
       console.log('[OfflineStorage] Fault saved successfully');
 
       // Add to local state for immediate UI update
       if (type === 'op5') {
-        const op5Fault = pendingFault.fault as Omit<OP5Fault, 'id'>;
+        const op5Fault = fault as Omit<OP5Fault, 'id'>;
         const newFault: OP5Fault & { isOnline: boolean; synced: boolean } = {
           ...op5Fault,
           id: key,
@@ -183,7 +229,7 @@ export class OfflineStorageService {
           } 
         }));
       } else {
-        const controlOutage = pendingFault.fault as Omit<ControlSystemOutage, 'id'>;
+        const controlOutage = fault as Omit<ControlSystemOutage, 'id'>;
         const newOutage: ControlSystemOutage & { isOnline: boolean; synced: boolean } = {
           ...controlOutage,
           id: key,
@@ -221,22 +267,23 @@ export class OfflineStorageService {
       await this.initializeDB();
     }
 
-    if (!this.db) {
+    if (!this.faultDB) {
       console.error('[OfflineStorage] Database not available after initialization');
       throw new Error('Database not initialized');
     }
 
     try {
-      const keys = await this.db.getAllKeys('pendingFaults');
-      const values = await this.db.getAll('pendingFaults');
+      const keys = await this.faultDB.getAllKeys('pendingFaults');
+      const values = await this.faultDB.getAll('pendingFaults');
       
       console.log('[OfflineStorage] Found', keys.length, 'pending faults');
       
-      return keys.map((key, index) => ({
-        key,
-        fault: values[index].fault,
-        timestamp: values[index].timestamp,
-        type: values[index].type
+      return values.map((value, index) => ({
+        key: keys[index],
+        fault: value.data.fault,
+        timestamp: value.data.timestamp,
+        type: value.data.type,
+        data: value.data
       }));
     } catch (error) {
       console.error('[OfflineStorage] Error getting pending faults:', error);
@@ -247,12 +294,12 @@ export class OfflineStorageService {
   public async removePendingFault(key: string): Promise<void> {
     console.log('[OfflineStorage] Removing pending fault:', key);
     
-    if (!this.db) {
+    if (!this.faultDB) {
       throw new Error('Database not initialized');
     }
 
     try {
-      await this.db.delete('pendingFaults', key);
+      await this.faultDB.delete('pendingFaults', key);
       console.log('[OfflineStorage] Fault removed successfully');
     } catch (error) {
       console.error('[OfflineStorage] Error removing fault:', error);
@@ -434,6 +481,103 @@ export class OfflineStorageService {
       
       return false;
     }
+  }
+
+  // Add VIT asset methods
+  public async getPendingAssets(): Promise<Array<{ key: string; asset: VITAssetData }>> {
+    try {
+      const db = await this.getVITDB();
+      const pendingAssets = await db.getAll('pendingAssets');
+      return pendingAssets.map(item => ({
+        key: item.id,
+        asset: item.data
+      }));
+    } catch (error) {
+      console.error('Error getting pending assets:', error);
+      throw error;
+    }
+  }
+
+  public async getPendingAsset(key: string): Promise<{ key: string; asset: VITAssetData }> {
+    try {
+      const db = await this.getVITDB();
+      const asset = await db.get('pendingAssets', key);
+      if (!asset) {
+        throw new Error('Asset not found');
+      }
+      return {
+        key,
+        asset: asset.data
+      };
+    } catch (error) {
+      console.error('Error getting pending asset:', error);
+      throw error;
+    }
+  }
+
+  public async removePendingAsset(key: string): Promise<void> {
+    try {
+      const db = await this.getVITDB();
+      await db.delete('pendingAssets', key);
+    } catch (error) {
+      console.error('Error removing pending asset:', error);
+      throw error;
+    }
+  }
+
+  public async addPendingAsset(asset: VITAsset): Promise<string> {
+    try {
+      const db = await this.getVITDB();
+      const key = crypto.randomUUID();
+      const vitAssetData: VITAssetData = {
+        ...asset,
+        type: 'VIT',
+        syncStatus: 'created',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      await db.add('pendingAssets', {
+        id: key,
+        data: vitAssetData
+      });
+      return key;
+    } catch (error) {
+      console.error('Error adding pending asset:', error);
+      throw error;
+    }
+  }
+
+  public async updatePendingAsset(key: string, asset: VITAsset): Promise<void> {
+    try {
+      const db = await this.getVITDB();
+      const existingAsset = await db.get('pendingAssets', key);
+      if (!existingAsset) {
+        throw new Error('Asset not found');
+      }
+      const vitAssetData: VITAssetData = {
+        ...asset,
+        type: 'VIT',
+        syncStatus: 'updated',
+        updatedAt: new Date().toISOString()
+      };
+      await db.put('pendingAssets', {
+        id: key,
+        data: vitAssetData
+      });
+    } catch (error) {
+      console.error('Error updating pending asset:', error);
+      throw error;
+    }
+  }
+
+  private async getVITDB(): Promise<IDBPDatabase<VITDB>> {
+    if (!this.vitDB) {
+      await this.initializeDB();
+    }
+    if (!this.vitDB) {
+      throw new Error('Database not initialized');
+    }
+    return this.vitDB;
   }
 }
 

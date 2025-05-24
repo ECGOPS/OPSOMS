@@ -14,6 +14,10 @@ import { toast } from "sonner";
 import { getPendingSyncItems } from "@/utils/db";
 import { syncPendingChanges } from "@/utils/sync";
 import { initDB } from "@/utils/db";
+import { OfflineInspectionService } from "@/services/OfflineInspectionService";
+import { VITSyncService } from "@/services/VITSyncService";
+import { Card } from "@/components/ui/card";
+import { Info } from "lucide-react";
 
 export default function VITInspectionPage() {
   const { vitAssets, vitInspections, regions, districts } = useData();
@@ -27,6 +31,9 @@ export default function VITInspectionPage() {
   const [forceUpdate, setForceUpdate] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [pendingSync, setPendingSync] = useState(false);
+  const [offlineAssets, setOfflineAssets] = useState<VITAsset[]>([]);
+  const offlineStorage = OfflineInspectionService.getInstance();
+  const vitSyncService = VITSyncService.getInstance();
   
   // Initialize database on mount
   useEffect(() => {
@@ -40,6 +47,81 @@ export default function VITInspectionPage() {
     };
     initializeDatabase();
   }, []);
+
+  // Initialize database and load offline data
+  useEffect(() => {
+    const loadOfflineData = async () => {
+      try {
+        const pendingAssets = await vitSyncService.getPendingVITAssets();
+        setOfflineAssets(pendingAssets);
+      } catch (error) {
+        console.error('Error loading offline assets:', error);
+      }
+    };
+
+    loadOfflineData();
+  }, []);
+
+  // Add effect to handle online/offline status
+  useEffect(() => {
+    const handleOnlineStatusChange = async () => {
+      const isOnlineNow = navigator.onLine;
+      setIsOnline(isOnlineNow);
+      
+      if (isOnlineNow) {
+        try {
+          // Trigger sync when coming back online
+          await vitSyncService.syncAllVITData();
+          setForceUpdate(prev => !prev);
+          setPendingSync(false);
+        } catch (error) {
+          console.error('Error syncing data:', error);
+          setPendingSync(true);
+        }
+      }
+    };
+
+    window.addEventListener('online', handleOnlineStatusChange);
+    window.addEventListener('offline', handleOnlineStatusChange);
+
+    return () => {
+      window.removeEventListener('online', handleOnlineStatusChange);
+      window.removeEventListener('offline', handleOnlineStatusChange);
+    };
+  }, []);
+
+  // Handle manual sync
+  const handleSync = async () => {
+    try {
+      await vitSyncService.syncAllVITData();
+      setForceUpdate(prev => !prev);
+      setPendingSync(false);
+    } catch (error) {
+      console.error('Error syncing data:', error);
+      toast.error('Failed to synchronize data');
+    }
+  };
+
+  // Combine online and offline assets with duplicate prevention
+  const allAssets = useMemo(() => {
+    const onlineAssets = vitAssets || [];
+    
+    // Create a map of online assets for quick lookup
+    const onlineAssetsMap = new Map(
+      onlineAssets.map(asset => [
+        `${asset.serialNumber}_${asset.region}_${asset.district}`,
+        asset
+      ])
+    );
+
+    // Filter offline assets to only include those not already in Firebase
+    const uniqueOfflineAssets = offlineAssets.filter(offlineAsset => {
+      const assetIdentifier = `${offlineAsset.serialNumber}_${offlineAsset.region}_${offlineAsset.district}`;
+      return !onlineAssetsMap.has(assetIdentifier);
+    });
+
+    return [...onlineAssets, ...uniqueOfflineAssets];
+  }, [vitAssets, offlineAssets]);
 
   // Filter assets based on user role
   const filteredAssets = useMemo(() => {
@@ -100,47 +182,6 @@ export default function VITInspectionPage() {
     return [];
   }, [vitInspections, vitAssets, user]);
 
-  // Add effect to handle online/offline status
-  useEffect(() => {
-    const handleOnlineStatusChange = () => {
-      const isOnlineNow = navigator.onLine;
-      setIsOnline(isOnlineNow);
-      
-      if (isOnlineNow) {
-        // Trigger sync when coming back online
-        setForceUpdate(prev => !prev);
-      }
-    };
-
-    window.addEventListener('online', handleOnlineStatusChange);
-    window.addEventListener('offline', handleOnlineStatusChange);
-
-    return () => {
-      window.removeEventListener('online', handleOnlineStatusChange);
-      window.removeEventListener('offline', handleOnlineStatusChange);
-    };
-  }, []);
-
-  // Add effect to handle pending sync status
-  useEffect(() => {
-    const checkPendingSync = async () => {
-      try {
-        const pendingItems = await getPendingSyncItems();
-        const hasPendingVITItems = pendingItems.some(
-          item => item.type === 'vitAssets' || item.type === 'vitInspections'
-        );
-        setPendingSync(hasPendingVITItems);
-      } catch (error) {
-        console.error('Error checking pending sync:', error);
-      }
-    };
-
-    checkPendingSync();
-    const interval = setInterval(checkPendingSync, 5000);
-
-    return () => clearInterval(interval);
-  }, []);
-  
   const handleAddAsset = () => {
     setSelectedAsset(null);
     setIsAssetFormOpen(true);
@@ -171,23 +212,6 @@ export default function VITInspectionPage() {
   
   const handleViewInspections = (assetId: string) => {
     navigate(`/asset-management/vit-inspection-details/${assetId}`);
-  };
-
-  const handleSync = async () => {
-    try {
-      const { successCount, failureCount } = await syncPendingChanges();
-      if (successCount > 0) {
-        toast.success(`Successfully synced ${successCount} items`);
-      }
-      if (failureCount > 0) {
-        toast.error(`Failed to sync ${failureCount} items`);
-      }
-      // Force a re-render to update the UI
-      setForceUpdate(prev => !prev);
-    } catch (error) {
-      console.error('Error syncing:', error);
-      toast.error('Failed to sync changes');
-    }
   };
 
   return (
@@ -232,7 +256,7 @@ export default function VITInspectionPage() {
           
           <TabsContent value="assets" className="space-y-6">
             <VITAssetsTable 
-              assets={filteredAssets}
+              assets={allAssets}
               onAddAsset={handleAddAsset} 
               onEditAsset={handleEditAsset}
               onInspect={handleAddInspection}
@@ -313,7 +337,11 @@ export default function VITInspectionPage() {
         </Tabs>
 
         {/* Asset Form Sheet */}
-        <Sheet open={isAssetFormOpen} onOpenChange={setIsAssetFormOpen}>
+        <Sheet open={isAssetFormOpen} onOpenChange={(open) => {
+          if (!open) {
+            handleAssetFormClose();
+          }
+        }}>
           <SheetContent className="w-full sm:max-w-xl overflow-y-auto">
             <SheetHeader>
               <SheetTitle>{selectedAsset ? "Edit VIT Asset" : "Add New VIT Asset"}</SheetTitle>
@@ -326,8 +354,14 @@ export default function VITInspectionPage() {
             <div className="mt-6">
               <VITAssetForm 
                 asset={selectedAsset || undefined} 
-                onSubmit={handleAssetFormClose}
-                onCancel={handleAssetFormClose}
+                onSubmit={() => {
+                  handleAssetFormClose();
+                  setIsAssetFormOpen(false);
+                }}
+                onCancel={() => {
+                  handleAssetFormClose();
+                  setIsAssetFormOpen(false);
+                }}
               />
             </div>
           </SheetContent>

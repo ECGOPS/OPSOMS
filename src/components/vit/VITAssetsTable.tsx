@@ -22,8 +22,15 @@ import { Badge } from "@/components/ui/badge";
 import { VITAsset } from "@/lib/types";
 import { formatDate } from "@/utils/calculations";
 import { useData } from "@/contexts/DataContext";
-import { MoreHorizontal, FileText, Edit, Trash2, Download, Search, Plus } from "lucide-react";
+import { MoreHorizontal, FileText, Edit, Trash2, Download, Search, Plus, ChevronLeft, ChevronRight } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface VITAssetsTableProps {
   assets?: VITAsset[];
@@ -39,6 +46,11 @@ export function VITAssetsTable({ assets: propAssets, onAddAsset, onEditAsset, on
   const [filteredAssets, setFilteredAssets] = useState<VITAsset[]>(propAssets || vitAssets);
   const [assetToDelete, setAssetToDelete] = useState<VITAsset | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const totalPages = Math.ceil(filteredAssets.length / pageSize);
 
   useEffect(() => {
     const sourceAssets = propAssets || vitAssets;
@@ -66,7 +78,15 @@ export function VITAssetsTable({ assets: propAssets, onAddAsset, onEditAsset, on
     } else {
       setFilteredAssets(uniqueAssetsArray);
     }
+    // Reset to first page when search term changes
+    setCurrentPage(1);
   }, [searchTerm, propAssets, vitAssets]);
+
+  // Get current page items
+  const currentItems = filteredAssets.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
+  );
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -201,7 +221,7 @@ export function VITAssetsTable({ assets: propAssets, onAddAsset, onEditAsset, on
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredAssets.length === 0 ? (
+            {currentItems.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={9} className="text-center py-10 text-muted-foreground">
                   {searchTerm 
@@ -210,7 +230,7 @@ export function VITAssetsTable({ assets: propAssets, onAddAsset, onEditAsset, on
                 </TableCell>
               </TableRow>
             ) : (
-              filteredAssets.map((asset, index) => (
+              currentItems.map((asset, index) => (
                 <TableRow
                   key={`vit-asset-${asset.id}-${index}`}
                   onClick={() => handleViewDetails(asset.id)}
@@ -285,6 +305,72 @@ export function VITAssetsTable({ assets: propAssets, onAddAsset, onEditAsset, on
             )}
           </TableBody>
         </Table>
+      </div>
+
+      {/* Pagination Controls */}
+      <div className="flex items-center justify-between px-2">
+        <div className="flex items-center space-x-2">
+          <p className="text-sm text-muted-foreground">
+            Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, filteredAssets.length)} of {filteredAssets.length} assets
+          </p>
+          <Select
+            value={pageSize.toString()}
+            onValueChange={(value) => {
+              setPageSize(Number(value));
+              setCurrentPage(1);
+            }}
+          >
+            <SelectTrigger className="h-8 w-[70px]">
+              <SelectValue placeholder={pageSize} />
+            </SelectTrigger>
+            <SelectContent side="top">
+              {[10, 20, 30, 40, 50].map((size) => (
+                <SelectItem key={size} value={size.toString()}>
+                  {size}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex items-center space-x-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage(1)}
+            disabled={currentPage === 1}
+          >
+            First
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+            disabled={currentPage === 1}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <div className="flex items-center gap-1">
+            <span className="text-sm font-medium">{currentPage}</span>
+            <span className="text-sm text-muted-foreground">/</span>
+            <span className="text-sm text-muted-foreground">{totalPages}</span>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+            disabled={currentPage === totalPages}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage(totalPages)}
+            disabled={currentPage === totalPages}
+          >
+            Last
+          </Button>
+        </div>
       </div>
 
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>

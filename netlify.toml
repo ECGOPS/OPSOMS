@@ -21,8 +21,23 @@
     Referrer-Policy = "strict-origin-when-cross-origin"
     Permissions-Policy = "camera=(), microphone=(), geolocation=(self)"
     Strict-Transport-Security = "max-age=31536000; includeSubDomains; preload"
-    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.google.com https://*.googleapis.com https://*.gstatic.com https://*.gpteng.co https://*.googletagmanager.com; style-src 'self' 'unsafe-inline' https://*.google.com https://*.googleapis.com https://*.gstatic.com; img-src 'self' data: https: blob: https://*.google.com https://*.googleapis.com https://*.gstatic.com; connect-src 'self' https: wss: https://*.google.com https://*.googleapis.com https://www.google.com; font-src 'self' data: https: https://*.google.com https://*.gstatic.com; object-src 'none'; media-src 'self'; frame-src 'self' https://www.google.com https://www.google.com/maps/ https://*.googleapis.com https://*.gstatic.com; worker-src 'self' blob:; manifest-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.google.com https://*.googleapis.com https://*.gstatic.com https://*.gpteng.co https://*.googletagmanager.com; style-src 'self' 'unsafe-inline' https://*.google.com https://*.googleapis.com https://*.gstatic.com; img-src 'self' data: https: blob: https://*.google.com https://*.googleapis.com https://*.gstatic.com; connect-src 'self' https: wss: data: https://*.google.com https://*.googleapis.com https://www.google.com; font-src 'self' data: https: https://*.google.com https://*.gstatic.com; object-src 'none'; media-src 'self'; frame-src 'self' https://www.google.com https://www.google.com/maps/ https://*.googleapis.com https://*.gstatic.com; worker-src 'self' blob:; manifest-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
     Cross-Origin-Embedder-Policy = "require-corp"
     Cross-Origin-Opener-Policy = "same-origin"
     Cross-Origin-Resource-Policy = "same-site"
-    Report-To = "{ 'group': 'csp-endpoint', 'max_age': 10886400, 'endpoints': [{ 'url': '/api/csp-report' }] }" 
+    Report-To = "{ 'group': 'csp-endpoint', 'max_age': 10886400, 'endpoints': [{ 'url': '/api/csp-report' }] }"
+
+[[headers]]
+  for = "https://*.googleapis.com/*"
+  [headers.values]
+    Cross-Origin-Resource-Policy = "cross-origin"
+
+[[headers]]
+  for = "https://*.gstatic.com/*"
+  [headers.values]
+    Cross-Origin-Resource-Policy = "cross-origin"
+
+[[headers]]
+  for = "https://*.google.com/*"
+  [headers.values]
+    Cross-Origin-Resource-Policy = "cross-origin" 

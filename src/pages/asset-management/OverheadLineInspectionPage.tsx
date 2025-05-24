@@ -25,6 +25,7 @@ import {
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationPrevious, PaginationNext } from "@/components/ui/pagination";
 import { InspectionDetailsView } from "@/components/inspection/InspectionDetailsView";
 import { useNavigate } from "react-router-dom";
+import { OfflineInspectionService } from "@/services/OfflineInspectionService";
 
 export default function OverheadLineInspectionPage() {
   const { user } = useAuth();
@@ -41,6 +42,45 @@ export default function OverheadLineInspectionPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
   const navigate = useNavigate();
+  const offlineStorage = OfflineInspectionService.getInstance();
+  const [offlineInspections, setOfflineInspections] = useState<OverheadLineInspection[]>([]);
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+
+  // Load offline inspections
+  useEffect(() => {
+    const handleOfflineInspectionsUpdate = (event: CustomEvent) => {
+      setOfflineInspections(event.detail.inspections);
+    };
+
+    // Load initial offline inspections
+    setOfflineInspections(offlineStorage.getOfflineInspections());
+
+    window.addEventListener('offlineInspectionsUpdated', handleOfflineInspectionsUpdate as EventListener);
+
+    return () => {
+      window.removeEventListener('offlineInspectionsUpdated', handleOfflineInspectionsUpdate as EventListener);
+    };
+  }, [offlineStorage]);
+
+  // Handle online/offline status
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOffline(false);
+      offlineStorage.syncPendingInspections();
+    };
+
+    const handleOffline = () => {
+      setIsOffline(true);
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [offlineStorage]);
 
   // Filter districts based on selected region
   const filteredDistricts = useMemo(() => {
@@ -50,9 +90,13 @@ export default function OverheadLineInspectionPage() {
 
   // Filter inspections based on user's role and assigned district/region
   const filteredInspections = useMemo(() => {
-    if (!overheadLineInspections) return [];
+    // Combine online and offline inspections
+    const allInspections = [
+      ...(overheadLineInspections || []),
+      ...offlineInspections
+    ];
     
-    let filtered = overheadLineInspections;
+    let filtered = allInspections;
     
     // Apply role-based filtering
     if (user?.role === 'district_engineer' || user?.role === 'technician') {
@@ -92,7 +136,7 @@ export default function OverheadLineInspectionPage() {
     }
     
     return filtered;
-  }, [overheadLineInspections, user, selectedDate, selectedMonth, selectedRegion, selectedDistrict]);
+  }, [overheadLineInspections, offlineInspections, user, selectedDate, selectedMonth, selectedRegion, selectedDistrict]);
 
   // Calculate pagination
   const totalPages = Math.ceil(filteredInspections.length / pageSize);
@@ -169,6 +213,14 @@ export default function OverheadLineInspectionPage() {
               <p className="text-muted-foreground mt-1">
                 Manage and monitor overhead line inspections
               </p>
+              {isOffline && (
+                <p className="text-sm text-yellow-600 mt-1">
+                  You are currently offline. Changes will be saved locally and synced when you're back online.
+                  {offlineInspections.length > 0 && (
+                    <span> You have {offlineInspections.length} inspection{offlineInspections.length === 1 ? '' : 's'} saved offline.</span>
+                  )}
+                </p>
+              )}
             </div>
             {(user?.role === 'global_engineer' || user?.role === 'district_engineer' || user?.role === 'regional_engineer' || user?.role === 'technician' || user?.role === 'system_admin') && (
               <Button onClick={handleAddInspection} className="mt-4 md:mt-0">

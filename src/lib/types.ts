@@ -226,6 +226,7 @@ export type ConditionStatus = "good" | "bad" | "";
 
 export type VITAsset = {
   id: string;
+  type: 'VIT';
   region: string;
   district: string;
   voltageLevel: VoltageLevel;
@@ -240,6 +241,7 @@ export type VITAsset = {
   updatedAt: any; // Firestore Timestamp
   createdBy: string;
   originalOfflineId?: string; // Added for offline tracking
+  syncStatus?: 'pending' | 'synced' | 'deleted' | 'created' | 'updated'; // Added for offline sync
 };
 
 export type VITInspectionChecklist = {

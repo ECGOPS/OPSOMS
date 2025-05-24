@@ -71,6 +71,7 @@ import { SubstationInspectionService } from '@/services/SubstationInspectionServ
 import { syncPendingChanges } from '@/utils/sync';
 import { getAllItems } from "@/lib/indexedDB";
 import { SMSService } from "@/services/SMSService";
+import { VITSyncService } from "@/services/VITSyncService";
 
 const DB_NAME = 'ecg-oms-db';
 const DB_VERSION = 4;  // Update from 3 to 4
@@ -582,6 +583,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [canDeleteLoadMonitoring, setCanDeleteLoadMonitoring] = useState(false);
   const [isDBInitialized, setIsDBInitialized] = useState(false);
   const inspectionService = SubstationInspectionService.getInstance();
+  const vitSyncService = VITSyncService.getInstance();
 
   useEffect(() => {
     // Initialize the database when the component mounts
@@ -871,22 +873,35 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubscribe = onSnapshot(q, async (snapshot) => {
       try {
-        // Use a Map to ensure unique assets by ID
+        // Get Firestore data
+        const firestoreAssets = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as VITAsset[];
+
+        // Get offline data
+        const pendingAssets = await vitSyncService.getPendingVITAssets();
+        
+        // Merge Firestore and offline data
         const assetMap = new Map<string, VITAsset>();
         
-        snapshot.docs.forEach(doc => {
-          const asset = {
-            id: doc.id,
-            ...doc.data()
-          } as VITAsset;
-          assetMap.set(doc.id, asset);
+        // Add Firestore assets
+        firestoreAssets.forEach(asset => {
+          assetMap.set(asset.id, asset);
         });
         
-        // Convert Map back to array
-        const assets = Array.from(assetMap.values());
-        setVITAssets(assets);
+        // Add pending assets that aren't in Firestore
+        pendingAssets.forEach(asset => {
+          if (!assetMap.has(asset.id)) {
+            assetMap.set(asset.id, asset);
+          }
+        });
+        
+        // Convert map to array and update state
+        const mergedAssets = Array.from(assetMap.values());
+        setVITAssets(mergedAssets);
       } catch (error) {
         console.error("Error updating VIT assets:", error);
         toast.error("Error updating assets list");
@@ -894,7 +909,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     });
 
     return () => unsubscribe();
-  }, [user]);
+  }, [user, vitSyncService]);
 
   // Subscribe to OP5 faults
   useEffect(() => {
@@ -1635,6 +1650,67 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Update the online handler in the useEffect
+  useEffect(() => {
+    if (!isDBInitialized) return;
+
+    const handleOnline = async () => {
+      console.log('[DataContext] Network connection restored');
+      try {
+        // Get the VIT sync service instance
+        const vitSyncService = VITSyncService.getInstance();
+        
+        // Get pending assets before sync
+        const pendingAssetsBefore = await vitSyncService.getPendingVITAssets();
+        console.log('[DataContext] Pending assets before sync:', pendingAssetsBefore.length);
+        
+        // Trigger sync
+        await vitSyncService.syncAllVITData();
+        
+        // Get pending assets after sync
+        const pendingAssetsAfter = await vitSyncService.getPendingVITAssets();
+        console.log('[DataContext] Pending assets after sync:', pendingAssetsAfter.length);
+        
+        if (pendingAssetsAfter.length > 0) {
+          console.warn('[DataContext] Some assets failed to sync:', pendingAssetsAfter);
+          toast.error(`${pendingAssetsAfter.length} assets failed to sync. Please try again.`);
+        } else {
+          toast.success('All assets synced successfully');
+        }
+        
+        // Update UI with latest data
+        setVITAssets(prevAssets => {
+          const updatedAssets = [...prevAssets];
+          
+          // Remove any assets that were successfully synced
+          const syncedAssets = pendingAssetsBefore.filter(
+            before => !pendingAssetsAfter.some(after => after.id === before.id)
+          );
+          
+          // Update or add synced assets
+          syncedAssets.forEach(asset => {
+            const index = updatedAssets.findIndex(a => a.id === asset.id);
+            if (index >= 0) {
+              updatedAssets[index] = asset;
+            } else {
+              updatedAssets.push(asset);
+            }
+          });
+          
+          return updatedAssets;
+        });
+      } catch (error) {
+        console.error('[DataContext] Error handling online state:', error);
+        toast.error('Failed to sync offline data. Please try again.');
+      }
+    };
+
+    window.addEventListener('online', handleOnline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [isDBInitialized]);
+
   // Update context value
   const contextValue: DataContextType = {
     regions,
@@ -1668,38 +1744,25 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     vitInspections,
     addVITAsset: async (asset: Omit<VITAsset, "id">) => {
       try {
-        const docRef = await addDoc(collection(db, "vitAssets"), {
-          ...asset,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
-        });
-        return docRef.id;
+        return await vitSyncService.addVITAsset(asset);
       } catch (error) {
         console.error("Error adding VIT asset:", error);
-        toast.error("Failed to add asset");
         throw error;
       }
     },
     updateVITAsset: async (id: string, updates: Partial<VITAsset>) => {
       try {
-        const docRef = doc(db, "vitAssets", id);
-        await updateDoc(docRef, {
-          ...updates,
-          updatedAt: serverTimestamp()
-        });
+        await vitSyncService.updateVITAsset({ id, ...updates });
       } catch (error) {
         console.error("Error updating VIT asset:", error);
-        toast.error("Failed to update asset");
         throw error;
       }
     },
     deleteVITAsset: async (id: string) => {
       try {
-        const docRef = doc(db, "vitAssets", id);
-        await deleteDoc(docRef);
+        await vitSyncService.deleteVITAsset(id);
       } catch (error) {
         console.error("Error deleting VIT asset:", error);
-        toast.error("Failed to delete asset");
         throw error;
       }
     },

@@ -26,6 +26,7 @@ import { AlertTriangle, CheckCircle2, ClipboardList, Loader2, WifiOff } from "lu
 import { VITInspectionChecklist, VITAsset, YesNoOption, GoodBadOption } from "@/lib/types";
 import { toast } from "react-hot-toast";
 import { serverTimestamp } from "firebase/firestore";
+import { OfflineInspectionService } from "@/services/OfflineInspectionService";
 
 interface VITInspectionFormProps {
   inspectionData?: VITInspectionChecklist;
@@ -43,6 +44,9 @@ export function VITInspectionForm({
   const { vitAssets, addVITInspection, updateVITInspection, regions, districts } = useData();
   const { user } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const offlineStorage = OfflineInspectionService.getInstance();
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const [offlineInspections, setOfflineInspections] = useState<VITInspectionChecklist[]>([]);
 
   // Form fields
   const [selectedAssetId, setSelectedAssetId] = useState<string>(assetId || inspectionData?.vitAssetId || "");
@@ -129,6 +133,71 @@ export function VITInspectionForm({
     }
   }, [selectedAssetId, vitAssets]);
 
+  // Add event listeners for offline sync
+  useEffect(() => {
+    const handleInspectionAdded = (event: CustomEvent) => {
+      if (event.detail.type === 'vit') {
+        if (event.detail.status === 'success') {
+          toast.success("Inspection saved offline successfully");
+        } else {
+          toast.error(event.detail.error || "Failed to save inspection offline");
+        }
+      }
+    };
+
+    const handleInspectionSynced = (event: CustomEvent) => {
+      if (event.detail.status === 'success') {
+        toast.success("Offline inspection synced successfully");
+      } else {
+        toast.error(event.detail.error || "Failed to sync offline inspection");
+      }
+    };
+
+    window.addEventListener('inspectionAdded', handleInspectionAdded as EventListener);
+    window.addEventListener('inspectionSynced', handleInspectionSynced as EventListener);
+
+    return () => {
+      window.removeEventListener('inspectionAdded', handleInspectionAdded as EventListener);
+      window.removeEventListener('inspectionSynced', handleInspectionSynced as EventListener);
+    };
+  }, []);
+
+  // Add offline status indicator
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOffline(false);
+      offlineStorage.syncPendingInspections();
+    };
+
+    const handleOffline = () => {
+      setIsOffline(true);
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [offlineStorage]);
+
+  // Add event listener for offline inspections updates
+  useEffect(() => {
+    const handleOfflineInspectionsUpdate = (event: CustomEvent) => {
+      setOfflineInspections(event.detail.inspections);
+    };
+
+    // Load initial offline inspections
+    setOfflineInspections(offlineStorage.getOfflineInspections());
+
+    window.addEventListener('offlineInspectionsUpdated', handleOfflineInspectionsUpdate as EventListener);
+
+    return () => {
+      window.removeEventListener('offlineInspectionsUpdated', handleOfflineInspectionsUpdate as EventListener);
+    };
+  }, [offlineStorage]);
+
   // Filter assets based on user role
   const filteredAssets = vitAssets.filter(asset => {
     if (user?.role === "global_engineer" || user?.role === "system_admin") return true;
@@ -199,7 +268,7 @@ export function VITInspectionForm({
 
     try {
       const timestamp = new Date().toISOString();
-      const newInspectionData = {
+      const newInspectionData: Omit<VITInspectionChecklist, 'id'> = {
         vitAssetId: selectedAsset.id,
         region: selectedAsset.region,
         district: selectedAsset.district,
@@ -231,14 +300,37 @@ export function VITInspectionForm({
         updatedAt: timestamp
       };
 
-      if (inspectionData) {
-        // Update existing inspection
-        await updateVITInspection(inspectionData.id, newInspectionData);
-        toast.success("Inspection updated successfully");
+      const isOnline = navigator.onLine;
+      console.log('[VITInspectionForm] Internet available:', isOnline);
+
+      if (isOnline) {
+        if (inspectionData?.id) {
+          // Only update if we have a valid ID and the inspection exists
+          try {
+            await updateVITInspection(inspectionData.id, newInspectionData);
+            toast.success("Inspection updated successfully");
+          } catch (error) {
+            console.error('[VITInspectionForm] Error updating inspection:', error);
+            // If update fails, try to create a new inspection
+            console.log('[VITInspectionForm] Attempting to create new inspection instead...');
+            await addVITInspection(newInspectionData);
+            toast.success("Inspection saved successfully");
+          }
+        } else {
+          // Add new inspection
+          await addVITInspection(newInspectionData);
+          toast.success("Inspection saved successfully");
+        }
       } else {
-        // Add new inspection
-        await addVITInspection(newInspectionData);
-        toast.success("Inspection saved successfully");
+        console.log('[VITInspectionForm] Saving inspection offline...');
+        try {
+          await offlineStorage.saveInspectionOffline(newInspectionData);
+          toast.success("Inspection saved offline. It will be synced when internet connection is restored.");
+        } catch (error) {
+          console.error('[VITInspectionForm] Error saving inspection offline:', error);
+          toast.error("Failed to save inspection offline. Please try again when you have internet connection.");
+          throw error;
+        }
       }
 
       // Call onSubmit to close the form
@@ -248,7 +340,6 @@ export function VITInspectionForm({
       toast.error("Failed to save inspection. Please try again.");
     } finally {
       setIsSubmitting(false);
-      toast.info("Submission process finished.");
     }
   };
 
@@ -261,6 +352,18 @@ export function VITInspectionForm({
           <ClipboardList className="h-5 w-5" />
           {inspectionData ? "Edit VIT Inspection" : "New VIT Inspection"}
         </CardTitle>
+        {isOffline && (
+          <div className="mt-1">
+            <p className="text-sm text-yellow-600">
+              You are currently offline. Changes will be saved locally and synced when you're back online.
+            </p>
+            {offlineInspections.length > 0 && (
+              <p className="text-sm text-yellow-600 mt-1">
+                You have {offlineInspections.length} inspection{offlineInspections.length === 1 ? '' : 's'} saved offline.
+              </p>
+            )}
+          </div>
+        )}
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-6">

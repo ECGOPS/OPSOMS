@@ -427,7 +427,7 @@ export function OverheadLineInspectionsTable({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Date</TableHead>
+              <TableHead>Date & Time</TableHead>
               <TableHead>Region</TableHead>
               <TableHead>District</TableHead>
               <TableHead>Feeder Name</TableHead>
@@ -448,29 +448,32 @@ export function OverheadLineInspectionsTable({
                 className="cursor-pointer hover:bg-muted transition-colors"
               >
                 <TableCell>
-                    {inspection.date 
-                      ? `${inspection.date}${inspection.time ? ` ${inspection.time}` : ''}`
-                      : inspection.createdAt && inspection.createdAt !== "" && !isNaN(new Date(inspection.createdAt).getTime())
-                      ? format(new Date(inspection.createdAt), "dd/MM/yyyy HH:mm")
-                      : new Date().toLocaleDateString()}
+                  {inspection.date 
+                    ? `${inspection.date}${inspection.time ? ` ${inspection.time}` : ''}`
+                    : inspection.createdAt && inspection.createdAt !== "" && !isNaN(new Date(inspection.createdAt).getTime())
+                    ? format(new Date(inspection.createdAt), "dd/MM/yyyy HH:mm")
+                    : new Date().toLocaleDateString()}
+                  {inspection.id.startsWith('inspection_') && (
+                    <span className="ml-2 text-xs text-yellow-600">(Offline)</span>
+                  )}
                 </TableCell>
-                  <TableCell>{inspection.region || "Unknown"}</TableCell>
-                  <TableCell>{inspection.district || "Unknown"}</TableCell>
+                <TableCell>{inspection.region || "Unknown"}</TableCell>
+                <TableCell>{inspection.district || "Unknown"}</TableCell>
                 <TableCell>{inspection.feederName}</TableCell>
                 <TableCell>{inspection.voltageLevel}</TableCell>
                 <TableCell>{inspection.referencePole}</TableCell>
                 <TableCell>
-                    <Badge
-                      className={
-                        inspection.status === "completed"
-                          ? "bg-green-500"
-                          : inspection.status === "in-progress"
-                          ? "bg-yellow-500"
-                          : "bg-gray-500"
-                      }
-                    >
-                      {inspection.status ? inspection.status.charAt(0).toUpperCase() + inspection.status.slice(1) : "Unknown"}
-                    </Badge>
+                  <Badge
+                    className={
+                      inspection.status === "completed"
+                        ? "bg-green-500"
+                        : inspection.status === "in-progress"
+                        ? "bg-yellow-500"
+                        : "bg-gray-500"
+                    }
+                  >
+                    {inspection.status ? inspection.status.charAt(0).toUpperCase() + inspection.status.slice(1) : "Unknown"}
+                  </Badge>
                 </TableCell>
                 <TableCell className="text-right actions-cell">
                   <DropdownMenu>

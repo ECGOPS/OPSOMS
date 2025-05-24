@@ -1,6 +1,6 @@
 import { doc, updateDoc, addDoc, collection } from "firebase/firestore";
 import { db } from "../config/firebase";
-import { OverheadLineInspection } from "./types";
+import { OverheadLineInspection, VITAsset } from "./types";
 
 interface Region {
   id: string;
@@ -75,4 +75,14 @@ export const updateOverheadLineInspection = async (id: string, data: Partial<Ove
 export const addOverheadLineInspection = async (data: Omit<OverheadLineInspection, "id">) => {
   const docRef = await addDoc(collection(db, "overheadLineInspections"), data);
   return docRef.id;
+};
+
+export const addVITAsset = async (data: Omit<VITAsset, "id">) => {
+  const docRef = await addDoc(collection(db, "vitAssets"), data);
+  return docRef.id;
+};
+
+export const updateVITAsset = async (id: string, data: Partial<VITAsset>) => {
+  const docRef = doc(db, "vitAssets", id);
+  await updateDoc(docRef, data);
 }; 

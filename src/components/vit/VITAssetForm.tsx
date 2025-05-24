@@ -489,14 +489,33 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
         setPhotoUrl("");
         setCapturedImage(null);
       }
-      
-      onSubmit();
+
+      // Call onSubmit to close the form after successful save
+      console.log("Calling onSubmit to close form");
+      try {
+        onSubmit();
+      } catch (error) {
+        console.error("Error closing form:", error);
+        // Even if there's an error closing the form, we still want to show success
+        toast.success("Asset saved successfully");
+      }
     } catch (error) {
       console.error("Error submitting VIT asset:", error);
-      toast.error("Failed to save asset. Please try again.");
+      // Check if the error is due to being offline
+      if (!navigator.onLine) {
+        toast.success("Asset saved offline. Will sync when online.");
+        // Still close the form since the save was successful (offline)
+        try {
+          onSubmit();
+        } catch (closeError) {
+          console.error("Error closing form:", closeError);
+        }
+      } else {
+        toast.error("Failed to save asset. Please try again.");
+      }
     } finally {
+      console.log("Form submission process finished");
       setIsSubmitting(false);
-      toast.info("Asset submission process finished.");
     }
   };
   
@@ -600,7 +619,7 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
         <CardTitle>{asset ? "Edit VIT Asset" : "Add New VIT Asset"}</CardTitle>
       </CardHeader>
       <CardContent className="bg-card">
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form id="vit-asset-form" onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="region">Region *</Label>
@@ -827,7 +846,7 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
         <Button variant="outline" onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="submit" disabled={isSubmitting} onClick={(e) => { console.log("Submit button clicked"); handleSubmit(e); }}>
+        <Button type="submit" disabled={isSubmitting} form="vit-asset-form">
           {isSubmitting ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />

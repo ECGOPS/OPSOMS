@@ -22,6 +22,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { showNotification, showServiceWorkerNotification } from '@/utils/notifications';
 import { serverTimestamp } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
+import { OfflineInspectionService } from '@/services/OfflineInspectionService';
 
 interface OverheadLineInspectionFormProps {
   inspection?: OverheadLineInspection | null;
@@ -37,6 +38,8 @@ export function OverheadLineInspectionForm({ inspection, onSubmit, onCancel }: O
   const [isGettingLocation, setIsGettingLocation] = useState(false);
   const navigate = useNavigate();
   const { addOverheadLineInspection, updateOverheadLineInspection } = useData();
+  const offlineStorage = OfflineInspectionService.getInstance();
+  const [offlineInspections, setOfflineInspections] = useState<OverheadLineInspection[]>([]);
 
   const defaultInsulatorCondition = {
     brokenOrCracked: false,
@@ -428,27 +431,50 @@ export function OverheadLineInspectionForm({ inspection, onSubmit, onCancel }: O
           .filter(([_, value]) => value !== undefined)
       ) as OverheadLineInspection;
 
-      if (inspection) {
-        try {
-          await updateOverheadLineInspection(inspection.id, finalData);
-          toast({ title: "Success", description: "Inspection updated successfully" });
-        } catch (error) {
-          if (error instanceof Error && error.message.includes("not found")) {
-            // If the inspection was not found, create a new one instead
-            const { id, ...dataWithoutId } = finalData;
-            await addOverheadLineInspection(dataWithoutId);
-            toast({ 
-              title: "Success", 
-              description: "Inspection was not found and has been recreated" 
-            });
-          } else {
-            throw error;
+      const isOnline = offlineStorage.isInternetAvailable();
+      console.log('[OverheadLineInspectionForm] Internet available:', isOnline);
+
+      if (isOnline) {
+        if (inspection) {
+          try {
+            await updateOverheadLineInspection(inspection.id, finalData);
+            toast({ title: "Success", description: "Inspection updated successfully" });
+          } catch (error) {
+            if (error instanceof Error && error.message.includes("not found")) {
+              // If the inspection was not found, create a new one instead
+              const { id, ...dataWithoutId } = finalData;
+              await addOverheadLineInspection(dataWithoutId);
+              toast({ 
+                title: "Success", 
+                description: "Inspection was not found and has been recreated" 
+              });
+            } else {
+              throw error;
+            }
           }
+        } else {
+          const { id, ...dataWithoutId } = finalData;
+          await addOverheadLineInspection(dataWithoutId);
+          toast({ title: "Success", description: "Inspection created successfully" });
         }
       } else {
-        const { id, ...dataWithoutId } = finalData;
-        await addOverheadLineInspection(dataWithoutId);
-        toast({ title: "Success", description: "Inspection created successfully" });
+        console.log('[OverheadLineInspectionForm] Saving inspection offline...');
+        try {
+          const { id, ...dataWithoutId } = finalData;
+          await offlineStorage.saveInspectionOffline(dataWithoutId);
+          toast({ 
+            title: "Success", 
+            description: "Inspection saved offline. It will be synced when internet connection is restored." 
+          });
+        } catch (error) {
+          console.error('[OverheadLineInspectionForm] Error saving inspection offline:', error);
+          toast({ 
+            title: "Error", 
+            description: "Failed to save inspection offline. Please try again when you have internet connection.",
+            variant: "destructive"
+          });
+          throw error;
+        }
       }
       
       setIsSubmitting(false);
@@ -1565,12 +1591,107 @@ export function OverheadLineInspectionForm({ inspection, onSubmit, onCancel }: O
     </Card>
   ), [formData]);
 
+  // Add event listeners for offline sync
+  useEffect(() => {
+    const handleInspectionAdded = (event: CustomEvent) => {
+      if (event.detail.type === 'overhead') {
+        if (event.detail.status === 'success') {
+          toast({ 
+            title: "Success", 
+            description: "Inspection saved offline successfully" 
+          });
+        } else {
+          toast({ 
+            title: "Error", 
+            description: event.detail.error || "Failed to save inspection offline",
+            variant: "destructive"
+          });
+        }
+      }
+    };
+
+    const handleInspectionSynced = (event: CustomEvent) => {
+      if (event.detail.status === 'success') {
+        toast({ 
+          title: "Success", 
+          description: "Offline inspection synced successfully" 
+        });
+      } else {
+        toast({ 
+          title: "Error", 
+          description: event.detail.error || "Failed to sync offline inspection",
+          variant: "destructive"
+        });
+      }
+    };
+
+    window.addEventListener('inspectionAdded', handleInspectionAdded as EventListener);
+    window.addEventListener('inspectionSynced', handleInspectionSynced as EventListener);
+
+    return () => {
+      window.removeEventListener('inspectionAdded', handleInspectionAdded as EventListener);
+      window.removeEventListener('inspectionSynced', handleInspectionSynced as EventListener);
+    };
+  }, [toast]);
+
+  // Add offline status indicator
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOffline(false);
+      offlineStorage.syncPendingInspections();
+    };
+
+    const handleOffline = () => {
+      setIsOffline(true);
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [offlineStorage]);
+
+  // Add event listener for offline inspections updates
+  useEffect(() => {
+    const handleOfflineInspectionsUpdate = (event: CustomEvent) => {
+      setOfflineInspections(event.detail.inspections);
+    };
+
+    // Load initial offline inspections
+    setOfflineInspections(offlineStorage.getOfflineInspections());
+
+    window.addEventListener('offlineInspectionsUpdated', handleOfflineInspectionsUpdate as EventListener);
+
+    return () => {
+      window.removeEventListener('offlineInspectionsUpdated', handleOfflineInspectionsUpdate as EventListener);
+    };
+  }, [offlineStorage]);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">
-          {inspection ? "Edit Overhead Line Inspection" : "New Overhead Line Inspection"}
-        </h2>
+        <div>
+          <h2 className="text-2xl font-bold">
+            {inspection ? "Edit Overhead Line Inspection" : "New Overhead Line Inspection"}
+          </h2>
+          {isOffline && (
+            <div className="mt-1">
+              <p className="text-sm text-yellow-600">
+                You are currently offline. Changes will be saved locally and synced when you're back online.
+              </p>
+              {offlineInspections.length > 0 && (
+                <p className="text-sm text-yellow-600 mt-1">
+                  You have {offlineInspections.length} inspection{offlineInspections.length === 1 ? '' : 's'} saved offline.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
         <Button variant="outline" onClick={onCancel}>
           Cancel
         </Button>

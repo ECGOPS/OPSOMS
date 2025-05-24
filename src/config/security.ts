@@ -21,8 +21,8 @@ export const securityConfig = {
         upgradeInsecureRequests: []
       }
     },
-    crossOriginEmbedderPolicy: true,
-    crossOriginOpenerPolicy: true,
+    crossOriginEmbedderPolicy: { policy: "require-corp" },
+    crossOriginOpenerPolicy: { policy: "same-origin" },
     crossOriginResourcePolicy: { policy: "same-site" },
     dnsPrefetchControl: true,
     frameguard: { action: "deny" },
