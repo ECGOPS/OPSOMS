@@ -182,6 +182,21 @@ export default function VITInspectionPage() {
     return [];
   }, [vitInspections, vitAssets, user]);
 
+  // Add effect to handle asset added events
+  useEffect(() => {
+    const handleAssetAdded = (event: CustomEvent) => {
+      if (event.detail.type === 'vit') {
+        // Add the new asset to offline assets immediately
+        setOfflineAssets(prev => [...prev, event.detail.asset]);
+      }
+    };
+
+    window.addEventListener('assetAdded', handleAssetAdded as EventListener);
+    return () => {
+      window.removeEventListener('assetAdded', handleAssetAdded as EventListener);
+    };
+  }, []);
+
   const handleAddAsset = () => {
     setSelectedAsset(null);
     setIsAssetFormOpen(true);

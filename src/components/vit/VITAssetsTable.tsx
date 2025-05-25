@@ -308,10 +308,13 @@ export function VITAssetsTable({ assets: propAssets, onAddAsset, onEditAsset, on
       </div>
 
       {/* Pagination Controls */}
-      <div className="flex items-center justify-between px-2">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-2">
         <div className="flex items-center space-x-2">
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-muted-foreground hidden sm:block">
             Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, filteredAssets.length)} of {filteredAssets.length} assets
+          </p>
+          <p className="text-sm text-muted-foreground sm:hidden">
+            {filteredAssets.length} assets
           </p>
           <Select
             value={pageSize.toString()}
@@ -338,6 +341,7 @@ export function VITAssetsTable({ assets: propAssets, onAddAsset, onEditAsset, on
             size="sm"
             onClick={() => setCurrentPage(1)}
             disabled={currentPage === 1}
+            className="hidden sm:inline-flex"
           >
             First
           </Button>
@@ -367,6 +371,7 @@ export function VITAssetsTable({ assets: propAssets, onAddAsset, onEditAsset, on
             size="sm"
             onClick={() => setCurrentPage(totalPages)}
             disabled={currentPage === totalPages}
+            className="hidden sm:inline-flex"
           >
             Last
           </Button>

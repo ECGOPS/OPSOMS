@@ -26,6 +26,7 @@ import { Pagination, PaginationContent, PaginationItem, PaginationLink, Paginati
 import { InspectionDetailsView } from "@/components/inspection/InspectionDetailsView";
 import { useNavigate } from "react-router-dom";
 import { OfflineInspectionService } from "@/services/OfflineInspectionService";
+import { OverheadLineInspectionDetailsView } from "@/components/overhead-line/OverheadLineInspectionDetailsView";
 
 export default function OverheadLineInspectionPage() {
   const { user } = useAuth();
@@ -397,7 +398,7 @@ export default function OverheadLineInspectionPage() {
                 </DialogDescription>
               </DialogHeader>
               {selectedInspection && (
-                <InspectionDetailsView
+                <OverheadLineInspectionDetailsView
                   inspection={selectedInspection}
                   showHeader={false}
                   showBackButton={false}

@@ -109,19 +109,56 @@ export function Navbar() {
           
           {/* Analytics Menu - Show for district engineers and above */}
           {showMenuItem("district_engineer") && (
-            <NavLink 
-              to="/analytics" 
-              className={({ isActive }) =>
-                cn(
-                  "px-3 py-2 rounded-md transition-colors",
-                  isActive 
-                    ? "bg-primary/10 text-primary font-medium" 
-                    : "text-foreground hover:text-primary hover:bg-primary/5"
-                )
-              }
-            >
-              Analytics
-            </NavLink>
+            <div className="hidden md:block">
+              <NavigationMenu>
+                <NavigationMenuList>
+                  <NavigationMenuItem>
+                    <NavigationMenuTrigger className={cn(
+                      "text-foreground hover:text-primary transition-colors",
+                      (isActiveRoute("/analytics") || isActiveRoute("/control-system-analytics")) && "bg-accent text-primary dark:bg-blue-700 dark:text-white"
+                    )}>
+                      Analytics
+                    </NavigationMenuTrigger>
+                    <NavigationMenuContent>
+                      <ul className="grid w-[200px] gap-3 p-4">
+                        <li>
+                          <NavigationMenuLink asChild>
+                            <NavLink
+                              to="/analytics"
+                              className={cn(
+                                "block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
+                                isActiveRoute("/analytics") && "bg-accent"
+                              )}
+                            >
+                              <div className="text-sm font-medium leading-none">Fault Analytics</div>
+                              <div className="line-clamp-2 text-sm leading-snug text-muted-foreground">
+                                View fault statistics and trends
+                              </div>
+                            </NavLink>
+                          </NavigationMenuLink>
+                        </li>
+                        <li>
+                          <NavigationMenuLink asChild>
+                            <NavLink
+                              to="/control-system-analytics"
+                              className={cn(
+                                "block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
+                                isActiveRoute("/control-system-analytics") && "bg-accent"
+                              )}
+                            >
+                              <div className="text-sm font-medium leading-none">Control System Analytics</div>
+                              <div className="line-clamp-2 text-sm leading-snug text-muted-foreground">
+                                View control system outage statistics
+                              </div>
+                            </NavLink>
+                          </NavigationMenuLink>
+                        </li>
+                      </ul>
+                    </NavigationMenuContent>
+                  </NavigationMenuItem>
+                </NavigationMenuList>
+              </NavigationMenu>
+            </div>
           )}
           
           {/* Asset Management Dropdown - Show for technicians and other roles */}

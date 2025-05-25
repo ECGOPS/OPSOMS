@@ -346,43 +346,43 @@ export function VITInspectionForm({
   const issuesCount = calculateIssuesCount();
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <ClipboardList className="h-5 w-5" />
+    <Card className="w-full">
+      <CardHeader className="p-3 sm:p-4">
+        <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+          <ClipboardList className="h-4 w-4 sm:h-5 sm:w-5" />
           {inspectionData ? "Edit VIT Inspection" : "New VIT Inspection"}
         </CardTitle>
         {isOffline && (
           <div className="mt-1">
-            <p className="text-sm text-yellow-600">
+            <p className="text-xs sm:text-sm text-yellow-600">
               You are currently offline. Changes will be saved locally and synced when you're back online.
             </p>
             {offlineInspections.length > 0 && (
-              <p className="text-sm text-yellow-600 mt-1">
+              <p className="text-xs sm:text-sm text-yellow-600 mt-1">
                 You have {offlineInspections.length} inspection{offlineInspections.length === 1 ? '' : 's'} saved offline.
               </p>
             )}
           </div>
         )}
       </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="assetSelect">VIT Asset *</Label>
+      <CardContent className="p-2 sm:p-4 max-w-full overflow-x-hidden">
+        <form onSubmit={handleSubmit} className="space-y-2 sm:space-y-4">
+          <div className="space-y-2 sm:space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5 md:gap-4">
+              <div className="space-y-1">
+                <Label htmlFor="assetSelect" className="text-xs sm:text-sm">VIT Asset *</Label>
                 <Select
                   value={selectedAssetId}
                   onValueChange={handleAssetChange}
                   disabled={user?.role === "district_engineer" && !inspectionData}
                   required
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="w-full h-8 sm:h-9 text-xs sm:text-sm">
                     <SelectValue placeholder="Select VIT Asset" />
                   </SelectTrigger>
                   <SelectContent>
                     {filteredAssets.map(asset => (
-                      <SelectItem key={asset.id} value={asset.id}>
+                      <SelectItem key={asset.id} value={asset.id} className="w-full text-xs sm:text-sm">
                         {asset.serialNumber} - {asset.typeOfUnit} ({asset.voltageLevel})
                       </SelectItem>
                     ))}
@@ -390,33 +390,35 @@ export function VITInspectionForm({
                 </Select>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="inspectionDate">Inspection Date & Time *</Label>
+              <div className="space-y-1">
+                <Label htmlFor="inspectionDate" className="text-xs sm:text-sm">Inspection Date & Time *</Label>
                 <Input
                   id="inspectionDate"
                   type="datetime-local"
                   value={inspectionDate}
                   onChange={(e) => setInspectionDate(e.target.value)}
                   required
+                  className="w-full h-8 sm:h-9 text-xs sm:text-sm"
                 />
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="inspectedBy">Inspected By *</Label>
+            <div className="space-y-1">
+              <Label htmlFor="inspectedBy" className="text-xs sm:text-sm">Inspected By *</Label>
               <Input
                 id="inspectedBy"
                 value={inspectedBy}
                 onChange={(e) => setInspectedBy(e.target.value)}
                 placeholder="Enter name of inspector"
                 required
+                className="w-full h-8 sm:h-9 text-xs sm:text-sm"
               />
             </div>
 
             {selectedAsset && (
-              <div className="rounded-md bg-muted/50 p-4 space-y-2 text-sm">
+              <div className="rounded-md bg-muted/50 p-3 sm:p-4 space-y-2 text-sm">
                 <div className="font-medium">Asset Details</div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
                   <div>
                     <span className="font-medium">Type:</span> {selectedAsset.typeOfUnit}
                   </div>
@@ -426,7 +428,7 @@ export function VITInspectionForm({
                   <div>
                     <span className="font-medium">Status:</span> {selectedAsset.status}
                   </div>
-                  <div className="md:col-span-3">
+                  <div className="sm:col-span-2 md:col-span-3">
                     <span className="font-medium">Location:</span> {selectedAsset.location}
                   </div>
                 </div>
@@ -446,14 +448,14 @@ export function VITInspectionForm({
             
             <Accordion type="single" collapsible className="w-full" defaultValue="section-1">
               <AccordionItem value="section-1">
-                <AccordionTrigger>Cubicle and Protection</AccordionTrigger>
+                <AccordionTrigger className="text-base">Cubicle and Protection</AccordionTrigger>
                 <AccordionContent className="space-y-4">
                   <div className="space-y-2">
                     <Label>Rodent/termite encroachments of cubicle</Label>
                     <RadioGroup
                       value={rodentTermiteEncroachment}
                       onValueChange={(val) => setRodentTermiteEncroachment(val as YesNoOption)}
-                      className="flex gap-4"
+                      className="flex flex-col sm:flex-row gap-3 sm:gap-4"
                     >
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="Yes" id="rodent-yes" />
@@ -474,7 +476,7 @@ export function VITInspectionForm({
                     <RadioGroup
                       value={cleanDustFree}
                       onValueChange={(val) => setCleanDustFree(val as YesNoOption)}
-                      className="flex gap-4"
+                      className="flex flex-col sm:flex-row gap-3 sm:gap-4"
                     >
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="Yes" id="clean-yes" />
@@ -495,7 +497,7 @@ export function VITInspectionForm({
                     <RadioGroup
                       value={protectionButtonEnabled}
                       onValueChange={(val) => setProtectionButtonEnabled(val as YesNoOption)}
-                      className="flex gap-4"
+                      className="flex flex-col sm:flex-row gap-3 sm:gap-4"
                     >
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="Yes" id="protection-yes" />
@@ -516,7 +518,7 @@ export function VITInspectionForm({
                     <RadioGroup
                       value={recloserButtonEnabled}
                       onValueChange={(val) => setRecloserButtonEnabled(val as YesNoOption)}
-                      className="flex gap-4"
+                      className="flex flex-col sm:flex-row gap-3 sm:gap-4"
                     >
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="Yes" id="recloser-yes" />
@@ -537,7 +539,7 @@ export function VITInspectionForm({
                     <RadioGroup
                       value={groundEarthButtonEnabled}
                       onValueChange={(val) => setGroundEarthButtonEnabled(val as YesNoOption)}
-                      className="flex gap-4"
+                      className="flex flex-col sm:flex-row gap-3 sm:gap-4"
                     >
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="Yes" id="ground-yes" />
@@ -563,7 +565,7 @@ export function VITInspectionForm({
                     <RadioGroup
                       value={acPowerOn}
                       onValueChange={(val) => setAcPowerOn(val as YesNoOption)}
-                      className="flex gap-4"
+                      className="flex flex-col sm:flex-row gap-3 sm:gap-4"
                     >
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="Yes" id="acpower-yes" />
@@ -584,7 +586,7 @@ export function VITInspectionForm({
                     <RadioGroup
                       value={batteryPowerLow}
                       onValueChange={(val) => setBatteryPowerLow(val as YesNoOption)}
-                      className="flex gap-4"
+                      className="flex flex-col sm:flex-row gap-3 sm:gap-4"
                     >
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="Yes" id="battery-yes" />
@@ -605,7 +607,7 @@ export function VITInspectionForm({
                     <RadioGroup
                       value={handleLockOn}
                       onValueChange={(val) => setHandleLockOn(val as YesNoOption)}
-                      className="flex gap-4"
+                      className="flex flex-col sm:flex-row gap-3 sm:gap-4"
                     >
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="Yes" id="lock-yes" />
@@ -626,7 +628,7 @@ export function VITInspectionForm({
                     <RadioGroup
                       value={remoteButtonEnabled}
                       onValueChange={(val) => setRemoteButtonEnabled(val as YesNoOption)}
-                      className="flex gap-4"
+                      className="flex flex-col sm:flex-row gap-3 sm:gap-4"
                     >
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="Yes" id="remote-yes" />
@@ -647,7 +649,7 @@ export function VITInspectionForm({
                     <RadioGroup
                       value={gasLevelLow}
                       onValueChange={(val) => setGasLevelLow(val as YesNoOption)}
-                      className="flex gap-4"
+                      className="flex flex-col sm:flex-row gap-3 sm:gap-4"
                     >
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="Yes" id="gas-yes" />
@@ -673,7 +675,7 @@ export function VITInspectionForm({
                     <RadioGroup
                       value={earthingArrangementAdequate}
                       onValueChange={(val) => setEarthingArrangementAdequate(val as YesNoOption)}
-                      className="flex gap-4"
+                      className="flex flex-col sm:flex-row gap-3 sm:gap-4"
                     >
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="Yes" id="earthing-yes" />
@@ -694,7 +696,7 @@ export function VITInspectionForm({
                     <RadioGroup
                       value={noFusesBlown}
                       onValueChange={(val) => setNoFusesBlown(val as YesNoOption)}
-                      className="flex gap-4"
+                      className="flex flex-col sm:flex-row gap-3 sm:gap-4"
                     >
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="Yes" id="fuses-yes" />
@@ -715,7 +717,7 @@ export function VITInspectionForm({
                     <RadioGroup
                       value={noDamageToBushings}
                       onValueChange={(val) => setNoDamageToBushings(val as YesNoOption)}
-                      className="flex gap-4"
+                      className="flex flex-col sm:flex-row gap-3 sm:gap-4"
                     >
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="Yes" id="bushings-yes" />
@@ -736,7 +738,7 @@ export function VITInspectionForm({
                     <RadioGroup
                       value={noDamageToHVConnections}
                       onValueChange={(val) => setNoDamageToHVConnections(val as YesNoOption)}
-                      className="flex gap-4"
+                      className="flex flex-col sm:flex-row gap-3 sm:gap-4"
                     >
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="Yes" id="hvconn-yes" />
@@ -757,7 +759,7 @@ export function VITInspectionForm({
                     <RadioGroup
                       value={insulatorsClean}
                       onValueChange={(val) => setInsulatorsClean(val as YesNoOption)}
-                      className="flex gap-4"
+                      className="flex flex-col sm:flex-row gap-3 sm:gap-4"
                     >
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="Yes" id="insulators-yes" />
@@ -783,7 +785,7 @@ export function VITInspectionForm({
                     <RadioGroup
                       value={paintworkAdequate}
                       onValueChange={(val) => setPaintworkAdequate(val as YesNoOption)}
-                      className="flex gap-4"
+                      className="flex flex-col sm:flex-row gap-3 sm:gap-4"
                     >
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="Yes" id="paint-yes" />
@@ -804,7 +806,7 @@ export function VITInspectionForm({
                     <RadioGroup
                       value={ptFuseLinkIntact}
                       onValueChange={(val) => setPtFuseLinkIntact(val as YesNoOption)}
-                      className="flex gap-4"
+                      className="flex flex-col sm:flex-row gap-3 sm:gap-4"
                     >
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="Yes" id="ptfuse-yes" />
@@ -825,7 +827,7 @@ export function VITInspectionForm({
                     <RadioGroup
                       value={noCorrosion}
                       onValueChange={(val) => setNoCorrosion(val as YesNoOption)}
-                      className="flex gap-4"
+                      className="flex flex-col sm:flex-row gap-3 sm:gap-4"
                     >
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="Yes" id="corrosion-yes" />
@@ -846,7 +848,7 @@ export function VITInspectionForm({
                     <RadioGroup
                       value={silicaGelCondition}
                       onValueChange={(val) => setSilicaGelCondition(val as GoodBadOption)}
-                      className="flex gap-4"
+                      className="flex flex-col sm:flex-row gap-3 sm:gap-4"
                     >
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="Good" id="silica-good" />
@@ -867,7 +869,7 @@ export function VITInspectionForm({
                     <RadioGroup
                       value={correctLabelling}
                       onValueChange={(val) => setCorrectLabelling(val as YesNoOption)}
-                      className="flex gap-4"
+                      className="flex flex-col sm:flex-row gap-3 sm:gap-4"
                     >
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="Yes" id="label-yes" />
@@ -896,14 +898,15 @@ export function VITInspectionForm({
                 onChange={(e) => setRemarks(e.target.value)}
                 placeholder="Enter any additional observations or notes"
                 rows={4}
+                className="w-full"
               />
             </div>
           </div>
-          <CardFooter className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={onCancel}>
+          <CardFooter className="flex flex-col sm:flex-row justify-end gap-2 w-full px-0">
+            <Button type="button" variant="outline" onClick={onCancel} className="w-full sm:w-auto">
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
+            <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto">
               {isSubmitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />

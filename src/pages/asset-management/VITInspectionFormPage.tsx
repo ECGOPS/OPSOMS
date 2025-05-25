@@ -49,7 +49,7 @@ export default function VITInspectionFormPage() {
 
   return (
     <Layout>
-      <div className="container py-8">
+      <div className="container max-w-4xl mx-auto px-4 py-4 sm:py-8">
         <Button 
           variant="ghost" 
           onClick={() => navigate(`/asset-management/vit-inspection-details/${assetId}`)}
@@ -59,14 +59,14 @@ export default function VITInspectionFormPage() {
           Back to Asset Details
         </Button>
         
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold tracking-tight">New VIT Inspection</h1>
+        <div className="mb-4 sm:mb-6">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">New VIT Inspection</h1>
           <p className="text-muted-foreground mt-1">
             Complete the inspection checklist for {asset.serialNumber}
           </p>
         </div>
         
-        <div className="bg-white rounded-lg border shadow-sm p-6">
+        <div className="bg-card text-card-foreground rounded-lg border shadow-sm">
           <VITInspectionForm
             assetId={assetId}
             onSubmit={handleSubmit}

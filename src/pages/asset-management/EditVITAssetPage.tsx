@@ -7,6 +7,7 @@ import { toast } from "@/components/ui/sonner";
 import { ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { VITAsset } from "@/lib/types";
+import { VITSyncService } from "@/services/VITSyncService";
 
 export default function EditVITAssetPage() {
   const { id } = useParams<{ id: string }>();
@@ -14,18 +15,41 @@ export default function EditVITAssetPage() {
   const { vitAssets } = useData();
   const [asset, setAsset] = useState<VITAsset | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const vitSyncService = VITSyncService.getInstance();
   
   useEffect(() => {
-    if (id) {
-      const foundAsset = vitAssets.find(a => a.id === id);
-      if (foundAsset) {
-        setAsset(foundAsset);
-        setIsLoading(false);
-      } else {
-        toast.error("Asset not found");
-        navigate("/asset-management/vit-inspection");
+    const loadAsset = async () => {
+      if (id) {
+        try {
+          // First check online assets
+          const foundAsset = vitAssets.find(a => a.id === id);
+          if (foundAsset) {
+            setAsset(foundAsset);
+            setIsLoading(false);
+            return;
+          }
+
+          // If not found in online assets, check offline assets
+          const offlineAssets = await vitSyncService.getPendingVITAssets();
+          const offlineAsset = offlineAssets.find(a => a.id === id);
+          if (offlineAsset) {
+            setAsset(offlineAsset);
+            setIsLoading(false);
+            return;
+          }
+
+          // If still not found, show error
+          toast.error("Asset not found");
+          navigate("/asset-management/vit-inspection");
+        } catch (error) {
+          console.error("Error loading asset:", error);
+          toast.error("Failed to load asset");
+          navigate("/asset-management/vit-inspection");
+        }
       }
-    }
+    };
+
+    loadAsset();
   }, [id, vitAssets, navigate]);
   
   const handleSubmit = () => {
@@ -56,33 +80,26 @@ export default function EditVITAssetPage() {
       </Layout>
     );
   }
-  
+
   return (
     <Layout>
       <div className="container py-8">
-        <Button 
-          variant="ghost" 
-          onClick={() => navigate(`/asset-management/vit-inspection-details/${id}`)}
-          className="mb-4"
-        >
-          <ChevronLeft className="mr-2 h-4 w-4" />
-          Back to Asset Details
-        </Button>
-        
-        <div className="mb-6">
+        <div className="flex items-center gap-4 mb-6">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => navigate(`/asset-management/vit-inspection-details/${id}`)}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
           <h1 className="text-3xl font-bold tracking-tight">Edit VIT Asset</h1>
-          <p className="text-muted-foreground mt-1">
-            Update the asset information
-          </p>
         </div>
         
-        <div className="rounded-lg border shadow-sm p-6">
-          <VITAssetForm
-            asset={asset}
-            onSubmit={handleSubmit}
-            onCancel={handleCancel}
-          />
-        </div>
+        <VITAssetForm
+          asset={asset}
+          onSubmit={handleSubmit}
+          onCancel={handleCancel}
+        />
       </div>
     </Layout>
   );

@@ -124,11 +124,55 @@ export default function EditControlOutagePage() {
   // Generic handler for most inputs
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { id, value, type } = e.target;
+    
+    // Handle date validations
+    if (id === 'repairStartDate') {
+      const repairStartDateTime = new Date(value);
+      const occurrenceDateTime = formData.occurrenceDate ? new Date(formData.occurrenceDate) : null;
+
+      if (occurrenceDateTime && repairStartDateTime < occurrenceDateTime) {
+        toast.error("Repair start date cannot be before occurrence date");
+        return;
+      }
+    }
+
+    if (id === 'repairEndDate') {
+      const repairEndDateTime = new Date(value);
+      const repairStartDateTime = formData.repairStartDate ? new Date(formData.repairStartDate) : null;
+
+      if (repairStartDateTime && repairEndDateTime <= repairStartDateTime) {
+        toast.error("Repair end date must be after repair start date");
+        return;
+      }
+    }
+
+    if (id === 'restorationDate') {
+      const restorationDateTime = new Date(value);
+      const occurrenceDateTime = formData.occurrenceDate ? new Date(formData.occurrenceDate) : null;
+      const repairStartDateTime = formData.repairStartDate ? new Date(formData.repairStartDate) : null;
+      const repairEndDateTime = formData.repairEndDate ? new Date(formData.repairEndDate) : null;
+
+      if (occurrenceDateTime && restorationDateTime <= occurrenceDateTime) {
+        toast.error("Restoration date must be after occurrence date");
+        return;
+      }
+
+      if (repairStartDateTime && restorationDateTime <= repairStartDateTime) {
+        toast.error("Restoration date must be after repair start date");
+        return;
+      }
+
+      if (repairEndDateTime && restorationDateTime <= repairEndDateTime) {
+        toast.error("Restoration date must be after repair end date");
+        return;
+      }
+    }
+
     if (id === 'loadMW' && type === 'number') {
-        const numValue = value === "" ? null : parseFloat(value); 
-        setFormData(prev => ({ ...prev, [id]: (numValue !== null && numValue >= 0) ? numValue : null })); // Store null if empty or negative
+      const numValue = value === "" ? null : parseFloat(value); 
+      setFormData(prev => ({ ...prev, [id]: (numValue !== null && numValue >= 0) ? numValue : null })); // Store null if empty or negative
     } else {
-        setFormData(prev => ({ ...prev, [id]: value }));
+      setFormData(prev => ({ ...prev, [id]: value }));
     }
   };
 
@@ -178,7 +222,14 @@ export default function EditControlOutagePage() {
         loadMW: formData.loadMW,
         unservedEnergyMWh: finalUnservedEnergy,
         customersAffected: formData.customersAffected || { rural: 0, urban: 0, metro: 0 },
-        status: formData.restorationDate ? 'resolved' : 'pending'
+        status: formData.restorationDate ? 'resolved' : 'pending',
+        feederName: formData.feederName || "",
+        voltageLevel: formData.voltageLevel || "",
+        repairStartDate: formData.repairStartDate,
+        repairEndDate: formData.repairEndDate,
+        feederType: formData.feederType || "",
+        customerInterruptions: formData.customerInterruptions || { metro: 0, urban: 0, rural: 0 },
+        feederCustomers: formData.feederCustomers || { metro: 0, urban: 0, rural: 0 }
       };
 
       await updateControlSystemOutage(outage.id, formDataToSubmit);
@@ -277,6 +328,18 @@ export default function EditControlOutagePage() {
                        </Select>
                      </div>
                      <div className="space-y-2">
+                       <Label htmlFor="feederName">Feeder Name</Label>
+                       <Input
+                         id="feederName"
+                         type="text"
+                         value={formData.feederName || ""}
+                         onChange={handleInputChange}
+                         placeholder="Enter feeder name"
+                         className="h-10"
+                         required
+                       />
+                     </div>
+                     <div className="space-y-2">
                        <Label htmlFor="loadMW">Load (MW) *</Label>
                        <Input id="loadMW" type="number" value={formData.loadMW ?? ""} onChange={handleInputChange} placeholder="Enter load in MW" min="0" step="0.01" className="h-10" required/>
                      </div>
@@ -289,6 +352,66 @@ export default function EditControlOutagePage() {
                        <Textarea id="controlPanelIndications" value={formData.controlPanelIndications || ""} onChange={handleInputChange} placeholder="Describe indications..." rows={3} className="text-sm"/>
                      </div>
                  </div>
+
+                 {/* Feeder/Equipment Details Section */}
+                 <div className="space-y-4 pt-4">
+                   <h3 className="text-lg font-semibold">Feeder/Equipment Details</h3>
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                     <div className="space-y-2">
+                       <Label htmlFor="voltageLevel" className="text-sm font-medium">Voltage Level</Label>
+                       <Select value={formData.voltageLevel || ''} onValueChange={(value) => handleSelectChange('voltageLevel', value)}>
+                         <SelectTrigger className="h-10">
+                           <SelectValue placeholder="Select voltage level" />
+                         </SelectTrigger>
+                         <SelectContent>
+                           <SelectItem value="11kv">11kV</SelectItem>
+                           <SelectItem value="33kv">33kV</SelectItem>
+                         </SelectContent>
+                       </Select>
+                     </div>
+                     <div className="space-y-2">
+                       <Label htmlFor="feederType" className="text-sm font-medium">Type of Feeder</Label>
+                       <Select value={formData.feederType || ''} onValueChange={(value) => handleSelectChange('feederType', value)}>
+                         <SelectTrigger className="h-10">
+                           <SelectValue placeholder="Select feeder type" />
+                         </SelectTrigger>
+                         <SelectContent>
+                           <SelectItem value="underground">Underground</SelectItem>
+                           <SelectItem value="overhead">Overhead</SelectItem>
+                         </SelectContent>
+                       </Select>
+                     </div>
+                   </div>
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                     <div className="space-y-2">
+                       <Label htmlFor="repairStartDate" className="text-sm font-medium">Repair Start</Label>
+                       <Input
+                         id="repairStartDate"
+                         type="datetime-local"
+                         value={formData.repairStartDate || ""}
+                         onChange={handleInputChange}
+                         className="h-10"
+                       />
+                       <p className="text-xs text-muted-foreground">
+                         Must be after or equal to occurrence date
+                       </p>
+                     </div>
+                     <div className="space-y-2">
+                       <Label htmlFor="repairEndDate" className="text-sm font-medium">Repair End</Label>
+                       <Input
+                         id="repairEndDate"
+                         type="datetime-local"
+                         value={formData.repairEndDate || ""}
+                         onChange={handleInputChange}
+                         className="h-10"
+                       />
+                       <p className="text-xs text-muted-foreground">
+                         Must be after repair start date
+                       </p>
+                     </div>
+                   </div>
+                 </div>
+
                  {/* Customers Affected Section */}
                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 pt-4">
                    <div className="space-y-2">
@@ -346,6 +469,67 @@ export default function EditControlOutagePage() {
                      />
                    </div>
                  </div>
+
+                 {/* Feeder Customers Section */}
+                 <div className="space-y-4 pt-4">
+                   <h3 className="text-lg font-semibold">Feeder Customers</h3>
+                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
+                     <div className="space-y-2">
+                       <Label htmlFor="metroFeederCustomers" className="font-medium flex items-center text-sm">Metro</Label>
+                       <Input
+                         id="metroFeederCustomers"
+                         type="number"
+                         min="0"
+                         value={formData.feederCustomers?.metro ?? ""}
+                         onChange={e => setFormData(prev => ({
+                           ...prev,
+                           feederCustomers: {
+                             ...prev.feederCustomers,
+                             metro: parseInt(e.target.value) || 0,
+                           },
+                         }))}
+                         className="bg-background/50 border-muted h-9 sm:h-10"
+                         placeholder="Enter number of customers"
+                       />
+                     </div>
+                     <div className="space-y-2">
+                       <Label htmlFor="urbanFeederCustomers" className="font-medium flex items-center text-sm">Urban</Label>
+                       <Input
+                         id="urbanFeederCustomers"
+                         type="number"
+                         min="0"
+                         value={formData.feederCustomers?.urban ?? ""}
+                         onChange={e => setFormData(prev => ({
+                           ...prev,
+                           feederCustomers: {
+                             ...prev.feederCustomers,
+                             urban: parseInt(e.target.value) || 0,
+                           },
+                         }))}
+                         className="bg-background/50 border-muted h-9 sm:h-10"
+                         placeholder="Enter number of customers"
+                       />
+                     </div>
+                     <div className="space-y-2">
+                       <Label htmlFor="ruralFeederCustomers" className="font-medium flex items-center text-sm">Rural</Label>
+                       <Input
+                         id="ruralFeederCustomers"
+                         type="number"
+                         min="0"
+                         value={formData.feederCustomers?.rural ?? ""}
+                         onChange={e => setFormData(prev => ({
+                           ...prev,
+                           feederCustomers: {
+                             ...prev.feederCustomers,
+                             rural: parseInt(e.target.value) || 0,
+                           },
+                         }))}
+                         className="bg-background/50 border-muted h-9 sm:h-10"
+                         placeholder="Enter number of customers"
+                       />
+                     </div>
+                   </div>
+                 </div>
               </div>
 
               {/* --- Section 3: Timing & Calculations --- */} 
@@ -358,7 +542,16 @@ export default function EditControlOutagePage() {
                      </div>
                      <div className="space-y-2">
                        <Label htmlFor="restorationDate">Restoration Date & Time</Label>
-                       <Input id="restorationDate" type="datetime-local" value={formData.restorationDate || ""} onChange={handleInputChange} className="w-full h-10"/>
+                       <Input 
+                         id="restorationDate" 
+                         type="datetime-local" 
+                         value={formData.restorationDate || ""} 
+                         onChange={handleInputChange} 
+                         className="w-full h-10"
+                       />
+                       <p className="text-xs text-muted-foreground">
+                         Must be after occurrence date and repair dates
+                       </p>
                      </div>
                  </div>
                  {/* Calculated Values Display */}

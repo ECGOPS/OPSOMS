@@ -189,28 +189,52 @@ export interface OP5Fault {
   alternativePhoneNumber?: string;
 }
 
-export interface ControlSystemOutage extends BaseRecord {
+export interface ControlSystemOutage {
+  id: string;
+  date: string;
+  region: string;
+  district: string;
+  description: string;
+  duration: number;
   regionId: string;
   districtId: string;
   occurrenceDate: string;
-  restorationDate?: string;
-  estimatedResolutionTime: string | null;
+  restorationDate: string | null;
   faultType: FaultType;
   specificFaultType?: UnplannedFaultType | EmergencyFaultType;
-  reason?: string;
-  controlPanelIndications?: string;
-  areaAffected?: string;
+  status: "pending" | "resolved";
   loadMW: number;
-  unservedEnergyMWh?: number;
-  customersAffected?: {
+  unservedEnergyMWh: number;
+  reason: string;
+  controlPanelIndications: string;
+  areaAffected: string;
+  customersAffected: {
     rural: number;
     urban: number;
     metro: number;
   };
-  status: 'pending' | 'resolved';
-  clientId?: string;
+  estimatedResolutionTime: string | null;
+  createdAt: string;
+  updatedAt: string;
   createdBy: string;
   updatedBy: string;
+  isOffline: boolean;
+  // New fields
+  voltageLevel: string;
+  repairStartDate: string | null;
+  repairEndDate: string | null;
+  feederType: string;
+  feederName: string;
+  customerInterruptions: {
+    metro: number;
+    urban: number;
+    rural: number;
+  };
+  feederCustomers: {
+    metro: number;
+    urban: number;
+    rural: number;
+  };
 }
 
 // VIT Asset Types

@@ -18,6 +18,7 @@ import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import DashboardPage from "./pages/DashboardPage";
 import ReportFaultPage from "./pages/ReportFaultPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
+import ControlSystemAnalyticsPage from "./pages/ControlSystemAnalyticsPage";
 import UserManagementPage from "./pages/UserManagementPage";
 import LoadMonitoringPage from "./pages/asset-management/LoadMonitoringPage";
 import SubstationInspectionPage from "./pages/asset-management/SubstationInspectionPage";
@@ -83,6 +84,12 @@ function App() {
                 <Route path="/analytics" element={
                   <ProtectedRoute requiredFeature="analytics_page">
                     <AnalyticsPage />
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/control-system-analytics" element={
+                  <ProtectedRoute requiredFeature="analytics_page">
+                    <ControlSystemAnalyticsPage />
                   </ProtectedRoute>
                 } />
 

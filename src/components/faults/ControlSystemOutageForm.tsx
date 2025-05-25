@@ -65,6 +65,41 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
   const [unservedEnergyMWh, setUnservedEnergyMWh] = useState<number | null>(null);
   const [specificFaultType, setSpecificFaultType] = useState<UnplannedFaultType | EmergencyFaultType | undefined>(undefined);
   
+  // New state variables for feeder/equipment details
+  const [feederName, setFeederName] = useState<string>("");
+  const [voltageLevel, setVoltageLevel] = useState<string>("");
+  const [repairStartDate, setRepairStartDate] = useState<string>("");
+  const [repairEndDate, setRepairEndDate] = useState<string>("");
+  const [feederType, setFeederType] = useState<string>("");
+  const [customersAffected, setCustomersAffected] = useState<{
+    metro: number;
+    urban: number;
+    rural: number;
+  }>({
+    metro: 0,
+    urban: 0,
+    rural: 0
+  });
+  const [feederCustomers, setFeederCustomers] = useState<{
+    metro: number | null;
+    urban: number | null;
+    rural: number | null;
+  }>({
+    metro: null,
+    urban: null,
+    rural: null
+  });
+  
+  // Customer interruption counts
+  const [metroInterruptions, setMetroInterruptions] = useState<number | null>(null);
+  const [urbanInterruptions, setUrbanInterruptions] = useState<number | null>(null);
+  const [ruralInterruptions, setRuralInterruptions] = useState<number | null>(null);
+  
+  // Feeder customer counts
+  const [metroFeederCustomers, setMetroFeederCustomers] = useState<number | null>(null);
+  const [urbanFeederCustomers, setUrbanFeederCustomers] = useState<number | null>(null);
+  const [ruralFeederCustomers, setRuralFeederCustomers] = useState<number | null>(null);
+  
   // Check if user has permission to report faults
   useEffect(() => {
     if (user && !permissionService.canAccessFeature(user.role, 'fault_reporting')) {
@@ -203,20 +238,20 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
     setRegionId(defaultRegionId);
     setDistrictId(defaultDistrictId);
     setOccurrenceDate("");
-    setFaultType("Unplanned");
-    setRuralAffected(null);
-    setUrbanAffected(null);
-    setMetroAffected(null);
     setRestorationDate("");
+    setFaultType(undefined);
+    setSpecificFaultType(undefined);
+    setLoadMW(null);
     setReason("");
     setIndications("");
     setAreaAffected("");
-    setLoadMW(0);
-    setDurationHours(null);
-    setUnservedEnergyMWh(null);
-    setSpecificFaultType(undefined);
-    setEstimatedResolutionTime("");
-    setEstimatedDuration(null);
+    setCustomersAffected({ rural: 0, urban: 0, metro: 0 });
+    setEstimatedResolutionTime(null);
+    setVoltageLevel("");
+    setRepairStartDate("");
+    setRepairEndDate("");
+    setFeederType("");
+    setFeederCustomers({ metro: null, urban: null, rural: null });
   };
   
   const handleSubmit = async (e: React.FormEvent) => {
@@ -247,14 +282,19 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
       const formattedRestorationDate = restorationDate ? new Date(restorationDate).toISOString() : null;
       const formattedEstimatedResolutionTime = estimatedResolutionTime ? new Date(estimatedResolutionTime).toISOString() : null;
 
-      // Construct the base data object without audit fields
-      const formDataToSubmit: Omit<ControlSystemOutage, "id" | "createdAt" | "updatedAt" | "createdBy" | "updatedBy" | "isOffline"> = {
-        regionId: regionId || "",
-        districtId: districtId || "",
+      const formDataToSubmit = {
+        regionId,
+        districtId,
+        region: getRegionName(regionId),
+        district: getDistrictName(districtId),
+        date: new Date().toISOString(),
+        description: reason || "",
+        duration: durationHours || 0,
         occurrenceDate: formattedOccurrenceDate,
         restorationDate: formattedRestorationDate,
         faultType: faultType as FaultType,
-        status: restorationDate ? "resolved" as const : "pending" as const,
+        specificFaultType,
+        status: formattedRestorationDate ? "resolved" : "pending",
         loadMW: loadMW || 0,
         unservedEnergyMWh: unservedEnergyMWh || 0,
         reason: reason || "",
@@ -266,6 +306,16 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
           metro: metroAffected ?? 0
         },
         estimatedResolutionTime: formattedEstimatedResolutionTime,
+        voltageLevel: voltageLevel || "",
+        repairStartDate: repairStartDate ? new Date(repairStartDate).toISOString() : null,
+        repairEndDate: repairEndDate ? new Date(repairEndDate).toISOString() : null,
+        feederType: feederType || "",
+        feederName: feederName || "",
+        feederCustomers: {
+          metro: feederCustomers.metro ?? 0,
+          urban: feederCustomers.urban ?? 0,
+          rural: feederCustomers.rural ?? 0
+        }
       };
 
       const offlineStorage = OfflineStorageService.getInstance();
@@ -406,6 +456,50 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
             </div>
           </div>
           
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold">Feeder Customers</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="space-y-2">
+                <Label htmlFor="metroFeederCustomers" className="text-sm font-medium">Metro Customers</Label>
+                <Input
+                  id="metroFeederCustomers"
+                  type="number"
+                  min="0"
+                  value={metroFeederCustomers === null ? "" : metroFeederCustomers}
+                  onChange={(e) => setMetroFeederCustomers(e.target.value === "" ? null : parseInt(e.target.value))}
+                  className="h-10"
+                  placeholder="Enter number of customers"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="urbanFeederCustomers" className="text-sm font-medium">Urban Customers</Label>
+                <Input
+                  id="urbanFeederCustomers"
+                  type="number"
+                  min="0"
+                  value={urbanFeederCustomers === null ? "" : urbanFeederCustomers}
+                  onChange={(e) => setUrbanFeederCustomers(e.target.value === "" ? null : parseInt(e.target.value))}
+                  className="h-10"
+                  placeholder="Enter number of customers"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="ruralFeederCustomers" className="text-sm font-medium">Rural Customers</Label>
+                <Input
+                  id="ruralFeederCustomers"
+                  type="number"
+                  min="0"
+                  value={ruralFeederCustomers === null ? "" : ruralFeederCustomers}
+                  onChange={(e) => setRuralFeederCustomers(e.target.value === "" ? null : parseInt(e.target.value))}
+                  className="h-10"
+                  placeholder="Enter number of customers"
+                />
+              </div>
+            </div>
+          </div>
+          
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="space-y-3">
               <Label htmlFor="faultType" className="text-base font-medium">Type of Fault</Label>
@@ -421,6 +515,19 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
                   <SelectItem value="GridCo Outages">GridCo Outages</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            <div className="space-y-3">
+              <Label htmlFor="feederName" className="text-base font-medium">Feeder Name</Label>
+              <Input
+                id="feederName"
+                type="text"
+                value={feederName}
+                onChange={(e) => setFeederName(e.target.value)}
+                placeholder="Enter feeder name"
+                className="h-12 text-base bg-background/50 border-muted"
+                required
+              />
             </div>
           </div>
           
@@ -589,6 +696,89 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
             </TabsContent>
             
             <TabsContent value="details" className="space-y-4 sm:space-y-6 pt-4 sm:pt-6">
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold">Feeder/Equipment Details</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="voltageLevel" className="text-sm font-medium">Voltage Level</Label>
+                    <Select value={voltageLevel} onValueChange={setVoltageLevel}>
+                      <SelectTrigger className="h-10">
+                        <SelectValue placeholder="Select voltage level" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="11kv">11kV</SelectItem>
+                        <SelectItem value="33kv">33kV</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="feederType" className="text-sm font-medium">Type of Feeder</Label>
+                    <Select value={feederType} onValueChange={setFeederType}>
+                      <SelectTrigger className="h-10">
+                        <SelectValue placeholder="Select feeder type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="underground">Underground</SelectItem>
+                        <SelectItem value="overhead">Overhead</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="repairStartDate" className="text-sm font-medium">Repair Start</Label>
+                    <Input
+                      id="repairStartDate"
+                      type="datetime-local"
+                      value={repairStartDate}
+                      onChange={(e) => {
+                        const newRepairStartDate = e.target.value;
+                        const repairStartDateTime = new Date(newRepairStartDate);
+                        const occurrenceDateTime = new Date(occurrenceDate);
+
+                        if (repairStartDateTime < occurrenceDateTime) {
+                          toast.error("Repair start date cannot be before occurrence date");
+                          return;
+                        }
+
+                        setRepairStartDate(newRepairStartDate);
+                      }}
+                      className="h-10"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Must be after or equal to occurrence date
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="repairEndDate" className="text-sm font-medium">Repair End</Label>
+                    <Input
+                      id="repairEndDate"
+                      type="datetime-local"
+                      value={repairEndDate}
+                      onChange={(e) => {
+                        const newRepairEndDate = e.target.value;
+                        const repairEndDateTime = new Date(newRepairEndDate);
+                        const repairStartDateTime = repairStartDate ? new Date(repairStartDate) : null;
+
+                        if (repairStartDateTime && repairEndDateTime <= repairStartDateTime) {
+                          toast.error("Repair end date must be after repair start date");
+                          return;
+                        }
+
+                        setRepairEndDate(newRepairEndDate);
+                      }}
+                      className="h-10"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Must be after repair start date
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="reason" className="text-sm font-medium">Reason for Outage</Label>
                 <Textarea
@@ -663,11 +853,34 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
                   id="restorationDate"
                   type="datetime-local"
                   value={restorationDate}
-                  onChange={(e) => setRestorationDate(e.target.value)}
+                  onChange={(e) => {
+                    const newRestorationDate = e.target.value;
+                    const restorationDateTime = new Date(newRestorationDate);
+                    const occurrenceDateTime = new Date(occurrenceDate);
+                    const repairStartDateTime = repairStartDate ? new Date(repairStartDate) : null;
+                    const repairEndDateTime = repairEndDate ? new Date(repairEndDate) : null;
+
+                    if (restorationDateTime <= occurrenceDateTime) {
+                      toast.error("Restoration date must be after occurrence date");
+                      return;
+                    }
+
+                    if (repairStartDateTime && restorationDateTime <= repairStartDateTime) {
+                      toast.error("Restoration date must be after repair start date");
+                      return;
+                    }
+
+                    if (repairEndDateTime && restorationDateTime <= repairEndDateTime) {
+                      toast.error("Restoration date must be after repair end date");
+                      return;
+                    }
+
+                    setRestorationDate(newRestorationDate);
+                  }}
                   className="h-9 sm:h-10 text-sm bg-background/50 border-muted"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Leave empty if the outage is still active
+                  Leave empty if the outage is still active. Must be after occurrence date and repair dates.
                 </p>
               </div>
             </TabsContent>
@@ -676,10 +889,10 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
               <div className="space-y-4 sm:space-y-8">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                   <div className="space-y-2">
-                    <Label htmlFor="durationHours" className="font-medium text-sm">Duration of Outage</Label>
+                    <Label htmlFor="durationHours" className="font-medium text-sm">Repair Duration</Label>
                     <div className="bg-muted/50 rounded-md p-2 sm:p-3 text-sm border border-muted">
-                      {durationHours !== null 
-                        ? `${durationHours.toFixed(2)} hours` 
+                      {repairStartDate && repairEndDate 
+                        ? `${calculateDurationHours(repairStartDate, repairEndDate).toFixed(2)} hours` 
                         : "Not calculated yet"}
                     </div>
                   </div>
@@ -692,6 +905,73 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
                         : "Not calculated yet"}
                     </div>
                   </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">Customer Interruption Duration</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="space-y-2">
+                      <Label className="font-medium text-sm">Metro</Label>
+                      <div className="bg-muted/50 rounded-md p-2 sm:p-3 text-sm border border-muted">
+                        {repairStartDate && repairEndDate && metroAffected
+                          ? `${(calculateDurationHours(repairStartDate, repairEndDate) * metroAffected).toFixed(2)} hours`
+                          : "Not calculated yet"}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="font-medium text-sm">Urban</Label>
+                      <div className="bg-muted/50 rounded-md p-2 sm:p-3 text-sm border border-muted">
+                        {repairStartDate && repairEndDate && urbanAffected
+                          ? `${(calculateDurationHours(repairStartDate, repairEndDate) * urbanAffected).toFixed(2)} hours`
+                          : "Not calculated yet"}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="font-medium text-sm">Rural</Label>
+                      <div className="bg-muted/50 rounded-md p-2 sm:p-3 text-sm border border-muted">
+                        {repairStartDate && repairEndDate && ruralAffected
+                          ? `${(calculateDurationHours(repairStartDate, repairEndDate) * ruralAffected).toFixed(2)} hours`
+                          : "Not calculated yet"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">Customer Interruption Frequency (CIF)</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="space-y-2">
+                      <Label className="font-medium text-sm">Metro CIF</Label>
+                      <div className="bg-muted/50 rounded-md p-2 sm:p-3 text-sm border border-muted">
+                        {metroAffected !== null && metroAffected > 0
+                          ? "1.00"
+                          : "0.00"}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="font-medium text-sm">Urban CIF</Label>
+                      <div className="bg-muted/50 rounded-md p-2 sm:p-3 text-sm border border-muted">
+                        {urbanAffected !== null && urbanAffected > 0
+                          ? "1.00"
+                          : "0.00"}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="font-medium text-sm">Rural CIF</Label>
+                      <div className="bg-muted/50 rounded-md p-2 sm:p-3 text-sm border border-muted">
+                        {ruralAffected !== null && ruralAffected > 0
+                          ? "1.00"
+                          : "0.00"}
+                      </div>
+                    </div>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    CIF = 1.00 for each category with affected customers (single outage event)
+                  </p>
                 </div>
               </div>
             </TabsContent>

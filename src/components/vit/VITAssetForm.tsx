@@ -456,7 +456,10 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
         photoUrl: capturedImage || photoUrl,
         createdBy: user?.email || "unknown",
         createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
+        type: "VIT" as const,
+        syncStatus: "created" as const,
+        ...(asset?.originalOfflineId ? { originalOfflineId: asset.originalOfflineId } : {})
       };
       
       console.log("Submitting asset data:", assetData);
@@ -464,17 +467,33 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
       if (asset) {
         // Update existing asset
         console.log("Updating asset:", asset.id);
-        console.log("Before updateVITAsset call");
         await updateVITAsset(asset.id, assetData);
-        console.log("After updateVITAsset call");
         toast.success("Asset updated successfully");
       } else {
         // Add new asset
         console.log("Adding new asset");
-        console.log("Before addVITAsset call");
-        await addVITAsset(assetData);
-        console.log("After addVITAsset call");
-        toast.success("Asset added successfully");
+        const isOnline = navigator.onLine;
+        
+        if (isOnline) {
+          await addVITAsset(assetData);
+          toast.success("Asset added successfully");
+        } else {
+          // Save offline and dispatch event
+          const offlineAsset = await addVITAsset(assetData);
+          // Dispatch custom event for offline asset
+          window.dispatchEvent(new CustomEvent('assetAdded', {
+            detail: {
+              type: 'vit',
+              asset: {
+                ...assetData,
+                id: offlineAsset,
+                syncStatus: 'created'
+              },
+              status: 'success'
+            }
+          }));
+          toast.success("Asset saved offline. It will be synced when internet connection is restored.");
+        }
       }
       
       // Only reset form if it's a new asset
@@ -491,30 +510,11 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
       }
 
       // Call onSubmit to close the form after successful save
-      console.log("Calling onSubmit to close form");
-      try {
-        onSubmit();
-      } catch (error) {
-        console.error("Error closing form:", error);
-        // Even if there's an error closing the form, we still want to show success
-        toast.success("Asset saved successfully");
-      }
+      onSubmit();
     } catch (error) {
       console.error("Error submitting VIT asset:", error);
-      // Check if the error is due to being offline
-      if (!navigator.onLine) {
-        toast.success("Asset saved offline. Will sync when online.");
-        // Still close the form since the save was successful (offline)
-        try {
-          onSubmit();
-        } catch (closeError) {
-          console.error("Error closing form:", closeError);
-        }
-      } else {
-        toast.error("Failed to save asset. Please try again.");
-      }
+      toast.error("Failed to save asset. Please try again.");
     } finally {
-      console.log("Form submission process finished");
       setIsSubmitting(false);
     }
   };
@@ -620,7 +620,7 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
       </CardHeader>
       <CardContent className="bg-card">
         <form id="vit-asset-form" onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-4">
             <div className="space-y-2">
               <Label htmlFor="region">Region *</Label>
               <Select 
@@ -629,12 +629,12 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
                 disabled={user?.role === "district_engineer" || user?.role === "regional_engineer" || user?.role === "technician" || user?.role === "district_manager" || user?.role === "regional_general_manager"}
                 required
               >
-                <SelectTrigger id="region">
+                <SelectTrigger id="region" className="w-full">
                   <SelectValue placeholder="Select region" />
                 </SelectTrigger>
                 <SelectContent>
                   {filteredRegions.map(region => (
-                    <SelectItem key={region.id} value={region.id || "unknown-region"}>
+                    <SelectItem key={region.id} value={region.id || "unknown-region"} className="w-full">
                       {region.name}
                     </SelectItem>
                   ))}
@@ -650,12 +650,12 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
                 disabled={user?.role === "district_engineer" || user?.role === "technician" || user?.role === "district_manager" || !regionId}
                 required
               >
-                <SelectTrigger id="district" className={user?.role === "district_engineer" || user?.role === "district_manager" ? "bg-muted" : ""}>
+                <SelectTrigger id="district" className="w-full">
                   <SelectValue placeholder="Select district" />
                 </SelectTrigger>
                 <SelectContent>
                   {filteredDistricts.map(district => (
-                    <SelectItem key={district.id} value={district.id || "unknown-district"}>
+                    <SelectItem key={district.id} value={district.id || "unknown-district"} className="w-full">
                       {district.name}
                     </SelectItem>
                   ))}
@@ -664,7 +664,7 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
             </div>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-4">
             <div className="space-y-2">
               <Label htmlFor="voltageLevel">Voltage Level *</Label>
               <Select 
@@ -672,7 +672,7 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
                 onValueChange={(val) => setVoltageLevel(val as VoltageLevel)}
                 required
               >
-                <SelectTrigger id="voltageLevel">
+                <SelectTrigger id="voltageLevel" className="w-full">
                   <SelectValue placeholder="Select voltage level" />
                 </SelectTrigger>
                 <SelectContent>
@@ -689,7 +689,7 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
                 onValueChange={(val) => setStatus(val as VITStatus)}
                 required
               >
-                <SelectTrigger id="status">
+                <SelectTrigger id="status" className="w-full">
                   <SelectValue placeholder="Select status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -702,7 +702,7 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
             </div>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-4">
             <div className="space-y-2">
               <Label htmlFor="typeOfUnit">Type of Unit *</Label>
               <Input
@@ -711,6 +711,7 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
                 onChange={(e) => setTypeOfUnit(e.target.value)}
                 placeholder="E.g., Ring Main Unit, Circuit Breaker"
                 required
+                className="w-full"
               />
             </div>
             
@@ -722,6 +723,7 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
                 onChange={(e) => setSerialNumber(e.target.value)}
                 placeholder="E.g., RMU2023-001"
                 required
+                className="w-full"
               />
             </div>
           </div>
@@ -734,6 +736,7 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
               onChange={(e) => setLocation(e.target.value)}
               placeholder="E.g., Main Street Substation"
               required
+              className="w-full"
             />
           </div>
           
@@ -750,6 +753,7 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
                 value={gpsCoordinates}
                 onChange={(e) => setGpsCoordinates(e.target.value)}
                 placeholder="e.g., 5.603717, -0.186964"
+                className="w-full"
               />
               <Button
                 type="button"
@@ -782,6 +786,7 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
               value={protection}
               onChange={(e) => setProtection(e.target.value)}
               placeholder="E.g., Overcurrent, Earth Fault"
+              className="w-full"
             />
           </div>
           
@@ -809,7 +814,6 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
                   </Button>
                 </div>
               )}
-              
               <div className="flex flex-col sm:flex-row gap-2">
                 <Button
                   type="button"
@@ -820,7 +824,6 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
                   <Camera className="mr-2 h-4 w-4" />
                   Take Photo
                 </Button>
-                
                 <Button
                   type="button"
                   variant="outline"
@@ -840,23 +843,23 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
               </div>
             </div>
           </div>
+          <CardFooter className="flex flex-col sm:flex-row justify-end gap-2 w-full">
+            <Button type="button" variant="outline" onClick={onCancel} className="w-full sm:w-auto">
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto">
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                asset ? "Update Asset" : "Add Asset"
+              )}
+            </Button>
+          </CardFooter>
         </form>
       </CardContent>
-      <CardFooter className="flex justify-end gap-2">
-        <Button variant="outline" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button type="submit" disabled={isSubmitting} form="vit-asset-form">
-          {isSubmitting ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              {asset ? "Updating..." : "Adding..."}
-            </>
-          ) : (
-            asset ? "Update Asset" : "Add Asset"
-          )}
-        </Button>
-      </CardFooter>
 
       {/* Camera Dialog */}
       <Dialog open={isCapturing} onOpenChange={(open) => {
