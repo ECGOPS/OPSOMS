@@ -397,98 +397,255 @@ export function Navbar() {
             <SheetContent side="left" className="flex flex-col overflow-y-auto">
               {/* Move Log Out button to the top for mobile */}
               {isAuthenticated && (
-                <div className="space-y-3 mb-4">
-                  <Link to="/profile" className="flex items-center gap-2 hover:underline">
-                    <User size={16} />
-                    <span className="font-medium">{user?.name || "User"}</span>
-                  </Link>
-                  <Button variant="outline" className="w-full" onClick={handleLogout}>
-                    <LogOut size={16} className="mr-2" />
-                    Log Out
+                <div className="flex items-center justify-between mb-4">
+                  <Button variant="ghost" size="sm" asChild>
+                    <Link to="/profile" className="flex items-center gap-2">
+                      <User size={16} />
+                      <span>{user?.name || "User"}</span>
+                    </Link>
+                  </Button>
+                  <Button variant="ghost" size="icon" onClick={handleLogout}>
+                    <LogOut size={18} />
                   </Button>
                 </div>
               )}
-              <nav className="flex flex-col gap-4 mt-4">
-                <NavLinks />
-                {/* Mobile Asset Management links */}
+              
+              <nav className="flex flex-col gap-2">
+                <NavLink
+                  to="/"
+                  className={({ isActive }) =>
+                    cn(
+                      "px-3 py-2 rounded-md transition-colors",
+                      isActive 
+                        ? "bg-primary/10 text-primary font-medium" 
+                        : "text-foreground hover:text-primary hover:bg-primary/5"
+                    )
+                  }
+                >
+                  Home
+                </NavLink>
+                
                 {isAuthenticated && (
-                  <div className="space-y-3">
-                    <div className="font-medium">Asset Management</div>
-                    <div className="pl-4 space-y-2">
+                  <>
+                    <NavLink 
+                      to="/dashboard"
+                      end
+                      className={({ isActive }) =>
+                        cn(
+                          "px-3 py-2 rounded-md transition-colors",
+                          isActive 
+                            ? "bg-primary/20 text-primary font-medium border border-primary/30" 
+                            : "text-foreground hover:text-primary hover:bg-primary/5"
+                        )
+                      }
+                    >
+                      Dashboard
+                    </NavLink>
+                    
+                    <NavLink 
+                      to="/report-fault" 
+                      className={({ isActive }) =>
+                        cn(
+                          "px-3 py-2 rounded-md transition-colors",
+                          isActive 
+                            ? "bg-primary/10 text-primary font-medium" 
+                            : "text-foreground hover:text-primary hover:bg-primary/5"
+                        )
+                      }
+                    >
+                      Report Fault
+                    </NavLink>
+                    
+                    {/* Analytics Links for Mobile */}
+                    {showMenuItem("district_engineer") && (
+                      <>
+                        <NavLink 
+                          to="/analytics" 
+                          className={({ isActive }) =>
+                            cn(
+                              "px-3 py-2 rounded-md transition-colors",
+                              isActive 
+                                ? "bg-primary/10 text-primary font-medium" 
+                                : "text-foreground hover:text-primary hover:bg-primary/5"
+                            )
+                          }
+                        >
+                          Fault Analytics
+                        </NavLink>
+                        <NavLink 
+                          to="/control-system-analytics" 
+                          className={({ isActive }) =>
+                            cn(
+                              "px-3 py-2 rounded-md transition-colors",
+                              isActive 
+                                ? "bg-primary/10 text-primary font-medium" 
+                                : "text-foreground hover:text-primary hover:bg-primary/5"
+                            )
+                          }
+                        >
+                          Control System Analytics
+                        </NavLink>
+                      </>
+                    )}
+                    
+                    {/* Asset Management Links for Mobile */}
+                    {showMenuItem("district_engineer") && (
+                      <>
+                        <NavLink 
+                          to="/asset-management/load-monitoring" 
+                          className={({ isActive }) =>
+                            cn(
+                              "px-3 py-2 rounded-md transition-colors",
+                              isActive 
+                                ? "bg-primary/10 text-primary font-medium" 
+                                : "text-foreground hover:text-primary hover:bg-primary/5"
+                            )
+                          }
+                        >
+                          Load Monitoring
+                        </NavLink>
+                        <NavLink 
+                          to="/asset-management/inspection-management" 
+                          className={({ isActive }) =>
+                            cn(
+                              "px-3 py-2 rounded-md transition-colors",
+                              isActive 
+                                ? "bg-primary/10 text-primary font-medium" 
+                                : "text-foreground hover:text-primary hover:bg-primary/5"
+                            )
+                          }
+                        >
+                          Substation Inspection
+                        </NavLink>
+                        <NavLink 
+                          to="/asset-management/vit-inspection" 
+                          className={({ isActive }) =>
+                            cn(
+                              "px-3 py-2 rounded-md transition-colors",
+                              isActive 
+                                ? "bg-primary/10 text-primary font-medium" 
+                                : "text-foreground hover:text-primary hover:bg-primary/5"
+                            )
+                          }
+                        >
+                          VITs Inspection
+                        </NavLink>
+                        <NavLink 
+                          to="/asset-management/overhead-line" 
+                          className={({ isActive }) =>
+                            cn(
+                              "px-3 py-2 rounded-md transition-colors",
+                              isActive 
+                                ? "bg-primary/10 text-primary font-medium" 
+                                : "text-foreground hover:text-primary hover:bg-primary/5"
+                            )
+                          }
+                        >
+                          Overhead Line Inspection
+                        </NavLink>
+                      </>
+                    )}
+                    
+                    {/* District Population Link for Mobile */}
+                    {showMenuItem("district_engineer") && (
                       <NavLink 
-                        to="/asset-management/load-monitoring" 
-                        className="block text-sm text-muted-foreground hover:text-foreground"
+                        to="/district-population" 
+                        className={({ isActive }) =>
+                          cn(
+                            "px-3 py-2 rounded-md transition-colors",
+                            isActive 
+                              ? "bg-primary/10 text-primary font-medium" 
+                              : "text-foreground hover:text-primary hover:bg-primary/5"
+                          )
+                        }
                       >
-                        Load Monitoring
+                        District Population
                       </NavLink>
-                      <NavLink 
-                        to="/asset-management/inspection-management" 
-                        className="block text-sm text-muted-foreground hover:text-foreground"
-                      >
-                        Substation Inspection
-                      </NavLink>
-                      <NavLink 
-                        to="/asset-management/vit-inspection" 
-                        className="block text-sm text-muted-foreground hover:text-foreground"
-                      >
-                        VITs Inspection
-                      </NavLink>
-                      <NavLink 
-                        to="/asset-management/overhead-line" 
-                        className="block text-sm text-muted-foreground hover:text-foreground"
-                      >
-                        Overhead Line Inspection
-                      </NavLink>
-                    </div>
-                  </div>
-                )}
-                {/* Mobile Admin Links */}
-                {user?.role === "system_admin" && (
-                  <div className="space-y-3">
-                    <div className="font-medium">Admin</div>
-                    <div className="pl-4 space-y-2">
+                    )}
+                    
+                    {/* Admin Menu Items for Mobile */}
+                    {user?.role === "system_admin" && (
+                      <>
+                        <NavLink 
+                          to="/user-management" 
+                          className={({ isActive }) =>
+                            cn(
+                              "px-3 py-2 rounded-md transition-colors",
+                              isActive 
+                                ? "bg-primary/10 text-primary font-medium" 
+                                : "text-foreground hover:text-primary hover:bg-primary/5"
+                            )
+                          }
+                        >
+                          User Management
+                        </NavLink>
+                        <NavLink 
+                          to="/system-admin/permissions" 
+                          className={({ isActive }) =>
+                            cn(
+                              "px-3 py-2 rounded-md transition-colors",
+                              isActive 
+                                ? "bg-primary/10 text-primary font-medium" 
+                                : "text-foreground hover:text-primary hover:bg-primary/5"
+                            )
+                          }
+                        >
+                          Permission Management
+                        </NavLink>
+                        <NavLink 
+                          to="/system-admin/security" 
+                          className={({ isActive }) =>
+                            cn(
+                              "px-3 py-2 rounded-md transition-colors",
+                              isActive 
+                                ? "bg-primary/10 text-primary font-medium" 
+                                : "text-foreground hover:text-primary hover:bg-primary/5"
+                            )
+                          }
+                        >
+                          Security Monitoring
+                        </NavLink>
+                        <NavLink 
+                          to="/test/security" 
+                          className={({ isActive }) =>
+                            cn(
+                              "px-3 py-2 rounded-md transition-colors",
+                              isActive 
+                                ? "bg-primary/10 text-primary font-medium" 
+                                : "text-foreground hover:text-primary hover:bg-primary/5"
+                            )
+                          }
+                        >
+                          Security Testing
+                        </NavLink>
+                      </>
+                    )}
+                    
+                    {user?.role === "global_engineer" && (
                       <NavLink 
                         to="/user-management" 
-                        className="block text-sm text-muted-foreground hover:text-foreground"
+                        className={({ isActive }) =>
+                          cn(
+                            "px-3 py-2 rounded-md transition-colors",
+                            isActive 
+                              ? "bg-primary/10 text-primary font-medium" 
+                              : "text-foreground hover:text-primary hover:bg-primary/5"
+                          )
+                        }
                       >
                         User Management
                       </NavLink>
-                      <NavLink 
-                        to="/system-admin/permissions" 
-                        className="block text-sm text-muted-foreground hover:text-foreground"
-                      >
-                        Permission Management
-                      </NavLink>
-                      <NavLink 
-                        to="/system-admin/security" 
-                        className="block text-sm text-muted-foreground hover:text-foreground"
-                      >
-                        Security Monitoring
-                      </NavLink>
-                      <NavLink 
-                        to="/test/security" 
-                        className="block text-sm text-muted-foreground hover:text-foreground"
-                      >
-                        Security Testing
-                      </NavLink>
-                    </div>
-                  </div>
+                    )}
+                  </>
                 )}
               </nav>
-              <Separator className="my-4" />
-              <Button variant="ghost" onClick={toggleTheme} className="w-full mb-2">
-                {theme === "dark" ? "Light Mode" : "Dark Mode"}
-              </Button>
-              {!isAuthenticated && (
-                <div className="flex flex-col gap-2 mt-auto">
-                  <Button variant="outline" className="w-full" asChild>
-                    <Link to="/login">Log In</Link>
-                  </Button>
-                  <Button className="w-full" asChild>
-                    <Link to="/signup">Sign Up</Link>
-                  </Button>
-                </div>
-              )}
+              
+              {/* Mobile Dark Mode Toggle Button */}
+              <div className="mt-auto pt-4 border-t">
+                <Button variant="ghost" onClick={toggleTheme} className="w-full justify-start">
+                  {theme === "dark" ? "Light Mode" : "Dark Mode"}
+                </Button>
+              </div>
             </SheetContent>
           </Sheet>
         </div>
