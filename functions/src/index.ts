@@ -4,21 +4,17 @@ import axios from 'axios';
 
 admin.initializeApp();
 
-// BulkSMS API configuration
-const BULKSMS_API_URL = 'https://pelrq3.api.infobip.com/sms/2/text/advanced';
-const BULKSMS_API_KEY = functions.config().bulksms.api_key;
+// mNotify API configuration
+const MNOTIFY_API_URL = 'https://api.mnotify.com/api/sms/quick';
+const MNOTIFY_API_KEY = functions.config().mnotify.api_key;
 
-interface ResetPasswordRequest {
-  userId: string;
-}
-
-interface ResetPasswordResponse {
-  tempPassword: string;
-}
-
-interface BulkSMSResponse {
-  id: string;
+interface MNotifyResponse {
   status: string;
+  code: number;
+  message: string;
+  message_id: string;
+  balance: number;
+  recipient: number;
 }
 
 // export const adminResetPassword = functions.https.onRequest(async (req, res) => {
@@ -207,6 +203,30 @@ export const getIpAddress = functions.https.onRequest((req, res) => {
   });
 });
 
+// Helper function to format phone numbers
+function formatPhoneNumber(phoneNumber: string): string {
+  // Remove any non-digit characters
+  const cleaned = phoneNumber.replace(/\D/g, '');
+  
+  // If number starts with 0, replace with +233
+  if (cleaned.startsWith('0')) {
+    return '+233' + cleaned.substring(1);
+  }
+  
+  // If number starts with 233, add +
+  if (cleaned.startsWith('233')) {
+    return '+' + cleaned;
+  }
+  
+  // If number doesn't have country code, add +233
+  if (cleaned.length === 10) {
+    return '+233' + cleaned;
+  }
+  
+  // Return as is if already in international format
+  return '+' + cleaned;
+}
+
 export const sendSMS = functions.https.onRequest(async (req, res) => {
   // Set CORS headers
   res.set('Access-Control-Allow-Origin', '*');
@@ -249,29 +269,29 @@ export const sendSMS = functions.https.onRequest(async (req, res) => {
       return;
     }
 
-    // Format phone number to ensure it's in the correct format (e.g., +233XXXXXXXXX)
-    const formattedPhoneNumber = formatPhoneNumber(phoneNumber);
+    // Format phone number to ensure it's in the correct format (e.g., 024XXXXXXXX)
+    const formattedPhoneNumber = formatPhoneNumber(phoneNumber).replace('+233', '0');
+    console.log('Sending SMS to:', formattedPhoneNumber);
 
-    // Send SMS using BulkSMS
-    const response = await axios.post<BulkSMSResponse>(
-      BULKSMS_API_URL,
+    // Send SMS using mNotify
+    const response = await axios.post<MNotifyResponse>(
+      `${MNOTIFY_API_URL}?key=${MNOTIFY_API_KEY}`,
       {
-        messages: [{
-          destinations: [{
-            to: formattedPhoneNumber
-          }],
-          from: 'ECG OUTAGE MANAGMENT SYSTEM',
-          text: message
-        }]
+        recipient: [formattedPhoneNumber],
+        sender: 'OPS STAFFS',
+        message: message,
+        is_schedule: 'false',
+        schedule_date: ''
       },
       {
         headers: {
-          'Authorization': `App ${BULKSMS_API_KEY}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
         }
       }
     );
+
+    console.log('mNotify API response:', response.data);
 
     // Log successful SMS
     await admin.firestore().collection('sms_logs').add({
@@ -280,12 +300,17 @@ export const sendSMS = functions.https.onRequest(async (req, res) => {
       faultId,
       faultType,
       status: 'sent',
-      bulksmsMessageId: response.data.id,
+      messageId: response.data.message_id,
       timestamp: admin.firestore.FieldValue.serverTimestamp()
     });
 
-    res.status(200).json({ success: true, messageId: response.data.id });
+    res.status(200).json({
+      success: true,
+      messageId: response.data.message_id
+    });
   } catch (error: any) {
+    console.error('SMS Error:', error.response?.data || error);
+    
     // Log failed SMS
     await admin.firestore().collection('sms_logs').add({
       phoneNumber: req.body.phoneNumber,
@@ -349,25 +374,22 @@ export const testSMS = functions.https.onRequest(async (req, res) => {
     const testMessage = "This is a test message from ECG Fault Master. Your fault has been resolved.";
 
     // Format phone number
-    const formattedPhoneNumber = formatPhoneNumber(phoneNumber);
+    const formattedPhoneNumber = formatPhoneNumber(phoneNumber).replace('+233', '0');
 
     // Send test SMS
-    const response = await axios.post<BulkSMSResponse>(
-      BULKSMS_API_URL,
+    const response = await axios.post<MNotifyResponse>(
+      `${MNOTIFY_API_URL}?key=${MNOTIFY_API_KEY}`,
       {
-        messages: [{
-          destinations: [{
-            to: formattedPhoneNumber
-          }],
-          from: 'ECG OUTAGE MANAGMENT SYSTEM',
-          text: testMessage
-        }]
+        recipient: [formattedPhoneNumber],
+        sender: 'OPS STAFFS',
+        message: testMessage,
+        is_schedule: 'false',
+        schedule_date: ''
       },
       {
         headers: {
-          'Authorization': `App ${BULKSMS_API_KEY}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
         }
       }
     );
@@ -379,13 +401,13 @@ export const testSMS = functions.https.onRequest(async (req, res) => {
       faultId: 'TEST',
       faultType: 'TEST',
       status: 'sent',
-      bulksmsMessageId: response.data.id,
+      messageId: response.data.message_id,
       timestamp: admin.firestore.FieldValue.serverTimestamp()
     });
 
     res.status(200).json({ 
       success: true, 
-      messageId: response.data.id,
+      messageId: response.data.message_id,
       message: 'Test SMS sent successfully'
     });
   } catch (error: any) {
@@ -407,28 +429,4 @@ export const testSMS = functions.https.onRequest(async (req, res) => {
       details: error.response?.data || error.message
     });
   }
-});
-
-// Helper function to format phone numbers
-function formatPhoneNumber(phoneNumber: string): string {
-  // Remove any non-digit characters
-  const cleaned = phoneNumber.replace(/\D/g, '');
-  
-  // If number starts with 0, replace with +233
-  if (cleaned.startsWith('0')) {
-    return '+233' + cleaned.substring(1);
-  }
-  
-  // If number starts with 233, add +
-  if (cleaned.startsWith('233')) {
-    return '+' + cleaned;
-  }
-  
-  // If number doesn't have country code, add +233
-  if (cleaned.length === 10) {
-    return '+233' + cleaned;
-  }
-  
-  // Return as is if already in international format
-  return '+' + cleaned;
-} 
+}); 
