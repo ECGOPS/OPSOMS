@@ -323,7 +323,7 @@ export default function EditControlOutagePage() {
                            <SelectItem value="Planned">Planned</SelectItem>
                            <SelectItem value="Unplanned">Unplanned</SelectItem>
                            <SelectItem value="Emergency">Emergency</SelectItem>
-                           <SelectItem value="Load Shedding">Load Shedding</SelectItem>
+                           <SelectItem value="ECG Load Shedding">ECG Load Shedding</SelectItem>
                          </SelectContent>
                        </Select>
                      </div>

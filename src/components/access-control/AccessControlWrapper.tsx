@@ -13,7 +13,7 @@ interface AccessControlWrapperProps {
   districtId?: string;
   assetId?: string;
   inspectionId?: string;
-  type?: 'asset' | 'inspection' | 'district_population' | 'analytics_dashboard' | 'analytics_page' | 'reliability_metrics' | 'performance_reports';
+  type?: 'asset' | 'inspection' | 'district_population' | 'analytics_dashboard' | 'analytics_page' | 'reliability_metrics' | 'performance_reports' | 'control_system_analytics';
 }
 
 export function AccessControlWrapper({
@@ -31,7 +31,6 @@ export function AccessControlWrapper({
     vitInspections,
     savedInspections,
     op5Faults,
-    controlOutages,
     regions,
     districts
   } = useData();
@@ -65,7 +64,7 @@ export function AccessControlWrapper({
       }
 
       // Check analytics access
-      if (type === 'analytics_dashboard' || type === 'reliability_metrics' || type === 'performance_reports') {
+      if (type === 'analytics_dashboard' || type === 'reliability_metrics' || type === 'performance_reports' || type === 'control_system_analytics') {
         if (!permissionService.canAccessFeature(user?.role || null, type)) {
           console.log('Access denied: Cannot access analytics feature');
           toast.error("You don't have permission to access analytics");

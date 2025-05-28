@@ -22,7 +22,7 @@ import {
   CardTitle 
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, InfoIcon, Users, MapPin, Calculator, FileText } from "lucide-react";
+import { Loader2, InfoIcon, Users, MapPin, Calculator, FileText, Search, X } from "lucide-react";
 import { FaultType, UnplannedFaultType, EmergencyFaultType, ControlSystemOutage } from "@/lib/types";
 import { 
   calculateDurationHours,
@@ -32,10 +32,20 @@ import { toast } from "@/components/ui/sonner";
 import { showNotification, showServiceWorkerNotification } from '@/utils/notifications';
 import { PermissionService } from "@/services/PermissionService";
 import OfflineStorageService from "@/services/OfflineStorageService";
+import { db } from "@/config/firebase";
+import { collection, getDocs, query, where } from "firebase/firestore";
 
 interface ControlSystemOutageFormProps {
   defaultRegionId?: string;
   defaultDistrictId?: string;
+}
+
+interface FeederInfo {
+  id: string;
+  name: string;
+  bsp: string;
+  regionId: string;
+  districtId: string;
 }
 
 export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictId = "" }: ControlSystemOutageFormProps) {
@@ -67,6 +77,7 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
   
   // New state variables for feeder/equipment details
   const [feederName, setFeederName] = useState<string>("");
+  const [bspPss, setBspPss] = useState<string>("");
   const [voltageLevel, setVoltageLevel] = useState<string>("");
   const [repairStartDate, setRepairStartDate] = useState<string>("");
   const [repairEndDate, setRepairEndDate] = useState<string>("");
@@ -99,6 +110,13 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
   const [metroFeederCustomers, setMetroFeederCustomers] = useState<number | null>(null);
   const [urbanFeederCustomers, setUrbanFeederCustomers] = useState<number | null>(null);
   const [ruralFeederCustomers, setRuralFeederCustomers] = useState<number | null>(null);
+  
+  // Feeder-related state
+  const [selectedRegion, setSelectedRegion] = useState<string>("");
+  const [selectedDistrict, setSelectedDistrict] = useState<string>("");
+  const [selectedFeeder, setSelectedFeeder] = useState<string>("");
+  const [feeders, setFeeders] = useState<FeederInfo[]>([]);
+  const [feederSearch, setFeederSearch] = useState("");
   
   // Check if user has permission to report faults
   useEffect(() => {
@@ -305,17 +323,28 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
           urban: urbanAffected ?? 0,
           metro: metroAffected ?? 0
         },
+        customerInterruptions: {
+          rural: ruralInterruptions ?? 0,
+          urban: urbanInterruptions ?? 0,
+          metro: metroInterruptions ?? 0
+        },
         estimatedResolutionTime: formattedEstimatedResolutionTime,
         voltageLevel: voltageLevel || "",
         repairStartDate: repairStartDate ? new Date(repairStartDate).toISOString() : null,
         repairEndDate: repairEndDate ? new Date(repairEndDate).toISOString() : null,
         feederType: feederType || "",
         feederName: feederName || "",
+        bspPss: bspPss || "",
         feederCustomers: {
           metro: feederCustomers.metro ?? 0,
           urban: feederCustomers.urban ?? 0,
           rural: feederCustomers.rural ?? 0
-        }
+        },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        createdBy: user?.id || "",
+        updatedBy: user?.id || "",
+        isOffline: !navigator.onLine
       };
 
       const offlineStorage = OfflineStorageService.getInstance();
@@ -364,6 +393,51 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
       setSpecificFaultType(undefined);
     }
   }, [faultType]);
+
+  // Fetch feeders when region changes
+  useEffect(() => {
+    const fetchFeeders = async () => {
+      if (!regionId) {
+        setFeeders([]);
+        return;
+      }
+
+      try {
+        const feedersRef = collection(db, "feeders");
+        const q = query(feedersRef, where("regionId", "==", regionId));
+        const querySnapshot = await getDocs(q);
+        const feedersData = querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as FeederInfo[];
+        setFeeders(feedersData);
+      } catch (error) {
+        console.error("Error fetching feeders:", error);
+        toast.error("Failed to load feeders");
+      }
+    };
+
+    fetchFeeders();
+  }, [regionId]);
+
+  // Update BSP/PSS when feeder changes
+  useEffect(() => {
+    if (selectedFeeder) {
+      const feeder = feeders.find(f => f.id === selectedFeeder);
+      if (feeder) {
+        setBspPss(feeder.bspPss);
+        setFeederName(feeder.name);
+      }
+    } else {
+      setBspPss("");
+      setFeederName("");
+    }
+  }, [selectedFeeder, feeders]);
+  
+  // Filter feeders based on search
+  const filteredFeeders = feeders.filter(feeder => 
+    feeder.name.toLowerCase().includes(feederSearch.toLowerCase())
+  );
   
   return (
     <Card className="border-0 shadow-none bg-transparent">
@@ -380,7 +454,12 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
               <Label htmlFor="region" className="text-base font-medium">Region</Label>
               <Select 
                 value={regionId} 
-                onValueChange={setRegionId}
+                onValueChange={(value) => {
+                  setRegionId(value);
+                  setSelectedDistrict("");
+                  setSelectedFeeder("");
+                  setBspPss("");
+                }}
                 disabled={user?.role === "district_engineer" || user?.role === "district_manager" || user?.role === "regional_engineer" || user?.role === "regional_general_manager" || user?.role === "technician"}
                 required
               >
@@ -401,7 +480,10 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
               <Label htmlFor="district" className="text-base font-medium">District</Label>
               <Select 
                 value={districtId} 
-                onValueChange={setDistrictId}
+                onValueChange={(value) => {
+                  setDistrictId(value);
+                  setSelectedFeeder("");
+                }}
                 disabled={user?.role === "district_engineer" || user?.role === "district_manager" || user?.role === "technician" || !regionId}
                 required
               >
@@ -500,7 +582,71 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
             </div>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="feederName" className="text-base font-medium">Feeder Name</Label>
+              <Select
+                value={selectedFeeder}
+                onValueChange={(value) => {
+                  setSelectedFeeder(value);
+                  const feeder = feeders.find(f => f.id === value);
+                  if (feeder) {
+                    setBspPss(feeder.bspPss);
+                  }
+                }}
+                disabled={!regionId}
+              >
+                <SelectTrigger className="h-12 text-base bg-background/50 border-muted">
+                  <SelectValue placeholder="Select feeder" />
+                </SelectTrigger>
+                <SelectContent className="max-h-[300px] overflow-y-auto">
+                  <div className="flex items-center px-3 py-2 sticky top-0 bg-background z-10 border-b">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search feeders..."
+                        value={feederSearch}
+                        onChange={(e) => setFeederSearch(e.target.value)}
+                        className="h-9 pl-9 pr-9 bg-background/50 border-muted focus:border-primary focus:ring-1 focus:ring-primary/20 transition-colors"
+                      />
+                      {feederSearch && (
+                        <button
+                          onClick={() => setFeederSearch("")}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  {filteredFeeders.length === 0 ? (
+                    <div className="py-6 text-center text-sm text-muted-foreground">
+                      No feeders found
+                    </div>
+                  ) : (
+                    filteredFeeders.map((feeder) => (
+                      <SelectItem key={feeder.id} value={feeder.id}>
+                        {feeder.name}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-3">
+              <Label htmlFor="bspPss" className="text-base font-medium">BSP/PSS</Label>
+              <Input
+                id="bspPss"
+                type="text"
+                value={bspPss}
+                onChange={(e) => setBspPss(e.target.value)}
+                placeholder="Enter BSP/PSS"
+                className="h-12 text-base bg-background/50 border-muted"
+                required
+              />
+            </div>
+
             <div className="space-y-3">
               <Label htmlFor="faultType" className="text-base font-medium">Type of Fault</Label>
               <Select value={faultType} onValueChange={(value) => setFaultType(value as FaultType)} required>
@@ -511,23 +657,10 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
                   <SelectItem value="Planned">Planned</SelectItem>
                   <SelectItem value="Unplanned">Unplanned</SelectItem>
                   <SelectItem value="Emergency">Emergency</SelectItem>
-                  <SelectItem value="Load Shedding">Load Shedding</SelectItem>
+                  <SelectItem value="ECG Load Shedding">ECG Load Shedding</SelectItem>
                   <SelectItem value="GridCo Outages">GridCo Outages</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-
-            <div className="space-y-3">
-              <Label htmlFor="feederName" className="text-base font-medium">Feeder Name</Label>
-              <Input
-                id="feederName"
-                type="text"
-                value={feederName}
-                onChange={(e) => setFeederName(e.target.value)}
-                placeholder="Enter feeder name"
-                className="h-12 text-base bg-background/50 border-muted"
-                required
-              />
             </div>
           </div>
           

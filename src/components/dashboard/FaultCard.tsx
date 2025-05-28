@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatDate, formatDuration } from "@/utils/calculations";
-import { AlertTriangle, BarChart, Clock, MapPin, Users, CheckCircle2, XCircle, Edit, Trash2, FileText } from "lucide-react";
+import { AlertTriangle, BarChart, Clock, MapPin, Users, CheckCircle2, XCircle, Edit, Trash2, FileText, TestTube } from "lucide-react";
 import { useData } from "@/contexts/DataContext";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
@@ -30,13 +30,15 @@ interface FaultCardProps {
 }
 
 export function FaultCard({ fault, type }: FaultCardProps) {
-  const { regions, districts, resolveFault, deleteFault, canEditFault } = useData();
+  const { regions, districts, resolveFault, deleteFault, canEditFault, addOP5Fault } = useData();
   const { user } = useAuth();
   const navigate = useNavigate();
   const permissionService = PermissionService.getInstance();
   const [isResolveOpen, setIsResolveOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [restorationDate, setRestorationDate] = useState<string>("");
+  const [isTestMode, setIsTestMode] = useState(false);
+  const [testFaultId, setTestFaultId] = useState<string | null>(null);
   
   const region = regions.find(r => r.id === fault.regionId);
   const district = districts.find(d => d.id === fault.districtId);
@@ -66,7 +68,7 @@ export function FaultCard({ fault, type }: FaultCardProps) {
         return "bg-red-100 text-red-800 hover:bg-red-100";
       case "Emergency":
         return "bg-orange-100 text-orange-800 hover:bg-orange-100";
-      case "Load Shedding":
+      case "ECG Load Shedding":
         return "bg-purple-100 text-purple-800 hover:bg-purple-100";
       default:
         return "bg-gray-100 text-gray-800 hover:bg-gray-100";
@@ -81,7 +83,7 @@ export function FaultCard({ fault, type }: FaultCardProps) {
         return "border-l-4 border-l-red-500 bg-gradient-to-br from-red-50 to-white dark:from-red-950/30 dark:to-gray-800/30";
       case "Emergency":
         return "border-l-4 border-l-orange-500 bg-gradient-to-br from-orange-50 to-white dark:from-orange-950/30 dark:to-gray-800/30";
-      case "Load Shedding":
+      case "ECG Load Shedding":
         return "border-l-4 border-l-purple-500 bg-gradient-to-br from-purple-50 to-white dark:from-purple-950/30 dark:to-gray-800/30";
       case "GridCo Outage":
         return "border-l-4 border-l-emerald-500 bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-950/30 dark:to-gray-800/30";
@@ -248,12 +250,62 @@ export function FaultCard({ fault, type }: FaultCardProps) {
     }
   };
   
+  // Add test fault function
+  const createTestFault = async () => {
+    try {
+      const testFault = {
+        faultType: "Unplanned" as const,
+        specificFaultType: "TEST_FAULT",
+        description: "Test fault for SMS notification",
+        areasAffected: "Test Area",
+        substationName: "Test Substation",
+        occurrenceDate: new Date().toISOString(),
+        regionId: regions[0]?.id || "",
+        districtId: districts[0]?.id || "",
+        region: regions[0]?.name || "",
+        district: districts[0]?.name || "",
+        status: "pending" as const,
+        customerPhoneNumber: "+233245003731", // Test phone number
+        affectedPopulation: {
+          rural: 0,
+          urban: 0,
+          metro: 0
+        },
+        voltageLevel: "11kV",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        createdBy: user?.uid || "",
+        updatedBy: user?.uid || "",
+        outageType: "Unplanned" as const,
+        substationNo: "TEST-001",
+        feeder: "TEST-FEEDER",
+        estimatedResolutionTime: new Date(Date.now() + 3600000).toISOString(), // 1 hour from now
+        repairDate: null,
+        repairEndDate: null,
+        restorationDate: null,
+        remarks: "Test fault for SMS notification testing",
+        materialsUsed: [] // Empty array for test fault
+      };
+
+      const faultId = await addOP5Fault(testFault);
+      setTestFaultId(faultId);
+      setIsTestMode(true);
+      toast.success("Test fault created successfully. You can now resolve it to test SMS notification.");
+    } catch (error) {
+      console.error("Error creating test fault:", error);
+      toast.error("Failed to create test fault");
+    }
+  };
+
   return (
     <Card className={`h-full flex flex-col shadow-md hover:shadow-lg transition-all duration-200 ease-out hover:scale-[1.01] overflow-hidden ${getCardColors(fault.faultType)} pb-20`}>
       <CardHeader className="p-4 pb-2 bg-white/80 dark:bg-gray-800/50">
         <div className="flex justify-between items-start">
           <CardTitle className="text-lg font-semibold">
             {isOP5 ? "OP5 Fault" : "Control System Outage"}
+            {isTestMode && fault.id === testFaultId && (
+              <Badge className="ml-2 bg-purple-100 text-purple-800">Test Mode</Badge>
+            )}
           </CardTitle>
           <Badge className={`${statusClass} shadow-sm`}>
             {fault.status === "pending" ? "Pending" : "Resolved"}
@@ -378,6 +430,35 @@ export function FaultCard({ fault, type }: FaultCardProps) {
       
       <CardFooter className="p-4 pt-4 bg-white/80 dark:bg-gray-800/50 mt-auto">
         <div className="flex flex-col gap-2 w-full sm:flex-row">
+          {/* Test buttons */}
+          {user?.role === "system_admin" && (
+            <>
+              {!isTestMode && (
+                <Button 
+                  variant="outline" 
+                  className="flex-1 border-purple-200 hover:bg-purple-50 hover:text-purple-700 dark:hover:bg-purple-900/30"
+                  onClick={createTestFault}
+                >
+                  <TestTube className="mr-2 h-4 w-4 text-purple-500" />
+                  Create Test Fault
+                </Button>
+              )}
+              {isTestMode && fault.id === testFaultId && (
+                <Button 
+                  variant="outline" 
+                  className="flex-1 border-purple-200 hover:bg-purple-50 hover:text-purple-700 dark:hover:bg-purple-900/30"
+                  onClick={() => {
+                    setIsTestMode(false);
+                    setTestFaultId(null);
+                  }}
+                >
+                  <TestTube className="mr-2 h-4 w-4 text-purple-500" />
+                  Exit Test Mode
+                </Button>
+              )}
+            </>
+          )}
+          
           {canResolve() && (
             <Dialog open={isResolveOpen} onOpenChange={setIsResolveOpen}>
               <DialogTrigger asChild>

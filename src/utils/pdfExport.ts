@@ -753,10 +753,10 @@ export const exportAnalyticsToPDF = async (
     currentY -= 20;
 
     const totalFaults = filteredFaults.length;
-    const op5Faults = filteredFaults.filter(f => 'faultLocation' in f).length;
-    const controlOutages = filteredFaults.filter(f => 'customersAffected' in f).length;
+    const op5Faults = filteredFaults.filter(f => f.type === 'OP5 Fault').length;
+    const controlOutages = filteredFaults.filter(f => f.type === 'Control Outage').length;
     const activeFaults = filteredFaults.filter(f => f.status === 'active').length;
-    const resolvedFaults = totalFaults - activeFaults; // Or filter for resolved status
+    const resolvedFaults = totalFaults - activeFaults;
 
     const summaryHeaders = ['Metric', 'Value'];
     const summaryData = [
@@ -817,70 +817,112 @@ export const exportAnalyticsToPDF = async (
     });
     currentY -= 20;
 
-    // --- MTTR Report Table --- 
-    const op5FaultsWithMTTR = filteredFaults.filter(f => 'faultLocation' in f && typeof f.mttr === 'number' && f.mttr > 0);
-    
-    if (op5FaultsWithMTTR.length > 0) {
-         page.drawText('Mean Time To Repair (MTTR) - OP5 Faults', {
-          x: margin,
-          y: currentY,
-          size: 14,
-          font: boldFont,
-          color: rgb(0, 0.2, 0.4),
-        });
-        currentY -= 20;
+    // --- MTTR Report Section ---
+    page.drawText('Mean Time To Repair (MTTR) Analysis', {
+      x: margin,
+      y: currentY,
+      size: 14,
+      font: boldFont,
+      color: rgb(0, 0.2, 0.4),
+    });
+    currentY -= 20;
 
-        const totalMTTR = op5FaultsWithMTTR.reduce((sum, fault) => sum + (fault.mttr || 0), 0);
-        const averageMTTR = totalMTTR / op5FaultsWithMTTR.length;
+    // Calculate MTTR statistics
+    console.log('MTTR Debug - All faults:', filteredFaults.map(f => ({
+      id: f.id,
+      type: f.type,
+      repairDate: f.repairDate,
+      repairEndDate: f.repairEndDate
+    })));
 
-        const mttrSummaryHeaders = ['Metric', 'Value'];
-        const mttrSummaryData = [
-            ['Faults with MTTR', op5FaultsWithMTTR.length],
-            ['Average MTTR (All)', `${averageMTTR.toFixed(2)} hours`],
-            ['Total Repair Time', `${totalMTTR.toFixed(2)} hours`],
-        ];
+    const op5FaultsWithMTTR = filteredFaults.filter(f => {
+      const isOP5 = f.type === 'OP5 Fault';
+      const hasValidDates = f.repairDate && f.repairEndDate;
+      
+      if (isOP5 && hasValidDates) {
+        const repairDate = new Date(f.repairDate);
+        const repairEndDate = new Date(f.repairEndDate);
+        const mttr = (repairEndDate.getTime() - repairDate.getTime()) / (1000 * 60 * 60); // Convert to hours
+        f.mttr = mttr; // Add calculated MTTR to the fault object
+      }
 
-        // Draw Summary MTTR Table first
-        currentY = await drawTable({ 
-            page, startX: margin, startY: currentY, tableWidth: contentWidth / 2, // Half width
-            headers: mttrSummaryHeaders, data: mttrSummaryData, 
-            headerFont: boldFont, bodyFont: regularFont, 
-            columnWidths: [150, 100]
-        });
-        currentY -= 15; // Space after summary
+      console.log('MTTR Debug - Fault:', {
+        id: f.id,
+        type: f.type,
+        repairDate: f.repairDate,
+        repairEndDate: f.repairEndDate,
+        calculatedMTTR: f.mttr,
+        isOP5,
+        hasValidDates
+      });
 
-        // MTTR by Region Table
-         page.drawText('Average MTTR by Region', {
-              x: margin,
-              y: currentY,
-              size: 12,
-              font: boldFont,
-              color: rgb(0, 0.2, 0.4),
-         });
-         currentY -= 15;
+      return isOP5 && hasValidDates;
+    });
 
-        const mttrRegionHeaders = ['Region', 'Avg. MTTR (hours)', 'Fault Count'];
-        const mttrRegionData = regions
-            .map(region => {
-                const regionFaults = op5FaultsWithMTTR.filter(f => f.regionId === region.id);
-                if (regionFaults.length === 0) return null; // Skip regions with no data
-                const regionMTTRSum = regionFaults.reduce((sum, fault) => sum + (fault.mttr || 0), 0);
-                const avgMTTR = regionMTTRSum / regionFaults.length;
-                return [region.name, avgMTTR.toFixed(2), regionFaults.length];
-            })
-            .filter(row => row !== null); // Filter out null rows
+    console.log('MTTR Debug - Filtered faults:', op5FaultsWithMTTR.map(f => ({
+      id: f.id,
+      type: f.type,
+      mttr: f.mttr
+    })));
 
-         if (mttrRegionData.length > 0) {
-             currentY = await drawTable({ 
-                page, startX: margin, startY: currentY, tableWidth: contentWidth * 0.75, // 3/4 width
-                headers: mttrRegionHeaders, data: mttrRegionData as (string | number)[][], 
-                headerFont: boldFont, bodyFont: regularFont, 
-                columnWidths: [150, 100, 100]
-            });
-         }
-         currentY -= 20;
+    const totalMTTR = op5FaultsWithMTTR.reduce((sum, fault) => sum + (fault.mttr || 0), 0);
+    const averageMTTR = op5FaultsWithMTTR.length > 0 ? totalMTTR / op5FaultsWithMTTR.length : 0;
+
+    console.log('MTTR Debug - Summary:', {
+      totalFaults: filteredFaults.length,
+      op5Faults: filteredFaults.filter(f => f.type === 'OP5 Fault').length,
+      faultsWithMTTR: op5FaultsWithMTTR.length,
+      totalMTTR,
+      averageMTTR
+    });
+
+    // MTTR Summary Table
+    const mttrSummaryHeaders = ['Metric', 'Value'];
+    const mttrSummaryData = [
+      ['Total Faults with MTTR', op5FaultsWithMTTR.length],
+      ['Average MTTR', `${averageMTTR.toFixed(2)} hours`],
+      ['Total Repair Time', `${totalMTTR.toFixed(2)} hours`],
+    ];
+
+    currentY = await drawTable({ 
+      page, startX: margin, startY: currentY, tableWidth: contentWidth / 2,
+      headers: mttrSummaryHeaders, data: mttrSummaryData, 
+      headerFont: boldFont, bodyFont: regularFont, 
+      columnWidths: [150, 100]
+    });
+    currentY -= 20;
+
+    // MTTR by Region Table
+    page.drawText('MTTR by Region', {
+      x: margin,
+      y: currentY,
+      size: 12,
+      font: boldFont,
+      color: rgb(0, 0.2, 0.4),
+    });
+    currentY -= 15;
+
+    const mttrRegionHeaders = ['Region', 'Avg. MTTR (hours)', 'Fault Count'];
+    const mttrRegionData = regions
+      .map(region => {
+        const regionFaults = op5FaultsWithMTTR.filter(f => f.regionId === region.id);
+        if (regionFaults.length === 0) return null;
+        const regionMTTRSum = regionFaults.reduce((sum, fault) => sum + (fault.mttr || 0), 0);
+        const avgMTTR = regionMTTRSum / regionFaults.length;
+        return [region.name, avgMTTR.toFixed(2), regionFaults.length];
+      })
+      .filter(row => row !== null);
+
+    if (mttrRegionData.length > 0) {
+      currentY = await drawTable({ 
+        page, startX: margin, startY: currentY, tableWidth: contentWidth * 0.75,
+        headers: mttrRegionHeaders, data: mttrRegionData as (string | number)[][], 
+        headerFont: boldFont, bodyFont: regularFont, 
+        columnWidths: [150, 100, 100]
+      });
     }
-    
+    currentY -= 20;
+
     // TODO: Add Fault List Table (Optional, might need pagination)
     // Consider adding a table listing the top N faults or faults exceeding a certain duration/MTTR
     // This would require pagination logic if the list is long.

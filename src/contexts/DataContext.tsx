@@ -1269,7 +1269,37 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       
       const collectionName = isOP5 ? "op5Faults" : "controlOutages";
       const docRef = doc(db, collectionName, id);
+      
+      // Get the fault data before updating
+      const faultDoc = await getDoc(docRef);
+      if (!faultDoc.exists()) {
+        throw new Error("Fault not found");
+      }
+      
+      const faultData = faultDoc.data();
+      
+      // Update the fault status
       await updateDoc(docRef, updateData);
+      
+      // Send SMS notification if phone number exists
+      if (faultData.customerPhoneNumber || faultData.alternativePhoneNumber) {
+        const smsService = SMSService.getInstance();
+        const phoneNumber = faultData.customerPhoneNumber || faultData.alternativePhoneNumber;
+        const location = faultData.substationName || faultData.areasAffected || "your location";
+        
+        try {
+          await smsService.sendFaultResolutionNotification(
+            phoneNumber,
+            id,
+            faultData.faultType || "power outage",
+            location
+          );
+        } catch (smsError) {
+          console.error("Error sending SMS notification:", smsError);
+          // Don't throw the error as the fault is already resolved
+          toast.error("Fault resolved but failed to send SMS notification");
+        }
+      }
       
       toast.success(`${isOP5 ? "OP5 Fault" : "Control System Outage"} resolved successfully`);
     } catch (error) {

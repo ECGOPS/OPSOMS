@@ -40,6 +40,8 @@ import { calculateOutageDuration, calculateMTTR } from "@/lib/calculations";
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '@/config/firebase';
 import { LoadMonitoringData } from '@/lib/asset-types';
+import { Checkbox } from "@/components/ui/checkbox";
+import { Settings2 } from "lucide-react";
 
 // Colors for charts
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
@@ -121,6 +123,39 @@ export default function AnalyticsPage() {
   
   // Add new state for days filter
   const [selectedDays, setSelectedDays] = useState<number>(7);
+  const [visibleColumns, setVisibleColumns] = useState({
+    region: true,
+    district: true,
+    occurrenceDate: true,
+    type: true,
+    status: true,
+    outageDuration: true,
+    repairDuration: true,
+    estimatedResolution: true,
+    resolutionStatus: true,
+    customersAffected: true,
+    description: true,
+    typeOfOutage: true,
+    remarks: true,
+    actions: true
+  });
+
+  const columnOptions = [
+    { id: 'region', label: 'Region' },
+    { id: 'district', label: 'District' },
+    { id: 'occurrenceDate', label: 'Occurrence Date' },
+    { id: 'type', label: 'Type' },
+    { id: 'status', label: 'Status' },
+    { id: 'outageDuration', label: 'Outage Duration' },
+    { id: 'repairDuration', label: 'Repair Duration' },
+    { id: 'estimatedResolution', label: 'Estimated Resolution' },
+    { id: 'resolutionStatus', label: 'Resolution Status' },
+    { id: 'customersAffected', label: 'Customers Affected' },
+    { id: 'description', label: 'Description' },
+    { id: 'typeOfOutage', label: 'Type of Outage' },
+    { id: 'remarks', label: 'Remarks' },
+    { id: 'actions', label: 'Actions' }
+  ];
 
   // Add handler for days change
   const handleDaysChange = (value: string) => {
@@ -991,8 +1026,12 @@ export default function AnalyticsPage() {
       'Load (MW)', 'Unserved Energy (MWh)', 'Area Affected', 'Reason', 'Control Panel Indications'
     ];
     
+    // Use filteredFaults instead of all faults
     const dataRows = filteredFaults.map((fault: any) => {
-      const type = 'faultLocation' in fault ? 'OP5 Fault' : 'Control Outage';
+      // Properly identify the fault type
+      const isOP5Fault = 'faultLocation' in fault || 'substationName' in fault || fault.type === 'OP5';
+      const type = isOP5Fault ? 'OP5 Fault' : 'Control Outage';
+      
       // Calculate duration properly
       const duration = fault.occurrenceDate && fault.restorationDate ? 
         calculateOutageDuration(fault.occurrenceDate, fault.restorationDate) : 0;
@@ -1011,7 +1050,7 @@ export default function AnalyticsPage() {
         fault.faultType,
         fault.specificFaultType || 'N/A',
         duration.toFixed(2), // Format duration to 2 decimal places
-        fault.createdBy,
+        getUserNameById(fault.createdBy),
         formatSafeDate(fault.createdAt),
         // Population affected
         fault.affectedPopulation?.rural || fault.customersAffected?.rural || 0,
@@ -1020,9 +1059,9 @@ export default function AnalyticsPage() {
       ];
 
       // Add OP5 specific fields
-      if ('faultLocation' in fault) {
+      if (isOP5Fault) {
         row.push(
-          fault.faultLocation || 'N/A',
+          fault.faultLocation || fault.substationName || 'N/A',
           fault.mttr || 'N/A',
           fault.reliabilityIndices?.saidi || 'N/A',
           fault.reliabilityIndices?.saifi || 'N/A',
@@ -1067,16 +1106,99 @@ export default function AnalyticsPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `fault-analysis-${format(new Date(), 'yyyy-MM-dd')}.csv`);
+    
+    // Add filter information to filename
+    let filename = `fault-analysis-${format(new Date(), 'yyyy-MM-dd')}`;
+    if (selectedRegion !== "all") {
+      const regionName = regions.find(r => r.id === selectedRegion)?.name || selectedRegion;
+      filename += `-${regionName}`;
+    }
+    if (selectedDistrict !== "all") {
+      const districtName = districts.find(d => d.id === selectedDistrict)?.name || selectedDistrict;
+      filename += `-${districtName}`;
+    }
+    if (selectedFaultType !== "all") {
+      filename += `-${selectedFaultType}`;
+    }
+    if (dateRange !== "all") {
+      filename += `-${dateRange}`;
+    }
+    
+    link.setAttribute('download', `${filename}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    
+    // Show success toast with breakdown of exported records
+    const op5Count = dataRows.filter(row => row[1] === 'OP5 Fault').length;
+    const controlCount = dataRows.filter(row => row[1] === 'Control Outage').length;
+    toast({
+      title: "Export Successful",
+      description: `Exported ${dataRows.length} records (${op5Count} OP5, ${controlCount} Control) with current filters applied.`,
+    });
   };
-  
+
   const exportToPDF = async () => {
     try {
+      // Log the initial filtered faults
+      console.log('Initial filteredFaults:', {
+        total: filteredFaults.length,
+        op5Count: filteredFaults.filter(f => 'faultLocation' in f || 'substationName' in f || 'substationNo' in f).length,
+        controlCount: filteredFaults.filter(f => !('faultLocation' in f || 'substationName' in f || 'substationNo' in f)).length,
+        sampleFaults: filteredFaults.slice(0, 2)
+      });
+
+      // Ensure we're using the filtered data
+      const dataToExport = filteredFaults.map(fault => {
+        // Log each fault being processed
+        console.log('Processing fault:', {
+          id: fault.id,
+          hasFaultLocation: 'faultLocation' in fault,
+          hasSubstationName: 'substationName' in fault,
+          hasSubstationNo: 'substationNo' in fault,
+          type: fault.type,
+          faultType: fault.faultType,
+          rawFault: fault
+        });
+
+        // Properly identify the fault type - check for all possible OP5 indicators
+        const isOP5Fault = 
+          'faultLocation' in fault || 
+          'substationName' in fault || 
+          'substationNo' in fault || 
+          fault.type === 'OP5' ||
+          fault.faultType === 'OP5';
+
+        const processedFault = {
+          ...fault,
+          type: isOP5Fault ? 'OP5 Fault' : 'Control Outage',
+          region: regions.find(r => r.id === fault.regionId)?.name || fault.regionId,
+          district: districts.find(d => d.id === fault.districtId)?.name || fault.districtId,
+          createdBy: getUserNameById(fault.createdBy),
+          updatedBy: getUserNameById(fault.updatedBy)
+        };
+
+        // Log the processed fault
+        console.log('Processed fault:', {
+          id: processedFault.id,
+          type: processedFault.type,
+          isOP5Fault
+        });
+
+        return processedFault;
+      });
+
+      // Log the final data being exported
+      console.log('Final export data:', {
+        totalRecords: dataToExport.length,
+        op5Faults: dataToExport.filter(f => f.type === 'OP5 Fault').length,
+        controlOutages: dataToExport.filter(f => f.type === 'Control Outage').length,
+        sampleOP5: dataToExport.find(f => f.type === 'OP5 Fault'),
+        sampleControl: dataToExport.find(f => f.type === 'Control Outage')
+      });
+
       await exportAnalyticsToPDF(
-        filteredFaults,
+        dataToExport,
         reliabilityIndices,
         dateRange,
         startDate,
@@ -1086,8 +1208,21 @@ export default function AnalyticsPage() {
         regions,
         districts
       );
+
+      // Show success toast with breakdown of exported records
+      const op5Count = dataToExport.filter(fault => fault.type === 'OP5 Fault').length;
+      const controlCount = dataToExport.filter(fault => fault.type === 'Control Outage').length;
+      toast({
+        title: "Export Successful",
+        description: `Exported ${dataToExport.length} records (${op5Count} OP5, ${controlCount} Control) to PDF.`,
+      });
     } catch (error) {
       console.error("Error exporting to PDF:", error);
+      toast({
+        title: "Export Failed",
+        description: "Failed to export PDF report. Please try again.",
+        variant: "destructive",
+      });
     }
   };
   
@@ -1483,72 +1618,131 @@ export default function AnalyticsPage() {
   
   // Function to export only the recent faults shown in the overview table
   const exportRecentFaultsToCSV = () => {
-    if (!paginatedFaults || paginatedFaults.length === 0) {
-      toast({ title: "No data to export", description: "The recent faults table is empty." });
+    // Get the latest filtered faults
+    const dataToExport = filteredFaults || [];
+    
+    if (dataToExport.length === 0) {
+      toast({
+        title: "No Data Available",
+        description: "No data matches the current filters.",
+        variant: "destructive",
+      });
       return;
     }
 
-    const headers = [
-      'ID', 'Type', 'Region', 'District', 'Occurrence Date', 'Status', 'Outage Duration', 'Estimated Resolution', 'Resolution Status', 'Customers Affected', 'Fault Description', 'Remarks'
-    ];
+    // Create headers based on visible columns
+    const headers = [];
+    if (visibleColumns.region) headers.push('Region');
+    if (visibleColumns.district) headers.push('District');
+    if (visibleColumns.occurrenceDate) headers.push('Occurrence Date');
+    if (visibleColumns.type) headers.push('Type');
+    if (visibleColumns.status) headers.push('Status');
+    if (visibleColumns.outageDuration) headers.push('Outage Duration');
+    if (visibleColumns.repairDuration) headers.push('Repair Duration');
+    if (visibleColumns.estimatedResolution) headers.push('Estimated Resolution Time');
+    if (visibleColumns.resolutionStatus) headers.push('Resolution Status');
+    if (visibleColumns.customersAffected) headers.push('Customers Affected');
+    if (visibleColumns.description) headers.push('Description');
+    if (visibleColumns.typeOfOutage) headers.push('Type of Outage');
+    if (visibleColumns.remarks) headers.push('Remarks');
 
-    const dataRows = paginatedFaults.map((fault: any) => {
-      const type = 'faultLocation' in fault || 'substationName' in fault ? 'OP5' : 'Control';
-      const region = getRegionName(fault.regionId);
-      const district = getDistrictName(fault.districtId);
-      const date = formatSafeDate(fault.occurrenceDate);
-      const status = fault.status;
-      const outageDuration = fault.occurrenceDate && fault.restorationDate
-        ? `${((new Date(fault.restorationDate).getTime() - new Date(fault.occurrenceDate).getTime()) / (1000 * 60 * 60)).toFixed(2)} hr`
-        : 'N/A';
-      const estimatedResolution = fault.estimatedResolutionTime
-        ? `${((new Date(fault.estimatedResolutionTime).getTime() - new Date(fault.occurrenceDate).getTime()) / (1000 * 60 * 60)).toFixed(2)} hr`
-        : 'N/A';
-      const resolutionStatus = fault.occurrenceDate && fault.restorationDate && fault.estimatedResolutionTime
-        ? (new Date(fault.restorationDate).getTime() - new Date(fault.occurrenceDate).getTime()) <= (new Date(fault.estimatedResolutionTime).getTime() - new Date(fault.occurrenceDate).getTime())
-          ? 'Within Estimate'
-          : 'Exceeded Estimate'
-        : 'N/A';
-      const faultDescription = fault.outageDescription || fault.description || 'N/A';
-      const remarks = fault.remarks || 'N/A';
-      return [
-        fault.id,
-        type,
-        region,
-        district,
-        date,
-        status,
-        outageDuration,
-        estimatedResolution,
-        resolutionStatus,
-        fault.affectedPopulation
-          ? (fault.affectedPopulation.rural + fault.affectedPopulation.urban + fault.affectedPopulation.metro)
-          : fault.customersAffected
-            ? (fault.customersAffected.rural + fault.customersAffected.urban + fault.customersAffected.metro)
-            : 'N/A',
-        faultDescription,
-        remarks
-      ].map(value => {
-        const strValue = String(value);
-        if (strValue.includes(',') || strValue.includes('"')) {
-           // Correctly escape double quotes for CSV
-          return `"${strValue.replace(/"/g, '""')}"`;
+    // Create data rows based on visible columns
+    const dataRows = dataToExport.map((fault: any) => {
+      const row = [];
+      if (visibleColumns.region) row.push(getRegionName(fault.regionId));
+      if (visibleColumns.district) row.push(getDistrictName(fault.districtId));
+      if (visibleColumns.occurrenceDate) row.push(formatSafeDate(fault.occurrenceDate));
+      if (visibleColumns.type) row.push('faultLocation' in fault || 'substationName' in fault ? 'OP5' : 'Control');
+      if (visibleColumns.status) row.push(fault.status);
+      if (visibleColumns.outageDuration) {
+        row.push(fault.occurrenceDate && fault.restorationDate
+          ? `${((new Date(fault.restorationDate).getTime() - new Date(fault.occurrenceDate).getTime()) / (1000 * 60 * 60)).toFixed(2)} hr`
+          : 'N/A');
+      }
+      if (visibleColumns.repairDuration) {
+        row.push(fault.repairDate && fault.repairEndDate
+          ? `${((new Date(fault.repairEndDate).getTime() - new Date(fault.repairDate).getTime()) / (1000 * 60 * 60)).toFixed(2)} hr`
+          : 'N/A');
+      }
+      if (visibleColumns.estimatedResolution) {
+        row.push(fault.occurrenceDate && fault.estimatedResolutionTime
+          ? `${((new Date(fault.estimatedResolutionTime).getTime() - new Date(fault.occurrenceDate).getTime()) / (1000 * 60 * 60)).toFixed(2)} hr`
+          : 'N/A');
+      }
+      if (visibleColumns.resolutionStatus) {
+        if (!fault.occurrenceDate || !fault.restorationDate || !fault.estimatedResolutionTime) {
+          row.push('N/A');
+        } else {
+          const outageDuration = (new Date(fault.restorationDate).getTime() - new Date(fault.occurrenceDate).getTime()) / (1000 * 60 * 60);
+          const estimatedDuration = (new Date(fault.estimatedResolutionTime).getTime() - new Date(fault.occurrenceDate).getTime()) / (1000 * 60 * 60);
+          row.push(outageDuration <= estimatedDuration ? 'Within Estimate' : 'Exceeded Estimate');
         }
-        return strValue;
-      }).join(',');
+      }
+      if (visibleColumns.customersAffected) {
+        let totalCustomersAffected = 0;
+        if (fault.affectedPopulation) {
+          totalCustomersAffected = (fault.affectedPopulation.rural || 0) + 
+                                 (fault.affectedPopulation.urban || 0) + 
+                                 (fault.affectedPopulation.metro || 0);
+        } else if (fault.customersAffected) {
+          totalCustomersAffected = (fault.customersAffected.rural || 0) + 
+                                 (fault.customersAffected.urban || 0) + 
+                                 (fault.customersAffected.metro || 0);
+        }
+        row.push(totalCustomersAffected || 'N/A');
+      }
+      if (visibleColumns.description) row.push(fault.outageDescription || fault.description || 'N/A');
+      if (visibleColumns.typeOfOutage) row.push(fault.faultType || 'N/A');
+      if (visibleColumns.remarks) row.push(fault.remarks || 'N/A');
+      return row;
     });
 
-    const csvContent = [headers.join(','), ...dataRows].join('\n');
+    // Create CSV content
+    const csvContent = [
+      headers.join(','),
+      ...dataRows.map(row => row.map(cell => {
+        // Handle special characters and ensure proper CSV formatting
+        if (cell === null || cell === undefined) return '';
+        const cellStr = String(cell);
+        if (cellStr.includes(',') || cellStr.includes('"') || cellStr.includes('\n')) {
+          return `"${cellStr.replace(/"/g, '""')}"`;
+        }
+        return cellStr;
+      }).join(','))
+    ].join('\n');
+
+    // Create and download the file
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `recent-faults-${overviewRecentFaultsTab}-${format(new Date(), 'yyyyMMdd')}.csv`);
+    const url = URL.createObjectURL(blob);
+    
+    // Generate filename based on current filters
+    let filename = 'fault-report';
+    if (selectedRegion && selectedRegion !== 'all') {
+      filename += `-${getRegionName(selectedRegion).toLowerCase().replace(/\s+/g, '-')}`;
+    }
+    if (selectedDistrict && selectedDistrict !== 'all') {
+      filename += `-${getDistrictName(selectedDistrict).toLowerCase().replace(/\s+/g, '-')}`;
+    }
+    if (filterFaultType) {
+      filename += `-${filterFaultType.toLowerCase().replace(/\s+/g, '-')}`;
+    }
+    if (dateRange) {
+      filename += `-${dateRange}`;
+    }
+    filename += `-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    // Correct the toast call to pass a single options object
-    toast({ title: "Export Successful", description: "Recent faults exported to CSV." }); 
+
+    toast({
+      title: "Export Successful",
+      description: `Exported ${dataToExport.length} records to CSV.`,
+    });
   };
   
   // Add a helper function to find user name by ID
@@ -1802,7 +1996,7 @@ export default function AnalyticsPage() {
                   <SelectItem value="Planned">Planned</SelectItem>
                   <SelectItem value="Unplanned">Unplanned</SelectItem>
                   <SelectItem value="Emergency">Emergency</SelectItem>
-                  <SelectItem value="Load Shedding">Load Shedding</SelectItem>
+                  <SelectItem value="ECG Load Shedding">ECG Load Shedding</SelectItem>
                   <SelectItem value="GridCo Outage">GridCo Outage</SelectItem>
                 </SelectContent>
               </Select>
@@ -2362,103 +2556,166 @@ export default function AnalyticsPage() {
                         Latest fault reports based on selected tab
                       </CardDescription>
                     </div>
-                    {/* Re-added Export button for this specific table */}
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="h-8 px-2"
-                      onClick={exportRecentFaultsToCSV} // Call the new function
-                    >
-                      <Download className="mr-1 h-4 w-4" />
-                      Export Recent
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Select
+                        value="columns"
+                        onValueChange={() => {}}
+                      >
+                        <SelectTrigger className="h-8 px-2">
+                          <Settings2 className="h-4 w-4 mr-2" />
+                          <span className="text-xs">Columns</span>
+                        </SelectTrigger>
+                        <SelectContent className="w-[200px]">
+                          <div className="p-2">
+                            <h4 className="text-sm font-medium mb-2">Visible Columns</h4>
+                            <div className="space-y-2">
+                              {columnOptions.map((column) => (
+                                <div key={column.id} className="flex items-center space-x-2">
+                                  <Checkbox
+                                    id={column.id}
+                                    checked={visibleColumns[column.id as keyof typeof visibleColumns]}
+                                    onCheckedChange={(checked) => {
+                                      setVisibleColumns(prev => ({
+                                        ...prev,
+                                        [column.id]: checked
+                                      }));
+                                    }}
+                                  />
+                                  <label
+                                    htmlFor={column.id}
+                                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                                  >
+                                    {column.label}
+                                  </label>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </SelectContent>
+                      </Select>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="h-8 px-2"
+                        onClick={exportRecentFaultsToCSV}
+                      >
+                        <Download className="mr-1 h-4 w-4" />
+                        Export Recent
+                      </Button>
+                    </div>
                   </div>
                 </CardHeader>
-                <CardContent className="p-0">
-                  <div className="overflow-x-auto">
+                <CardContent>
+                  <div className="rounded-md border">
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead className="text-xs sm:text-sm py-2 px-2 sm:px-4">Region</TableHead>
-                          <TableHead className="text-xs sm:text-sm py-2 px-2 sm:px-4">District</TableHead>
-                          <TableHead className="text-xs sm:text-sm py-2 px-2 sm:px-4">Occurrence Date</TableHead>
-                          <TableHead className="text-xs sm:text-sm py-2 px-2 sm:px-4">Type</TableHead>
-                          <TableHead className="text-xs sm:text-sm py-2 px-2 sm:px-4">Status</TableHead>
-                          <TableHead className="text-xs sm:text-sm py-2 px-2 sm:px-4">Outage Duration</TableHead>
-                          <TableHead className="text-xs sm:text-sm py-2 px-2 sm:px-4">Repair Duration</TableHead>
-                          <TableHead className="text-xs sm:text-sm py-2 px-2 sm:px-4">Estimated Resolution</TableHead>
-                          <TableHead className="text-xs sm:text-sm py-2 px-2 sm:px-4">Resolution Status</TableHead>
-                          <TableHead className="text-xs sm:text-sm py-2 px-2 sm:px-4">Customers Affected</TableHead>
-                          <TableHead className="text-xs sm:text-sm py-2 px-2 sm:px-4">Description</TableHead>
-                          <TableHead className="text-xs sm:text-sm py-2 px-2 sm:px-4">Actions</TableHead>
+                          {visibleColumns.region && <TableHead className="text-xs sm:text-sm">Region</TableHead>}
+                          {visibleColumns.district && <TableHead className="text-xs sm:text-sm">District</TableHead>}
+                          {visibleColumns.occurrenceDate && <TableHead className="text-xs sm:text-sm">Occurrence Date</TableHead>}
+                          {visibleColumns.type && <TableHead className="text-xs sm:text-sm">Type</TableHead>}
+                          {visibleColumns.status && <TableHead className="text-xs sm:text-sm">Status</TableHead>}
+                          {visibleColumns.outageDuration && <TableHead className="text-xs sm:text-sm">Outage Duration</TableHead>}
+                          {visibleColumns.repairDuration && <TableHead className="text-xs sm:text-sm">Repair Duration</TableHead>}
+                          {visibleColumns.estimatedResolution && <TableHead className="text-xs sm:text-sm">Estimated Resolution</TableHead>}
+                          {visibleColumns.resolutionStatus && <TableHead className="text-xs sm:text-sm">Resolution Status</TableHead>}
+                          {visibleColumns.customersAffected && <TableHead className="text-xs sm:text-sm">Customers Affected</TableHead>}
+                          {visibleColumns.description && <TableHead className="text-xs sm:text-sm">Description</TableHead>}
+                          {visibleColumns.typeOfOutage && <TableHead className="text-xs sm:text-sm">Type of Outage</TableHead>}
+                          {visibleColumns.remarks && <TableHead className="text-xs sm:text-sm">Remarks</TableHead>}
+                          {visibleColumns.actions && <TableHead className="text-xs sm:text-sm">Actions</TableHead>}
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {paginatedFaults.length > 0 ? (
                           paginatedFaults.map((fault: any) => (
                             <TableRow key={fault.id}>
-                              <TableCell className="text-xs sm:text-sm py-2 px-2 sm:px-4">{getRegionName(fault.regionId)}</TableCell>
-                              <TableCell className="text-xs sm:text-sm py-2 px-2 sm:px-4">{getDistrictName(fault.districtId)}</TableCell>
-                              <TableCell className="text-xs sm:text-sm py-2 px-2 sm:px-4">{formatSafeDate(fault.occurrenceDate)}</TableCell>
-                              <TableCell className="text-xs sm:text-sm py-2 px-2 sm:px-4">{
-                                op5Faults.some(f => f.id === fault.id) ? 'OP5' : 'Control'
-                              }</TableCell>
-                              <TableCell className="py-2 px-2 sm:px-4">
-                                <span className={`px-2 py-1 rounded-full text-xs ${fault.status === 'pending' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
-                                  {fault.status}
-                                </span>
-                              </TableCell>
-                              <TableCell className="text-xs sm:text-sm py-2 px-2 sm:px-4">{
-                                fault.occurrenceDate && fault.restorationDate
-                                  ? `${((new Date(fault.restorationDate).getTime() - new Date(fault.occurrenceDate).getTime()) / (1000 * 60 * 60)).toFixed(2)} hr`
-                                  : 'N/A'
-                              }</TableCell>
-                              <TableCell className="text-xs sm:text-sm py-2 px-2 sm:px-4">{
-                                fault.repairDate && fault.repairEndDate
-                                  ? `${((new Date(fault.repairEndDate).getTime() - new Date(fault.repairDate).getTime()) / (1000 * 60 * 60)).toFixed(2)} hr`
-                                  : 'N/A'
-                              }</TableCell>
-                              <TableCell className="text-xs sm:text-sm py-2 px-2 sm:px-4">{
-                                fault.occurrenceDate && fault.estimatedResolutionTime
-                                  ? `${((new Date(fault.estimatedResolutionTime).getTime() - new Date(fault.occurrenceDate).getTime()) / (1000 * 60 * 60)).toFixed(2)} hr`
-                                  : 'N/A'
-                              }</TableCell>
-                              <TableCell className="py-2 px-2 sm:px-4">
-                                {(() => {
-                                  if (!fault.occurrenceDate || !fault.restorationDate || !fault.estimatedResolutionTime) {
-                                    return <span className="px-2 py-1 rounded-full text-xs bg-gray-100 text-gray-800">N/A</span>;
-                                  }
-                                  const outageDuration = (new Date(fault.restorationDate).getTime() - new Date(fault.occurrenceDate).getTime()) / (1000 * 60 * 60);
-                                  const estimatedDuration = (new Date(fault.estimatedResolutionTime).getTime() - new Date(fault.occurrenceDate).getTime()) / (1000 * 60 * 60);
-                                  
-                                  if (outageDuration <= estimatedDuration) {
-                                    return <span className="px-2 py-1 rounded-full text-xs bg-green-100 text-green-800">Within Estimate</span>;
-                                  } else {
-                                    return <span className="px-2 py-1 rounded-full text-xs bg-red-100 text-red-800">Exceeded Estimate</span>;
-                                  }
-                                })()}
-                              </TableCell>
-                              <TableCell className="text-xs sm:text-sm py-2 px-2 sm:px-4">{
-                                fault.affectedPopulation
-                                  ? (fault.affectedPopulation.rural + fault.affectedPopulation.urban + fault.affectedPopulation.metro)
-                                  : fault.customersAffected
-                                    ? (fault.customersAffected.rural + fault.customersAffected.urban + fault.customersAffected.metro)
-                                    : 'N/A'
-                              }</TableCell>
-                              <TableCell className="text-xs sm:text-sm py-2 px-2 sm:px-4">{
-                                fault.outageDescription || fault.description || 'N/A'
-                              }</TableCell>
-                              <TableCell className="py-2 px-2 sm:px-4">
-                                <Button variant="ghost" size="sm" className="h-7 px-1 sm:px-2" onClick={() => showFaultDetails(fault)}>
-                                  <Eye size={14} />
-                                  <span className="ml-1 hidden sm:inline">View</span>
-                                </Button>
-                              </TableCell>
+                              {visibleColumns.region && <TableCell className="text-xs sm:text-sm py-2 px-2 sm:px-4">{getRegionName(fault.regionId)}</TableCell>}
+                              {visibleColumns.district && <TableCell className="text-xs sm:text-sm py-2 px-2 sm:px-4">{getDistrictName(fault.districtId)}</TableCell>}
+                              {visibleColumns.occurrenceDate && <TableCell className="text-xs sm:text-sm py-2 px-2 sm:px-4">{formatSafeDate(fault.occurrenceDate)}</TableCell>}
+                              {visibleColumns.type && <TableCell className="text-xs sm:text-sm py-2 px-2 sm:px-4">{op5Faults.some(f => f.id === fault.id) ? 'OP5' : 'Control'}</TableCell>}
+                              {visibleColumns.status && (
+                                <TableCell className="py-2 px-2 sm:px-4">
+                                  <span className={`px-2 py-1 rounded-full text-xs ${fault.status === 'pending' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
+                                    {fault.status}
+                                  </span>
+                                </TableCell>
+                              )}
+                              {visibleColumns.outageDuration && (
+                                <TableCell className="text-xs sm:text-sm py-2 px-2 sm:px-4">
+                                  {fault.occurrenceDate && fault.restorationDate
+                                    ? `${((new Date(fault.restorationDate).getTime() - new Date(fault.occurrenceDate).getTime()) / (1000 * 60 * 60)).toFixed(2)} hr`
+                                    : 'N/A'}
+                                </TableCell>
+                              )}
+                              {visibleColumns.repairDuration && (
+                                <TableCell className="text-xs sm:text-sm py-2 px-2 sm:px-4">
+                                  {fault.repairDate && fault.repairEndDate
+                                    ? `${((new Date(fault.repairEndDate).getTime() - new Date(fault.repairDate).getTime()) / (1000 * 60 * 60)).toFixed(2)} hr`
+                                    : 'N/A'}
+                                </TableCell>
+                              )}
+                              {visibleColumns.estimatedResolution && (
+                                <TableCell className="text-xs sm:text-sm py-2 px-2 sm:px-4">
+                                  {fault.occurrenceDate && fault.estimatedResolutionTime
+                                    ? `${((new Date(fault.estimatedResolutionTime).getTime() - new Date(fault.occurrenceDate).getTime()) / (1000 * 60 * 60)).toFixed(2)} hr`
+                                    : 'N/A'}
+                                </TableCell>
+                              )}
+                              {visibleColumns.resolutionStatus && (
+                                <TableCell className="py-2 px-2 sm:px-4">
+                                  {(() => {
+                                    if (!fault.occurrenceDate || !fault.restorationDate || !fault.estimatedResolutionTime) {
+                                      return <span className="px-2 py-1 rounded-full text-xs bg-gray-100 text-gray-800">N/A</span>;
+                                    }
+                                    const outageDuration = (new Date(fault.restorationDate).getTime() - new Date(fault.occurrenceDate).getTime()) / (1000 * 60 * 60);
+                                    const estimatedDuration = (new Date(fault.estimatedResolutionTime).getTime() - new Date(fault.occurrenceDate).getTime()) / (1000 * 60 * 60);
+                                    
+                                    if (outageDuration <= estimatedDuration) {
+                                      return <span className="px-2 py-1 rounded-full text-xs bg-green-100 text-green-800">Within Estimate</span>;
+                                    } else {
+                                      return <span className="px-2 py-1 rounded-full text-xs bg-red-100 text-red-800">Exceeded Estimate</span>;
+                                    }
+                                  })()}
+                                </TableCell>
+                              )}
+                              {visibleColumns.customersAffected && (
+                                <TableCell className="text-xs sm:text-sm py-2 px-2 sm:px-4">
+                                  {fault.affectedPopulation
+                                    ? (fault.affectedPopulation.rural + fault.affectedPopulation.urban + fault.affectedPopulation.metro)
+                                    : fault.customersAffected
+                                      ? (fault.customersAffected.rural + fault.customersAffected.urban + fault.customersAffected.metro)
+                                      : 'N/A'}
+                                </TableCell>
+                              )}
+                              {visibleColumns.description && (
+                                <TableCell className="text-xs sm:text-sm py-2 px-2 sm:px-4">
+                                  {fault.outageDescription || fault.description || 'N/A'}
+                                </TableCell>
+                              )}
+                              {visibleColumns.typeOfOutage && (
+                                <TableCell className="text-xs sm:text-sm py-2 px-2 sm:px-4">
+                                  {fault.faultType || 'N/A'}
+                                </TableCell>
+                              )}
+                              {visibleColumns.remarks && (
+                                <TableCell className="text-xs sm:text-sm py-2 px-2 sm:px-4">
+                                  {fault.remarks || 'N/A'}
+                                </TableCell>
+                              )}
+                              {visibleColumns.actions && (
+                                <TableCell className="py-2 px-2 sm:px-4">
+                                  <Button variant="ghost" size="sm" className="h-7 px-1 sm:px-2" onClick={() => showFaultDetails(fault)}>
+                                    <Eye size={14} />
+                                    <span className="ml-1 hidden sm:inline">View</span>
+                                  </Button>
+                                </TableCell>
+                              )}
                             </TableRow>
                           ))
                         ) : (
                           <TableRow>
-                            <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
+                            <TableCell colSpan={Object.values(visibleColumns).filter(Boolean).length} className="h-24 text-center text-muted-foreground">
                               No recent faults found for the selected type.
                             </TableCell>
                           </TableRow>

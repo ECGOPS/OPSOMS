@@ -72,7 +72,7 @@ export function SignupForm() {
           district: ""
         }));
         setIsFieldsLocked(false);
-        setErrors(prev => ({ ...prev, staffId: "Invalid staff ID" }));
+        setErrors(prev => ({ ...prev, staffId: "Sorry, your staff ID was not found in the ECG Operations database. Please contact your administrator to complete your enrollment." }));
       }
     } else {
       // Reset fields if staff ID is empty
@@ -120,7 +120,7 @@ export function SignupForm() {
     } else {
       const { isValid } = verifyStaffId(formData.staffId);
       if (!isValid) {
-        newErrors.staffId = "Invalid staff ID";
+        newErrors.staffId = "Sorry, your staff ID was not found in the ECG Operations database. Please contact your administrator to complete your enrollment.";
       }
     }
 

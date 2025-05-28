@@ -183,5 +183,38 @@ service cloud.firestore {
       allow update, delete: if isAuthenticated() && 
         resource.data.senderId == request.auth.uid;
     }
+
+    // Feeders collection
+    match /feeders/{feederId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && (
+        isSystemAdmin() || 
+        isGlobalEngineer() || 
+        ((isRegionalEngineer() || isRegionalGeneralManager()) && request.resource.data.regionId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.regionId) ||
+        ((isDistrictEngineer() || isDistrictManager()) && request.resource.data.districtId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.districtId)
+      );
+      allow update: if isAuthenticated() && (
+        isSystemAdmin() || 
+        isGlobalEngineer() || 
+        ((isRegionalEngineer() || isRegionalGeneralManager()) && resource.data.regionId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.regionId) ||
+        ((isDistrictEngineer() || isDistrictManager()) && resource.data.districtId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.districtId)
+      );
+      allow delete: if isAuthenticated() && (isSystemAdmin() || isGlobalEngineer());
+    }
+
+    // SMS Logs collection
+    match /sms_logs/{logId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && (
+        isSystemAdmin() || 
+        isGlobalEngineer() || 
+        isRegionalEngineer() || 
+        isRegionalGeneralManager() || 
+        isDistrictEngineer() || 
+        isDistrictManager() || 
+        isTechnician()
+      );
+      allow update, delete: if isAuthenticated() && (isSystemAdmin() || isGlobalEngineer());
+    }
   }
 } 

@@ -65,7 +65,7 @@ export type District = {
   }[];
 };
 
-export type FaultType = "Planned" | "Unplanned" | "Emergency" | "Load Shedding" | "GridCo Outages";
+export type FaultType = "Planned" | "Unplanned" | "Emergency" | "ECG Load Shedding" | "GridCo Outages";
 
 export type GridCoOutageType =
   | "TRANSMISSION LINE FAULT"
@@ -225,6 +225,7 @@ export interface ControlSystemOutage {
   repairEndDate: string | null;
   feederType: string;
   feederName: string;
+  bspPss: string;
   customerInterruptions: {
     metro: number;
     urban: number;

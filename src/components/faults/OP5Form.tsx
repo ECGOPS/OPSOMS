@@ -765,7 +765,7 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
                   <SelectItem value="Planned">Planned</SelectItem>
                   <SelectItem value="Unplanned">Unplanned</SelectItem>
                   <SelectItem value="Emergency">Emergency</SelectItem>
-                  <SelectItem value="Load Shedding">Load Shedding</SelectItem>
+                  <SelectItem value="ECG Load Shedding">ECG Load Shedding</SelectItem>
                   <SelectItem value="GridCo Outages">GridCo Outages</SelectItem>
                 </SelectContent>
               </Select>

@@ -86,7 +86,7 @@ const getFaultTypeBadgeColor = (type: string | undefined) => {
       return "bg-red-100 text-red-800 border-red-200";
     case "Emergency":
       return "bg-orange-100 text-orange-800 border-orange-200";
-    case "Load Shedding":
+    case "ECG Load Shedding":
       return "bg-purple-100 text-purple-800 border-purple-200";
     case "GridCo Outage":
       return "bg-emerald-100 text-emerald-800 border-emerald-200";
@@ -950,7 +950,7 @@ export default function EditOP5FaultPage() {
                           <SelectItem value="Planned">Planned</SelectItem>
                           <SelectItem value="Unplanned">Unplanned</SelectItem>
                           <SelectItem value="Emergency">Emergency</SelectItem>
-                          <SelectItem value="Load Shedding">Load Shedding</SelectItem>
+                          <SelectItem value="ECG Load Shedding">ECG Load Shedding</SelectItem>
                           <SelectItem value="GridCo Outages">GridCo Outages</SelectItem>
                         </SelectContent>
                       </Select>

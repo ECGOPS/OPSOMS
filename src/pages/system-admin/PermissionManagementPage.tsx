@@ -72,6 +72,11 @@ const featureCategories: FeatureCategory[] = [
         id: "overhead_line_inspection",
         name: "Overhead Line Inspection",
         description: "Manage overhead line inspections"
+      },
+      {
+        id: "feeder_management",
+        name: "Feeder Management",
+        description: "Manage and monitor feeder operations"
       }
     ]
   },

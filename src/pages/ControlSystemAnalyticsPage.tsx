@@ -42,11 +42,14 @@ import {
   LineChart,
   Line
 } from 'recharts';
+import { FeederManagement } from "@/components/analytics/FeederManagement";
+import { useNavigate } from "react-router-dom";
+import { getUserRegionAndDistrict } from "@/utils/user-utils";
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
 
 export default function ControlSystemAnalyticsPage() {
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const { controlSystemOutages, regions, districts } = useData();
   const [filterRegion, setFilterRegion] = useState<string | undefined>(undefined);
   const [filterDistrict, setFilterDistrict] = useState<string | undefined>(undefined);
@@ -58,13 +61,15 @@ export default function ControlSystemAnalyticsPage() {
   const [sortField, setSortField] = useState<string>('occurrenceDate');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState<string>("overview");
+  const navigate = useNavigate();
 
   // Define all possible fault types
   const faultTypes = [
     "Planned",
     "Unplanned",
     "Emergency",
-    "Load Shedding",
+    "ECG Load Shedding",
     "GridCo Outages"
   ];
 
@@ -535,6 +540,39 @@ export default function ControlSystemAnalyticsPage() {
     );
   };
 
+  useEffect(() => {
+    if (!isAuthenticated) {
+      navigate("/login");
+      return;
+    }
+    
+    // Initialize filters based on user role
+    if (user) {
+      // Only set region/district filters if user is not a system admin or global engineer
+      if (user.role !== 'system_admin' && user.role !== 'global_engineer') {
+        const { regionId, districtId } = getUserRegionAndDistrict(user, regions, districts);
+        
+        if (regionId) {
+          setFilterRegion(regionId);
+        } else {
+          // Set to "all" if no specific region
+          setFilterRegion(undefined);
+        }
+        
+        if (districtId) {
+          setFilterDistrict(districtId);
+        }
+      } else {
+        // For system admins and global engineers, set to "all" by default
+        setFilterRegion(undefined);
+        setFilterDistrict(undefined);
+      }
+    } else {
+      // Set default to "all" when no user role restrictions
+      setFilterRegion(undefined);
+    }
+  }, [isAuthenticated, user, navigate, regions, districts]);
+
   return (
     <Layout>
       <div className="container mx-auto py-6 space-y-6">
@@ -553,217 +591,232 @@ export default function ControlSystemAnalyticsPage() {
           </Button>
         </div>
 
-        {/* Filters */}
-        <Card className="p-4">
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-            <div>
-              <Label>Region</Label>
-              <Select
-                value={filterRegion || ""}
-                onValueChange={setFilterRegion}
-                disabled={user?.role === "district_engineer" || user?.role === "regional_engineer"}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="All Regions" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Regions</SelectItem>
-                  {regions.map(region => (
-                    <SelectItem key={region.id} value={region.id}>
-                      {region.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>District</Label>
-              <Select
-                value={filterDistrict || ""}
-                onValueChange={setFilterDistrict}
-                disabled={user?.role === "district_engineer" || !filterRegion}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="All Districts" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Districts</SelectItem>
-                  {districts
-                    .filter(d => !filterRegion || d.regionId === filterRegion)
-                    .map(district => (
-                      <SelectItem key={district.id} value={district.id}>
-                        {district.name}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Time Range</Label>
-              <Select value={dateRange} onValueChange={setDateRange}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select time range" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Time</SelectItem>
-                  <SelectItem value="7days">Last 7 Days</SelectItem>
-                  <SelectItem value="30days">Last 30 Days</SelectItem>
-                  <SelectItem value="90days">Last 90 Days</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Outage Type</Label>
-              <Select 
-                value={outageType} 
-                onValueChange={(value: 'all' | 'sustained' | 'momentary') => setOutageType(value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select outage type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Outages</SelectItem>
-                  <SelectItem value="sustained">Sustained ({'>'}5 min)</SelectItem>
-                  <SelectItem value="momentary">Momentary (≤5 min)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Fault Type</Label>
-              <Select value={filterFaultType} onValueChange={setFilterFaultType}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select fault type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Fault Types</SelectItem>
-                  {faultTypes.map(type => (
-                    <SelectItem key={type} value={type}>
-                      {type}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </Card>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="feeder-management">Feeder Management</TabsTrigger>
+            <TabsTrigger value="details">Details</TabsTrigger>
+          </TabsList>
 
-        {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Outages</CardTitle>
-              <AlertTriangle className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{metrics.totalOutages}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Customers Affected</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{metrics.totalCustomersAffected}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Customer Interruption Duration</CardTitle>
-              <Clock className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{metrics.customerInterruptionDuration.toFixed(2)} hrs</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Customer Interruption Frequency</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{metrics.customerInterruptionFrequency}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Avg. Repair Duration</CardTitle>
-              <Clock className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{metrics.repairDurations.toFixed(2)} hrs</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Unserved Energy</CardTitle>
-              <Zap className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{metrics.totalUnservedEnergy.toFixed(2)} MWh</div>
-            </CardContent>
-          </Card>
-        </div>
+          <TabsContent value="overview">
+            {/* Filters */}
+            <Card className="p-4">
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <div>
+                  <Label>Region</Label>
+                  <Select
+                    value={filterRegion || ""}
+                    onValueChange={setFilterRegion}
+                    disabled={user?.role === "district_engineer" || user?.role === "regional_engineer" || user?.role === "district_manager" || user?.role === "regional_general_manager"}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="All Regions" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Regions</SelectItem>
+                      {regions.map(region => (
+                        <SelectItem key={region.id} value={region.id}>
+                          {region.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>District</Label>
+                  <Select
+                    value={filterDistrict || ""}
+                    onValueChange={setFilterDistrict}
+                    disabled={user?.role === "district_engineer" || user?.role === "district_manager"}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="All Districts" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Districts</SelectItem>
+                      {districts
+                        .filter(d => !filterRegion || d.regionId === filterRegion)
+                        .map(district => (
+                          <SelectItem key={district.id} value={district.id}>
+                            {district.name}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Time Range</Label>
+                  <Select value={dateRange} onValueChange={setDateRange}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select time range" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Time</SelectItem>
+                      <SelectItem value="7days">Last 7 Days</SelectItem>
+                      <SelectItem value="30days">Last 30 Days</SelectItem>
+                      <SelectItem value="90days">Last 90 Days</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Outage Type</Label>
+                  <Select 
+                    value={outageType} 
+                    onValueChange={(value: 'all' | 'sustained' | 'momentary') => setOutageType(value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select outage type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Outages</SelectItem>
+                      <SelectItem value="sustained">Sustained ({'>'}5 min)</SelectItem>
+                      <SelectItem value="momentary">Momentary (≤5 min)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Fault Type</Label>
+                  <Select value={filterFaultType} onValueChange={setFilterFaultType}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select fault type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Fault Types</SelectItem>
+                      {faultTypes.map(type => (
+                        <SelectItem key={type} value={type}>
+                          {type}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </Card>
 
-        {/* Charts */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Outages by Type</CardTitle>
-              <CardDescription>Distribution of outage types</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {renderChart(chartData.byType)}
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Outages by Voltage Level</CardTitle>
-              <CardDescription>Distribution by voltage level</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {renderChart(chartData.byVoltage)}
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Repair Duration by Type</CardTitle>
-              <CardDescription>Average repair duration for each outage type</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {renderChart(chartData.repairDurationByType)}
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Customer Interruption Duration by Type</CardTitle>
-              <CardDescription>Total customer interruption duration by outage type</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {renderChart(chartData.customerInterruptionDurationByType)}
-            </CardContent>
-          </Card>
-          <Card className="md:col-span-2">
-            <CardHeader>
-              <CardTitle>Monthly Trend</CardTitle>
-              <CardDescription>Number of outages over time</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {renderChart(chartData.monthlyTrend)}
-            </CardContent>
-          </Card>
-        </div>
+            {/* Summary Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Total Outages</CardTitle>
+                  <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{metrics.totalOutages}</div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Customers Affected</CardTitle>
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{metrics.totalCustomersAffected}</div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Customer Interruption Duration</CardTitle>
+                  <Clock className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{metrics.customerInterruptionDuration.toFixed(2)} hrs</div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Customer Interruption Frequency</CardTitle>
+                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{metrics.customerInterruptionFrequency}</div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Avg. Repair Duration</CardTitle>
+                  <Clock className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{metrics.repairDurations.toFixed(2)} hrs</div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Unserved Energy</CardTitle>
+                  <Zap className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{metrics.totalUnservedEnergy.toFixed(2)} MWh</div>
+                </CardContent>
+              </Card>
+            </div>
 
-        {/* Table View */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Outage Details</CardTitle>
-            <CardDescription>Detailed view of all control system outages</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {renderTable()}
-          </CardContent>
-        </Card>
+            {/* Charts */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Outages by Type</CardTitle>
+                  <CardDescription>Distribution of outage types</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {renderChart(chartData.byType)}
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Outages by Voltage Level</CardTitle>
+                  <CardDescription>Distribution by voltage level</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {renderChart(chartData.byVoltage)}
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Repair Duration by Type</CardTitle>
+                  <CardDescription>Average repair duration for each outage type</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {renderChart(chartData.repairDurationByType)}
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Customer Interruption Duration by Type</CardTitle>
+                  <CardDescription>Total customer interruption duration by outage type</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {renderChart(chartData.customerInterruptionDurationByType)}
+                </CardContent>
+              </Card>
+              <Card className="md:col-span-2">
+                <CardHeader>
+                  <CardTitle>Monthly Trend</CardTitle>
+                  <CardDescription>Number of outages over time</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {renderChart(chartData.monthlyTrend)}
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="feeder-management">
+            <FeederManagement />
+          </TabsContent>
+
+          <TabsContent value="details">
+            <Card>
+              <CardHeader>
+                <CardTitle>Outage Details</CardTitle>
+                <CardDescription>Detailed view of all control system outages</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {renderTable()}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </Layout>
   );

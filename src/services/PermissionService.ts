@@ -32,6 +32,11 @@ export class PermissionService {
     'asset_management_update': ['district_engineer', 'district_manager', 'regional_engineer', 'regional_general_manager', 'global_engineer', 'system_admin'],
     'asset_management_delete': ['regional_engineer', 'regional_general_manager', 'global_engineer', 'system_admin'],
     
+    // SMS Notification Features
+    'sms_notification': ['technician', 'district_engineer', 'district_manager', 'regional_engineer', 'regional_general_manager', 'global_engineer', 'system_admin'],
+    'sms_notification_update': ['district_engineer', 'district_manager', 'regional_engineer', 'regional_general_manager', 'global_engineer', 'system_admin'],
+    'sms_notification_delete': ['regional_engineer', 'regional_general_manager', 'global_engineer', 'system_admin'],
+    
     'inspection_management': ['technician', 'district_engineer', 'district_manager', 'regional_engineer', 'regional_general_manager', 'global_engineer', 'system_admin'],
     'inspection_management_update': ['district_engineer', 'district_manager', 'regional_engineer', 'regional_general_manager', 'global_engineer', 'system_admin'],
     'inspection_management_delete': ['regional_engineer', 'regional_general_manager', 'global_engineer', 'system_admin'],
@@ -61,6 +66,7 @@ export class PermissionService {
     'fault_analytics_update': ['regional_engineer', 'regional_general_manager', 'global_engineer', 'system_admin'],
     'fault_analytics_delete': ['global_engineer', 'system_admin'],
     
+    'control_system_analytics': ['district_engineer', 'district_manager', 'regional_engineer', 'regional_general_manager', 'global_engineer', 'system_admin'],
     'control_outage_management': ['district_engineer', 'district_manager', 'regional_engineer', 'regional_general_manager', 'global_engineer', 'system_admin'],
     'control_outage_management_update': ['regional_engineer', 'regional_general_manager', 'global_engineer', 'system_admin'],
     'control_outage_management_delete': ['global_engineer', 'system_admin'],
@@ -78,6 +84,11 @@ export class PermissionService {
     'performance_reports': ['district_engineer', 'district_manager', 'regional_engineer', 'regional_general_manager', 'global_engineer', 'system_admin'],
     'performance_reports_update': ['district_engineer', 'district_manager', 'regional_engineer', 'regional_general_manager', 'global_engineer', 'system_admin'],
     'performance_reports_delete': ['regional_engineer', 'regional_general_manager', 'global_engineer', 'system_admin'],
+    
+    // Feeder Management Features
+    'feeder_management': ['technician', 'district_engineer', 'district_manager', 'regional_engineer', 'regional_general_manager', 'global_engineer', 'system_admin'],
+    'feeder_management_update': ['district_engineer', 'district_manager', 'regional_engineer', 'regional_general_manager', 'global_engineer', 'system_admin'],
+    'feeder_management_delete': ['regional_engineer', 'regional_general_manager', 'global_engineer', 'system_admin'],
     
     // User Management Features
     'user_management': ['global_engineer', 'system_admin'],
