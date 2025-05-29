@@ -40,13 +40,19 @@ interface FilterBarProps {
   dateFilterType: "range" | "day" | "month" | "year";
 }
 
+// Add a utility function to check if the environment is production
+const isProduction = process.env.NODE_ENV === 'production';
+
 export default function DashboardPage() {
   const { isAuthenticated, user } = useAuth();
   const { getFilteredFaults, regions, districts, op5Faults, controlSystemOutages } = useData();
   const navigate = useNavigate();
   const permissionService = PermissionService.getInstance();
   
+  // Replace console.log statements with conditional logging
+  if (!isProduction) {
   console.log('[Dashboard] Initial render - Auth state:', { isAuthenticated, userRole: user?.role });
+  }
   
   const [filterRegion, setFilterRegion] = useState<string | undefined>(undefined);
   const [filterDistrict, setFilterDistrict] = useState<string | undefined>(undefined);
@@ -75,26 +81,37 @@ export default function DashboardPage() {
   
   // Set initial filter values based on user role
   useEffect(() => {
+    // Replace console.log statements with conditional logging
+    if (!isProduction) {
     console.log('[Dashboard] Auth effect - Checking authentication');
+    }
     if (!isAuthenticated) {
+      if (!isProduction) {
       console.log('[Dashboard] Not authenticated, redirecting to login');
+      }
       navigate("/login");
       return;
     }
     
     if (user) {
+      if (!isProduction) {
       console.log('[Dashboard] User data:', { 
         role: user.role, 
         region: user.region, 
         district: user.district 
       });
+      }
       
       // Check if user has access to dashboard
       const hasAccess = permissionService.canAccessFeature(user.role, 'analytics_dashboard');
+      if (!isProduction) {
       console.log('[Dashboard] User has access to dashboard:', hasAccess);
+      }
       
       if (!hasAccess) {
+        if (!isProduction) {
         console.log('[Dashboard] User does not have access to dashboard, redirecting');
+        }
         navigate("/unauthorized");
         return;
       }
@@ -102,7 +119,9 @@ export default function DashboardPage() {
       // Only set region/district filters if user is not a system admin or global engineer
       if (user.role !== 'system_admin' && user.role !== 'global_engineer') {
         const { regionId, districtId } = getUserRegionAndDistrict(user, regions, districts);
+        if (!isProduction) {
         console.log('[Dashboard] Region/District IDs:', { regionId, districtId });
+        }
         
         if (regionId) {
           setFilterRegion(regionId);
@@ -118,6 +137,8 @@ export default function DashboardPage() {
   }, [isAuthenticated, navigate, user, regions, districts]);
   
   useEffect(() => {
+    // Replace console.log statements with conditional logging
+    if (!isProduction) {
     console.log('[Dashboard] Loading faults with filters:', { 
       filterRegion, 
       filterDistrict, 
@@ -130,6 +151,7 @@ export default function DashboardPage() {
       selectedMonthYear,
       selectedYear
     });
+    }
     loadFaults();
   }, [
     filterRegion, 
@@ -147,17 +169,23 @@ export default function DashboardPage() {
   
   // Add effect to reload faults when context data changes
   useEffect(() => {
+    // Replace console.log statements with conditional logging
+    if (!isProduction) {
     console.log('[Dashboard] Context data changed:', {
       op5FaultsCount: op5Faults.length,
       controlOutagesCount: controlSystemOutages.length,
       op5Faults: op5Faults,
       controlSystemOutages: controlSystemOutages
     });
+    }
     loadFaults();
   }, [op5Faults, controlSystemOutages, getFilteredFaults]);
   
   const loadFaults = () => {
+    // Replace console.log statements with conditional logging
+    if (!isProduction) {
     console.log('[Dashboard] loadFaults called');
+    }
     console.log('[Dashboard] Current filter states:', { 
       filterRegion, 
       filterDistrict, 
@@ -258,7 +286,10 @@ export default function DashboardPage() {
   };
   
   const handleRefresh = () => {
+    // Replace console.log statements with conditional logging
+    if (!isProduction) {
     console.log('[Dashboard] Refreshing data');
+    }
     setIsRefreshing(true);
     setTimeout(() => {
       loadFaults();
@@ -319,6 +350,7 @@ export default function DashboardPage() {
 
   // Add debug logging for pagination
   useEffect(() => {
+    if (!isProduction) {
     console.log('[Dashboard] Pagination state:', {
       currentPage,
       pageSize,
@@ -330,17 +362,22 @@ export default function DashboardPage() {
           ? faults.op5Faults.length 
           : faults.controlOutages.length
     });
+    }
   }, [currentPage, pageSize, totalPages, activeTab, faults]);
   
   if (!isAuthenticated) {
+    if (!isProduction) {
     console.log('[Dashboard] Not authenticated, returning null');
+    }
     return null;
   }
   
+  if (!isProduction) {
   console.log('[Dashboard] Rendering with faults:', { 
     op5Count: faults.op5Faults.length,
     controlCount: faults.controlOutages.length
   });
+  }
   
   return (
     <Layout>
@@ -431,7 +468,9 @@ export default function DashboardPage() {
               <div className="text-center py-12 border rounded-lg bg-muted/20 shadow-sm">
                 <p className="text-muted-foreground">No faults found with the current filters</p>
                 <Button variant="link" onClick={() => {
+                  if (!isProduction) {
                   console.log('[Dashboard] Clearing filters for user role:', user?.role);
+                  }
                   if (user?.role === "global_engineer") {
                     setFilterRegion(undefined);
                     setFilterDistrict(undefined);
@@ -467,7 +506,7 @@ export default function DashboardPage() {
 
                 {/* Pagination Controls */}
                 {totalPages > 1 && (
-                  <div className="flex justify-center items-center gap-4 mt-6">
+                  <div className="flex justify-center items-center gap-2 mt-6 mb-20">
                     <Button
                       variant="outline"
                       onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
@@ -524,7 +563,7 @@ export default function DashboardPage() {
 
                 {/* Pagination Controls */}
                 {totalPages > 1 && (
-                  <div className="flex justify-center items-center gap-4 mt-6">
+                  <div className="flex justify-center items-center gap-2 mt-6 mb-20">
                     <Button
                       variant="outline"
                       onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
@@ -581,7 +620,7 @@ export default function DashboardPage() {
 
                 {/* Pagination Controls */}
                 {totalPages > 1 && (
-                  <div className="flex justify-center items-center gap-4 mt-6">
+                  <div className="flex justify-center items-center gap-2 mt-6 mb-20">
                     <Button
                       variant="outline"
                       onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}

@@ -478,10 +478,10 @@ export function FeederManagement() {
             <CardTitle>Feeder Management</CardTitle>
             <CardDescription>View and manage feeders across regions and districts</CardDescription>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={downloadCSVTemplate}>
-              <Download className="h-4 w-4 mr-2" />
-              Download Template
+          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+            <Button variant="outline" onClick={downloadCSVTemplate} title="Download CSV Template" className="flex items-center px-2 md:px-4">
+              <Download className="h-4 w-4 mr-1 md:mr-2" />
+              <span className="hidden sm:inline">Download Sample</span>
             </Button>
             <div className="relative">
               <Input
@@ -496,9 +496,10 @@ export function FeederManagement() {
                 variant="outline"
                 onClick={() => document.getElementById('csv-upload')?.click()}
                 disabled={isUploading}
+                className="flex items-center px-2 md:px-4"
               >
-                <Upload className="h-4 w-4 mr-2" />
-                {isUploading ? "Uploading..." : "Upload CSV"}
+                <Upload className="h-4 w-4 mr-1 md:mr-2" />
+                <span className="hidden sm:inline">{isUploading ? "Uploading..." : "Upload CSV"}</span>
               </Button>
             </div>
             <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
@@ -713,22 +714,6 @@ export function FeederManagement() {
                   className={currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
                 />
               </PaginationItem>
-              
-              {getPageNumbers().map((page, index) => (
-                <PaginationItem key={index}>
-                  {page === '...' ? (
-                    <PaginationEllipsis />
-                  ) : (
-                    <PaginationLink
-                      onClick={() => setCurrentPage(Number(page))}
-                      isActive={currentPage === page}
-                    >
-                      {page}
-                    </PaginationLink>
-                  )}
-                </PaginationItem>
-              ))}
-
               <PaginationItem>
                 <PaginationNext 
                   onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}

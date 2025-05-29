@@ -44,6 +44,7 @@ interface FeederInfo {
   id: string;
   name: string;
   bsp: string;
+  bspPss: string;
   regionId: string;
   districtId: string;
 }
@@ -66,7 +67,7 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
   const [reason, setReason] = useState<string>("");
   const [indications, setIndications] = useState<string>("");
   const [areaAffected, setAreaAffected] = useState<string>("");
-  const [loadMW, setLoadMW] = useState<number>(0);
+  const [loadMW, setLoadMW] = useState<number | null>(null);
   const [estimatedResolutionTime, setEstimatedResolutionTime] = useState<string>("");
   const [estimatedDuration, setEstimatedDuration] = useState<number | null>(null);
   
@@ -237,7 +238,7 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
         }
 
         // Calculate metrics only if dates are valid
-        if (loadMW > 0) {
+        if (loadMW !== null && loadMW > 0) {
           const duration = calculateDurationHours(occurrenceDate, restorationDate);
           setDurationHours(duration);
           
@@ -640,10 +641,10 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
                 id="bspPss"
                 type="text"
                 value={bspPss}
-                onChange={(e) => setBspPss(e.target.value)}
-                placeholder="Enter BSP/PSS"
-                className="h-12 text-base bg-background/50 border-muted"
-                required
+                readOnly
+                disabled
+                placeholder="BSP/PSS will be set automatically based on feeder selection"
+                className="h-12 text-base bg-muted/50 border-muted cursor-not-allowed"
               />
             </div>
 
@@ -948,73 +949,75 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
                 />
               </div>
               
-              <div className="space-y-3">
-                <Label htmlFor="load" className="text-base font-medium flex items-center gap-2">
-                  Load (MW)
-                  <InfoIcon className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">
-                    Enter the load in Megawatts (MW) at the time of the outage
-                  </span>
-                </Label>
-                <Input
-                  id="load"
-                  type="number"
-                  min="0"
-                  step="0.1"
-                  value={loadMW}
-                  onChange={(e) => {
-                    const value = parseFloat(e.target.value);
-                    if (value >= 0) {
-                      setLoadMW(value);
-                    }
-                  }}
-                  className="h-12 text-base bg-background/50 border-muted"
-                  required
-                />
-                {loadMW > 0 && durationHours !== null && unservedEnergyMWh !== null && (
-                  <div className="text-sm text-muted-foreground">
-                    Unserved Energy: {unservedEnergyMWh} MWh
-                    <br />
-                    (Load: {loadMW} MW × Duration: {durationHours.toFixed(2)} hours)
-                  </div>
-                )}
-              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-3">
+                  <Label htmlFor="load" className="text-base font-medium flex items-center gap-2">
+                    Load (MW)
+                    <InfoIcon className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">
+                      Enter the load in Megawatts (MW) at the time of the outage
+                    </span>
+                  </Label>
+                  <Input
+                    id="load"
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    value={loadMW === null ? "" : loadMW}
+                    onChange={(e) => {
+                      const value = e.target.value === "" ? null : parseFloat(e.target.value);
+                      if (value === null || value >= 0) {
+                        setLoadMW(value);
+                      }
+                    }}
+                    className="h-12 text-base bg-background/50 border-muted"
+                    required
+                  />
+                  {loadMW !== null && loadMW > 0 && durationHours !== null && unservedEnergyMWh !== null && (
+                    <div className="text-sm text-muted-foreground">
+                      Unserved Energy: {unservedEnergyMWh} MWh
+                      <br />
+                      (Load: {loadMW} MW × Duration: {durationHours.toFixed(2)} hours)
+                    </div>
+                  )}
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="restorationDate" className="text-sm font-medium">Restoration Date & Time</Label>
-                <Input
-                  id="restorationDate"
-                  type="datetime-local"
-                  value={restorationDate}
-                  onChange={(e) => {
-                    const newRestorationDate = e.target.value;
-                    const restorationDateTime = new Date(newRestorationDate);
-                    const occurrenceDateTime = new Date(occurrenceDate);
-                    const repairStartDateTime = repairStartDate ? new Date(repairStartDate) : null;
-                    const repairEndDateTime = repairEndDate ? new Date(repairEndDate) : null;
+                <div className="space-y-2">
+                  <Label htmlFor="restorationDate" className="text-sm font-medium">Restoration Date & Time</Label>
+                  <Input
+                    id="restorationDate"
+                    type="datetime-local"
+                    value={restorationDate}
+                    onChange={(e) => {
+                      const newRestorationDate = e.target.value;
+                      const restorationDateTime = new Date(newRestorationDate);
+                      const occurrenceDateTime = new Date(occurrenceDate);
+                      const repairStartDateTime = repairStartDate ? new Date(repairStartDate) : null;
+                      const repairEndDateTime = repairEndDate ? new Date(repairEndDate) : null;
 
-                    if (restorationDateTime <= occurrenceDateTime) {
-                      toast.error("Restoration date must be after occurrence date");
-                      return;
-                    }
+                      if (restorationDateTime <= occurrenceDateTime) {
+                        toast.error("Restoration date must be after occurrence date");
+                        return;
+                      }
 
-                    if (repairStartDateTime && restorationDateTime <= repairStartDateTime) {
-                      toast.error("Restoration date must be after repair start date");
-                      return;
-                    }
+                      if (repairStartDateTime && restorationDateTime <= repairStartDateTime) {
+                        toast.error("Restoration date must be after repair start date");
+                        return;
+                      }
 
-                    if (repairEndDateTime && restorationDateTime <= repairEndDateTime) {
-                      toast.error("Restoration date must be after repair end date");
-                      return;
-                    }
+                      if (repairEndDateTime && restorationDateTime <= repairEndDateTime) {
+                        toast.error("Restoration date must be after repair end date");
+                        return;
+                      }
 
-                    setRestorationDate(newRestorationDate);
-                  }}
-                  className="h-9 sm:h-10 text-sm bg-background/50 border-muted"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Leave empty if the outage is still active. Must be after occurrence date and repair dates.
-                </p>
+                      setRestorationDate(newRestorationDate);
+                    }}
+                    className="h-12 text-base bg-background/50 border-muted"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Leave empty if the outage is still active. Must be after occurrence date and repair dates.
+                  </p>
+                </div>
               </div>
             </TabsContent>
             

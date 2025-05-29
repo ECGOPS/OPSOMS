@@ -1288,29 +1288,51 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
                 </div>
               </div>
               
-              <div className="space-y-3">
-                <Label htmlFor="repairEndDate">
-                  Repair End Date & Time
-                  {restorationDate && <span className="text-destructive ml-1">*</span>}
-                </Label>
-                <Input
-                  id="repairEndDate"
-                  type="datetime-local"
-                  value={repairEndDate}
-                  onChange={(e) => setRepairEndDate(e.target.value)}
-                  className="h-10"
-                  required={!!restorationDate}
-                />
-                {mttr !== null && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="space-y-3">
+                  <Label htmlFor="repairEndDate">
+                    Repair End Date & Time
+                    {restorationDate && <span className="text-destructive ml-1">*</span>}
+                  </Label>
+                  <Input
+                    id="repairEndDate"
+                    type="datetime-local"
+                    value={repairEndDate}
+                    onChange={(e) => setRepairEndDate(e.target.value)}
+                    className="h-10"
+                    required={!!restorationDate}
+                  />
+                  {mttr !== null && (
+                    <p className="text-sm text-muted-foreground">
+                      MTTR: {formatDuration(mttr)}
+                    </p>
+                  )}
+                  {restorationDate && !repairEndDate && (
+                    <p className="text-sm text-destructive">
+                      Repair end date is required when fault is resolved
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-3">
+                  <Label htmlFor="estimatedResolutionTime" className="text-base font-medium">Estimated Resolution Time</Label>
+                  <Input
+                    id="estimatedResolutionTime"
+                    type="datetime-local"
+                    value={estimatedResolutionTime}
+                    onChange={(e) => setEstimatedResolutionTime(e.target.value)}
+                    className="h-10"
+                    placeholder="Select estimated resolution time"
+                  />
                   <p className="text-sm text-muted-foreground">
-                    MTTR: {formatDuration(mttr)}
+                    When do you expect to resolve this fault?
+                    {estimatedDuration !== null && (
+                      <span className="block mt-1">
+                        Estimated duration: {formatDuration(estimatedDuration)}
+                      </span>
+                    )}
                   </p>
-                )}
-                {restorationDate && !repairEndDate && (
-                  <p className="text-sm text-destructive">
-                    Repair end date is required when fault is resolved
-                  </p>
-                )}
+                </div>
               </div>
 
               <div className="space-y-3">
@@ -1324,27 +1346,6 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
                 />
                 <p className="text-xs text-muted-foreground">
                   Leave empty if the fault is still active
-                </p>
-              </div>
-
-              {/* Add this after the occurrence date input */}
-              <div className="space-y-3">
-                <Label htmlFor="estimatedResolutionTime" className="text-base font-medium">Estimated Resolution Time</Label>
-                <Input
-                  id="estimatedResolutionTime"
-                  type="datetime-local"
-                  value={estimatedResolutionTime}
-                  onChange={(e) => setEstimatedResolutionTime(e.target.value)}
-                  className="h-12 text-base bg-background/50 border-muted"
-                  placeholder="Select estimated resolution time"
-                />
-                <p className="text-sm text-muted-foreground">
-                  When do you expect to resolve this fault?
-                  {estimatedDuration !== null && (
-                    <span className="block mt-1">
-                      Estimated duration: {formatDuration(estimatedDuration)}
-                    </span>
-                  )}
                 </p>
               </div>
 
