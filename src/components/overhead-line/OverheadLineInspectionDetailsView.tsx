@@ -1,9 +1,15 @@
 import { OverheadLineInspection } from "@/lib/types";
 import { format } from "date-fns";
-import { CheckCircle2, AlertCircle, ChevronLeft, Pencil, ChevronRight } from "lucide-react";
+import { CheckCircle2, AlertCircle, ChevronLeft, Pencil, ChevronRight, X } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface OverheadLineInspectionDetailsViewProps {
   inspection: OverheadLineInspection;
@@ -21,7 +27,8 @@ export function OverheadLineInspectionDetailsView({
   onEdit
 }: OverheadLineInspectionDetailsViewProps) {
   const [currentPage, setCurrentPage] = useState(1);
-  const totalPages = 9;
+  const [enlargedImage, setEnlargedImage] = useState<string | null>(null);
+  const totalPages = 10;
 
   const getStatusSummary = () => {
     if (!inspection) return { good: 0, requiresAttention: 0 };
@@ -499,6 +506,64 @@ export function OverheadLineInspectionDetailsView({
             </CardContent>
           </Card>
         );
+      case 10:
+        return (
+          <>
+            <Card className="mb-8">
+              <CardHeader className="border-b">
+                <CardTitle>Images</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-6">
+                {inspection.images && inspection.images.length > 0 ? (
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    {inspection.images.map((image, index) => (
+                      <div 
+                        key={index} 
+                        className="relative aspect-video cursor-pointer hover:opacity-90 transition-opacity"
+                        onClick={() => setEnlargedImage(image)}
+                      >
+                        <img
+                          src={image}
+                          alt={`Inspection image ${index + 1}`}
+                          className="w-full h-full object-cover rounded-lg"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground">No images available</p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Dialog open={!!enlargedImage} onOpenChange={() => setEnlargedImage(null)}>
+              <DialogContent className="max-w-4xl w-full">
+                <DialogHeader>
+                  <DialogTitle className="flex justify-between items-center">
+                    <span>Inspection Image</span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setEnlargedImage(null)}
+                      className="h-8 w-8"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </DialogTitle>
+                </DialogHeader>
+                {enlargedImage && (
+                  <div className="relative w-full aspect-video">
+                    <img
+                      src={enlargedImage}
+                      alt="Enlarged inspection image"
+                      className="w-full h-full object-contain rounded-lg"
+                    />
+                  </div>
+                )}
+              </DialogContent>
+            </Dialog>
+          </>
+        );
     }
   };
 
@@ -526,29 +591,29 @@ export function OverheadLineInspectionDetailsView({
         </div>
       )}
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card className="bg-blue-50 dark:bg-blue-950">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Items</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{statusSummary.good + statusSummary.requiresAttention}</div>
+            <div className="text-2xl font-bold text-blue-700 dark:text-blue-300">{statusSummary.good + statusSummary.requiresAttention}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="bg-green-50 dark:bg-green-950">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Good Condition</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{statusSummary.good}</div>
+            <div className="text-2xl font-bold text-green-700 dark:text-green-300">{statusSummary.good}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="bg-amber-50 dark:bg-amber-950">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Requires Attention</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{statusSummary.requiresAttention}</div>
+            <div className="text-2xl font-bold text-amber-700 dark:text-amber-300">{statusSummary.requiresAttention}</div>
           </CardContent>
         </Card>
       </div>
@@ -561,7 +626,7 @@ export function OverheadLineInspectionDetailsView({
           onClick={handlePreviousPage}
           disabled={currentPage === 1}
         >
-          <ChevronLeft className="mr-2 h-4 w-4" />
+          <ChevronLeft className="h-4 w-4 mr-2" />
           Previous
         </Button>
         <span className="text-sm text-muted-foreground">
@@ -573,7 +638,7 @@ export function OverheadLineInspectionDetailsView({
           disabled={currentPage === totalPages}
         >
           Next
-          <ChevronRight className="ml-2 h-4 w-4" />
+          <ChevronRight className="h-4 w-4 ml-2" />
         </Button>
       </div>
     </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -14,11 +14,10 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { toast } from "@/components/ui/sonner";
-import { Loader2, MapPin } from "lucide-react";
+import { useToast } from "@/components/ui/use-toast";
+import { Loader2, MapPin, Camera, Upload, X } from "lucide-react";
 import { OverheadLineInspection, ConditionStatus } from "@/lib/types";
 import { getRegions, getDistricts } from "@/lib/api";
-import { useToast } from "@/components/ui/use-toast";
 import { showNotification, showServiceWorkerNotification } from '@/utils/notifications';
 import { serverTimestamp } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
@@ -40,6 +39,11 @@ export function OverheadLineInspectionForm({ inspection, onSubmit, onCancel }: O
   const { addOverheadLineInspection, updateOverheadLineInspection } = useData();
   const offlineStorage = OfflineInspectionService.getInstance();
   const [offlineInspections, setOfflineInspections] = useState<OverheadLineInspection[]>([]);
+  const [isCapturing, setIsCapturing] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [isVideoReady, setIsVideoReady] = useState(false);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
 
   const defaultInsulatorCondition = {
     brokenOrCracked: false,
@@ -167,6 +171,7 @@ export function OverheadLineInspectionForm({ inspection, onSubmit, onCancel }: O
       return {
         ...defaultFormData,
         ...inspection,
+        images: inspection.images || [],
         date: inspection.date ? inspection.date.split('T')[0] : new Date().toISOString().split('T')[0],
         time: inspection.time,
         status: inspection.status || "pending"
@@ -1672,6 +1677,226 @@ export function OverheadLineInspectionForm({ inspection, onSubmit, onCancel }: O
     };
   }, [offlineStorage]);
 
+  // Add cleanup effect
+  useEffect(() => {
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, []);
+
+  // Effect to handle video stream when it's available
+  useEffect(() => {
+    if (cameraStream && videoRef.current) {
+      videoRef.current.srcObject = cameraStream;
+      videoRef.current.onloadedmetadata = () => {
+        videoRef.current?.play()
+          .then(() => {
+            console.log('Video playback started');
+            setIsVideoReady(true);
+          })
+          .catch(error => {
+            console.error('Error playing video:', error);
+            toast({
+              variant: "destructive",
+              title: "Error",
+              description: "Failed to start video playback"
+            });
+          });
+      };
+    }
+  }, [cameraStream]);
+
+  const startCamera = async () => {
+    try {
+      console.log('Starting camera...');
+      const constraints = {
+        video: {
+          facingMode: 'environment',
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        }
+      };
+      
+      console.log('Requesting camera with constraints:', constraints);
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      console.log('Camera stream obtained:', stream);
+      
+      streamRef.current = stream;
+      setCameraStream(stream);
+      setIsCapturing(true);
+    } catch (err) {
+      console.error('Error accessing camera:', err);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to access camera. Please check your camera permissions."
+      });
+    }
+  };
+
+  const stopCamera = () => {
+    console.log('Stopping camera...');
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => {
+        console.log('Stopping track:', track.kind);
+        track.stop();
+      });
+      streamRef.current = null;
+    }
+    setCameraStream(null);
+    setIsVideoReady(false);
+    setIsCapturing(false);
+    console.log('Camera stopped');
+  };
+
+  const captureImage = () => {
+    if (videoRef.current) {
+      const canvas = document.createElement('canvas');
+      canvas.width = videoRef.current.videoWidth;
+      canvas.height = videoRef.current.videoHeight;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(videoRef.current, 0, 0);
+        const imageUrl = canvas.toDataURL('image/jpeg');
+        setFormData(prev => ({
+          ...prev,
+          images: [...(Array.isArray(prev.images) ? prev.images : []), imageUrl]
+        }));
+        stopCamera();
+      }
+    }
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files) {
+      Array.from(files).forEach(file => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setFormData(prev => ({
+            ...prev,
+            images: [...(Array.isArray(prev.images) ? prev.images : []), reader.result as string]
+          }));
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+  };
+
+  const removeImage = (index: number) => {
+    setFormData(prev => ({
+      ...prev,
+      images: (Array.isArray(prev.images) ? prev.images : []).filter((_, i) => i !== index)
+    }));
+  };
+
+  // Update the camera view section
+  const renderCameraView = useMemo(() => {
+    if (!isCapturing) return null;
+
+    return (
+      <div className="relative border-2 border-gray-300 rounded-lg p-2">
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          className="w-full max-w-md rounded-lg bg-black"
+          style={{ 
+            transform: 'scaleX(-1)',
+            minHeight: '300px',
+            objectFit: 'cover'
+          }}
+        />
+        {isVideoReady && (
+          <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex gap-2">
+            <Button
+              type="button"
+              onClick={captureImage}
+              className="bg-white text-black hover:bg-gray-100"
+            >
+              Capture
+            </Button>
+            <Button
+              type="button"
+              onClick={stopCamera}
+              variant="destructive"
+            >
+              Cancel
+            </Button>
+          </div>
+        )}
+      </div>
+    );
+  }, [isCapturing, isVideoReady]);
+
+  // Update the image upload section to use the new camera view
+  const renderImageUpload = useMemo(() => (
+    <Card>
+      <CardContent className="p-6">
+        <h3 className="text-lg font-semibold mb-4">Images</h3>
+        <div className="space-y-4">
+          <div className="flex gap-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={startCamera}
+              disabled={isCapturing}
+            >
+              <Camera className="mr-2 h-4 w-4" />
+              Take Photo
+            </Button>
+            <div className="relative">
+              <Input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleFileUpload}
+                className="hidden"
+                id="image-upload"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => document.getElementById('image-upload')?.click()}
+              >
+                <Upload className="mr-2 h-4 w-4" />
+                Upload Images
+              </Button>
+            </div>
+          </div>
+
+          {renderCameraView}
+
+          {formData.images && formData.images.length > 0 && (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {formData.images.map((image, index) => (
+                <div key={index} className="relative group">
+                  <img
+                    src={image}
+                    alt={`Inspection image ${index + 1}`}
+                    className="w-full h-32 object-cover rounded-lg"
+                  />
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="icon"
+                    className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={() => removeImage(index)}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  ), [formData.images, isCapturing, isVideoReady]);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -1711,6 +1936,7 @@ export function OverheadLineInspectionForm({ inspection, onSubmit, onCancel }: O
         {renderTransformerCondition}
         {renderRecloserCondition}
         {renderAdditionalNotes}
+        {renderImageUpload}
 
         <div className="flex justify-end gap-4">
           <Button type="button" variant="outline" onClick={onCancel}>

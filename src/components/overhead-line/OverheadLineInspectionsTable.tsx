@@ -91,48 +91,28 @@ export function OverheadLineInspectionsTable({
     const doc = new jsPDF();
     
     // Add title
-    doc.setFontSize(16);
-    doc.text('Overhead Line Inspection Details', 14, 15);
+    doc.setFontSize(20);
+    doc.text('Overhead Line Inspection Report', 14, 20);
     
-    // Helper function to safely format dates
-    const formatDate = (date: any) => {
-      if (!date) return 'Unknown';
-      try {
-        const dateObj = new Date(date);
-        if (isNaN(dateObj.getTime())) return 'Invalid Date';
-        return format(dateObj, 'dd/MM/yyyy');
-      } catch (error) {
-        return 'Invalid Date';
-      }
-    };
-
-    const formatDateTime = (date: any) => {
-      if (!date) return 'Unknown';
-      try {
-        const dateObj = new Date(date);
-        if (isNaN(dateObj.getTime())) return 'Invalid Date';
-        return format(dateObj, 'dd/MM/yyyy HH:mm');
-      } catch (error) {
-        return 'Invalid Date';
-      }
-    };
+    // Add inspection ID and date
+    doc.setFontSize(12);
+    doc.text(`Inspection ID: ${inspection.id}`, 14, 30);
+    doc.text(`Date: ${inspection.date || format(new Date(inspection.createdAt), "dd/MM/yyyy")}`, 14, 37);
     
     // Basic Information
-    doc.setFontSize(12);
+    doc.text('Basic Information', 14, 47);
     const basicInfo = [
-      ['Region:', inspection.region || 'Unknown'],
-      ['District:', inspection.district || 'Unknown'],
+      ['Region:', inspection.region],
+      ['District:', inspection.district],
       ['Feeder Name:', inspection.feederName],
       ['Voltage Level:', inspection.voltageLevel],
       ['Reference Pole:', inspection.referencePole],
       ['Status:', inspection.status],
-      ['Date:', formatDate(inspection.date)],
-      ['Created At:', formatDateTime(inspection.createdAt)],
-      ['Last Updated:', formatDateTime(inspection.updatedAt)],
+      ['Inspector:', inspection.inspector.name],
     ];
     
     autoTable(doc, {
-      startY: 25,
+      startY: 50,
       head: [['Field', 'Value']],
       body: basicInfo,
       theme: 'grid',
@@ -347,6 +327,37 @@ export function OverheadLineInspectionsTable({
       headStyles: { fillColor: [41, 128, 185] },
     });
     
+    // Images Section
+    if (inspection.images && inspection.images.length > 0) {
+      doc.addPage();
+      doc.text('Inspection Images', 14, 20);
+      
+      const imageWidth = 180; // Maximum width for images
+      const imageHeight = 100; // Maximum height for images
+      let currentY = 30;
+      
+      for (let i = 0; i < inspection.images.length; i++) {
+        const image = inspection.images[i];
+        
+        // Check if we need a new page
+        if (currentY + imageHeight > 280) {
+          doc.addPage();
+          currentY = 20;
+        }
+        
+        try {
+          // Add image with caption
+          doc.text(`Image ${i + 1}`, 14, currentY);
+          doc.addImage(image, 'JPEG', 14, currentY + 5, imageWidth, imageHeight);
+          currentY += imageHeight + 20; // Add some spacing between images
+        } catch (error) {
+          console.error('Error adding image to PDF:', error);
+          doc.text(`Error loading image ${i + 1}`, 14, currentY);
+          currentY += 20;
+        }
+      }
+    }
+
     // Save the PDF
     doc.save(`overhead-line-inspection-${inspection.id}.pdf`);
   };
