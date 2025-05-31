@@ -42,7 +42,8 @@ import {
   Pie,
   Cell,
   LineChart,
-  Line
+  Line,
+  ReferenceLine
 } from 'recharts';
 import { FeederManagement } from "@/components/analytics/FeederManagement";
 import { useNavigate } from "react-router-dom";
@@ -77,6 +78,7 @@ export default function ControlSystemAnalyticsPage() {
   const [chartType, setChartType] = useState<'bar' | 'line' | 'pie'>('bar');
   const [outageType, setOutageType] = useState<'all' | 'sustained' | 'momentary'>('all');
   const [filterFaultType, setFilterFaultType] = useState<string>("all");
+  const [minTripCount, setMinTripCount] = useState<number>(1); // Changed default to 1
   const [view, setView] = useState<'charts' | 'table'>('charts');
   const [sortField, setSortField] = useState<string>('occurrenceDate');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
@@ -135,6 +137,12 @@ export default function ControlSystemAnalyticsPage() {
     restorationDateTime: true
   });
 
+  // Add a new state for filtered data
+  const [filteredTableData, setFilteredTableData] = useState<OutageData[]>([]);
+
+  // Add a new state for tracking the current data
+  const [currentData, setCurrentData] = useState<OutageData[]>([]);
+
   // Add clear filters function
   const clearFilters = () => {
     setFilterRegion(undefined);
@@ -149,6 +157,7 @@ export default function ControlSystemAnalyticsPage() {
     setSelectedMonthYear(undefined);
     setOutageType("all");
     setFilterFaultType("all");
+    setMinTripCount(1); // Reset minimum trip count
     setSearchQuery("");
     setSortField("occurrenceDate");
     setSortDirection("desc");
@@ -202,26 +211,47 @@ export default function ControlSystemAnalyticsPage() {
     return `${filterRegion}-${filterDistrict}-${dateRange}-${outageType}-${filterFaultType}-${user?.role}-${user?.region}-${user?.district}`;
   }, [filterRegion, filterDistrict, dateRange, outageType, filterFaultType, user]);
 
+  // Add interface for outage data
+  interface OutageData {
+    id: string;
+    occurrenceDate: string;
+    restorationDate: string;
+    regionId: string;
+    districtId: string;
+    faultType: string;
+    specificFaultType?: string;
+    description?: string;
+    feederName?: string;
+    voltageLevel?: string;
+    customersAffected?: {
+      rural: number;
+      urban: number;
+      metro: number;
+    };
+    status: string;
+    [key: string]: any;
+  }
+
   // Load data with server-side pagination
   const loadData = useCallback(async (resetPagination = false) => {
+    console.log('=== loadData START ===');
+    console.log('Current filters:', {
+      filterDistrict,
+      filterRegion,
+      dateRange,
+      selectedWeek,
+      selectedWeekYear,
+      selectedMonth,
+      selectedMonthYear,
+      outageType,
+      filterFaultType,
+      minTripCount,
+      startDate,
+      endDate
+    });
+    
     setIsLoading(true);
     try {
-      console.log('[loadData] Starting data load with filters:', {
-        filterRegion,
-        filterDistrict,
-        dateRange,
-        startDate,
-        endDate,
-        selectedWeek,
-        selectedMonth,
-        selectedYear,
-        filterFaultType,
-        userRole: user?.role,
-        userRegion: user?.region,
-        userDistrict: user?.district,
-        pageSize
-      });
-
       const outagesRef = collection(db, "controlOutages");
       let q = query(outagesRef);
 
@@ -232,13 +262,17 @@ export default function ControlSystemAnalyticsPage() {
         q = query(q, where("districtId", "==", user.district));
       }
 
-      // Apply filters
-      if (filterRegion && filterRegion !== "all") {
-        q = query(q, where("regionId", "==", filterRegion));
-      }
+      // Apply district filter
       if (filterDistrict && filterDistrict !== "all") {
         q = query(q, where("districtId", "==", filterDistrict));
       }
+
+      // Apply region filter
+      if (filterRegion && filterRegion !== "all") {
+        q = query(q, where("regionId", "==", filterRegion));
+      }
+
+      // Apply fault type filter - this should work independently
       if (filterFaultType && filterFaultType !== "all") {
         q = query(q, where("faultType", "==", filterFaultType));
       }
@@ -250,57 +284,52 @@ export default function ControlSystemAnalyticsPage() {
         if (dateRange === "custom" && startDate && endDate) {
           start = startOfDay(startDate);
           end = endOfDay(endDate);
+        } else if (dateRange === "today") {
+          const now = new Date();
+          start = startOfDay(now);
+          end = endOfDay(now);
+        } else if (dateRange === "yesterday") {
+          const yesterday = subDays(new Date(), 1);
+          start = startOfDay(yesterday);
+          end = endOfDay(yesterday);
+        } else if (dateRange === "7days") {
+          const now = new Date();
+          start = startOfDay(subDays(now, 7));
+          end = endOfDay(now);
+        } else if (dateRange === "30days") {
+          const now = new Date();
+          start = startOfDay(subDays(now, 30));
+          end = endOfDay(now);
+        } else if (dateRange === "90days") {
+          const now = new Date();
+          start = startOfDay(subDays(now, 90));
+          end = endOfDay(now);
         } else if (dateRange === "week" && selectedWeek !== undefined && selectedWeekYear !== undefined) {
-          const year = selectedWeekYear;
-          const weekStart = startOfWeek(new Date(year, 0, 1));
+          const yearStart = new Date(selectedWeekYear, 0, 1);
+          const firstWeekStart = startOfWeek(yearStart);
+          const weekStart = new Date(firstWeekStart);
           weekStart.setDate(weekStart.getDate() + (selectedWeek * 7));
           start = startOfWeek(weekStart);
           end = endOfWeek(weekStart);
         } else if (dateRange === "month" && selectedMonth !== undefined && selectedMonthYear !== undefined) {
-          const year = selectedMonthYear;
-          const monthStart = new Date(year, selectedMonth, 1);
+          const monthStart = new Date(selectedMonthYear, selectedMonth, 1);
           start = startOfMonth(monthStart);
           end = endOfMonth(monthStart);
         } else if (dateRange === "year" && selectedYear !== undefined) {
           start = startOfYear(new Date(selectedYear, 0, 1));
           end = endOfYear(new Date(selectedYear, 0, 1));
-        } else {
-          const now = new Date();
-          const cutoff = new Date();
-          
-          if (dateRange === "7days") {
-            cutoff.setDate(now.getDate() - 7);
-          } else if (dateRange === "30days") {
-            cutoff.setDate(now.getDate() - 30);
-          } else if (dateRange === "90days") {
-            cutoff.setDate(now.getDate() - 90);
-          }
-          
-          start = startOfDay(cutoff);
-          end = endOfDay(now);
         }
-        
-        q = query(q, where("occurrenceDate", ">=", start));
-        q = query(q, where("occurrenceDate", "<=", end));
+
+        if (start && end) {
+          q = query(q, where("occurrenceDate", ">=", start));
+          q = query(q, where("occurrenceDate", "<=", end));
+        }
       }
 
-      // Get total count from cache or server
-      const cacheKey = getCacheKey();
-      let totalCount = totalCountCache[cacheKey];
-      
-      if (!totalCount) {
-        setIsLoadingCount(true);
-        try {
-          console.log('[loadData] Getting count from server');
-          const countSnapshot = await getCountFromServer(q);
-          totalCount = countSnapshot.data().count;
-          setTotalCountCache(prev => ({ ...prev, [cacheKey]: totalCount }));
-        } finally {
-          setIsLoadingCount(false);
-        }
-      }
-      
-      console.log('[loadData] Total count:', totalCount);
+      // Get total count
+      const countSnapshot = await getCountFromServer(q);
+      const totalCount = countSnapshot.data().count;
+      console.log('Total count before pagination:', totalCount);
       setTotalItems(totalCount);
       
       // Reset pagination if filters changed
@@ -310,7 +339,7 @@ export default function ControlSystemAnalyticsPage() {
         setHasMore(true);
       }
       
-      // Apply pagination
+      // Apply pagination and sorting
       q = query(
         q,
         orderBy(sortField, sortDirection),
@@ -321,14 +350,15 @@ export default function ControlSystemAnalyticsPage() {
         q = query(q, startAfter(lastVisible));
       }
 
-      console.log('[loadData] Executing final query');
-      const querySnapshot = await getDocs(q);
-      console.log('[loadData] Query results:', {
-        docsCount: querySnapshot.docs.length,
-        firstDoc: querySnapshot.docs[0]?.data(),
-        lastDoc: querySnapshot.docs[querySnapshot.docs.length - 1]?.data()
+      console.log('Executing Firestore query with:', {
+        sortField,
+        sortDirection,
+        pageSize,
+        hasLastVisible: !!lastVisible,
+        resetPagination
       });
 
+      const querySnapshot = await getDocs(q);
       const lastVisibleDoc = querySnapshot.docs[querySnapshot.docs.length - 1];
       setLastVisible(lastVisibleDoc);
       setHasMore(querySnapshot.docs.length === pageSize);
@@ -336,14 +366,53 @@ export default function ControlSystemAnalyticsPage() {
       const outages = querySnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
-      }));
+      })) as OutageData[];
 
-      console.log('[loadData] Setting paginated outages:', outages.length);
-      setPaginatedOutages(outages);
+      console.log('Retrieved outages from Firestore:', {
+        count: outages.length,
+        sample: outages.slice(0, 2).map(o => ({
+          id: o.id,
+          occurrenceDate: o.occurrenceDate,
+          regionId: o.regionId,
+          districtId: o.districtId
+        }))
+      });
+
+      // Filter outages by outage type (sustained/momentary)
+      const filteredOutages = outages.filter(outage => {
+        if (outageType === 'all') return true;
+        if (outage.occurrenceDate && outage.restorationDate) {
+          const duration = (new Date(outage.restorationDate).getTime() - new Date(outage.occurrenceDate).getTime()) / (1000 * 60); // duration in minutes
+          if (outageType === 'sustained' && duration > 5) return true;
+          if (outageType === 'momentary' && duration <= 5) return true;
+        }
+        return false;
+      });
+
+      console.log('After outage type filtering:', {
+        count: filteredOutages.length,
+        sample: filteredOutages.slice(0, 2).map(o => ({
+          id: o.id,
+          occurrenceDate: o.occurrenceDate,
+          regionId: o.regionId,
+          districtId: o.districtId
+        }))
+      });
+
+      // Update all data states
+      setPaginatedOutages(filteredOutages);
+      setFilteredTableData(filteredOutages);
+      setCurrentData(filteredOutages);
+
+      // Update total items count based on filtered data
+      if (outageType !== 'all') {
+        setTotalItems(filteredOutages.length);
+      }
     } catch (error) {
-      console.error('[loadData] Error loading data:', error);
+      console.error('Error loading data:', error);
     } finally {
       setIsLoading(false);
+      console.log('=== loadData END ===');
     }
   }, [
     filterRegion,
@@ -354,25 +423,39 @@ export default function ControlSystemAnalyticsPage() {
     selectedWeek,
     selectedMonth,
     selectedYear,
+    selectedWeekYear,
+    selectedMonthYear,
     filterFaultType,
+    outageType,
+    minTripCount,
     user,
     sortField,
     sortDirection,
     pageSize,
-    lastVisible,
-    getCacheKey
+    lastVisible
   ]);
 
-  // Add initial data load
-  useEffect(() => {
-    console.log('[Initial Load] Starting initial data load');
-    loadData(true);
-  }, []); // Empty dependency array for initial load only
-
-  // Load data when filters change
+  // Update the effect to reload data when filters change
   useEffect(() => {
     loadData(true);
-  }, [filterRegion, filterDistrict, dateRange, filterFaultType, sortField, sortDirection]);
+  }, [
+    filterRegion,
+    filterDistrict,
+    dateRange,
+    startDate,
+    endDate,
+    selectedWeek,
+    selectedMonth,
+    selectedYear,
+    selectedWeekYear,
+    selectedMonthYear,
+    filterFaultType,
+    outageType,
+    minTripCount,
+    sortField,
+    sortDirection,
+    pageSize
+  ]);
 
   // Load next page
   const loadNextPage = () => {
@@ -401,23 +484,64 @@ export default function ControlSystemAnalyticsPage() {
 
   // Filter outages based on selected criteria
   const filteredOutages = controlSystemOutages?.filter(outage => {
-    if (filterRegion && filterRegion !== "all" && outage.regionId !== filterRegion) return false;
-    if (filterDistrict && filterDistrict !== "all" && outage.districtId !== filterDistrict) return false;
-    if (filterFaultType && filterFaultType !== "all" && outage.faultType !== filterFaultType) return false;
+    // Apply region filter
+    if (filterRegion && filterRegion !== "all" && outage.regionId !== filterRegion) {
+      return false;
+    }
+
+    // Apply district filter
+    if (filterDistrict && filterDistrict !== "all" && outage.districtId !== filterDistrict) {
+      return false;
+    }
+
+    // Apply fault type filter - this should work independently
+    if (filterFaultType && filterFaultType !== "all" && outage.faultType !== filterFaultType) {
+      return false;
+    }
     
     if (dateRange !== "all") {
       const now = new Date();
-      const cutoff = new Date();
+      let start, end;
       
-      if (dateRange === "7days") {
-        cutoff.setDate(now.getDate() - 7);
+      if (dateRange === "today") {
+        start = startOfDay(now);
+        end = endOfDay(now);
+      } else if (dateRange === "yesterday") {
+        const yesterday = subDays(now, 1);
+        start = startOfDay(yesterday);
+        end = endOfDay(yesterday);
+      } else if (dateRange === "7days") {
+        start = startOfDay(subDays(now, 7));
+        end = endOfDay(now);
       } else if (dateRange === "30days") {
-        cutoff.setDate(now.getDate() - 30);
+        start = startOfDay(subDays(now, 30));
+        end = endOfDay(now);
       } else if (dateRange === "90days") {
-        cutoff.setDate(now.getDate() - 90);
+        start = startOfDay(subDays(now, 90));
+        end = endOfDay(now);
+      } else if (dateRange === "custom" && startDate && endDate) {
+        start = startOfDay(startDate);
+        end = endOfDay(endDate);
+      } else if (dateRange === "week" && selectedWeek !== undefined && selectedWeekYear !== undefined) {
+        const yearStart = new Date(selectedWeekYear, 0, 1);
+        const firstWeekStart = startOfWeek(yearStart);
+        const weekStart = new Date(firstWeekStart);
+        weekStart.setDate(weekStart.getDate() + (selectedWeek * 7));
+        start = startOfWeek(weekStart);
+        end = endOfWeek(weekStart);
+      } else if (dateRange === "month" && selectedMonth !== undefined && selectedMonthYear !== undefined) {
+        const monthStart = new Date(selectedMonthYear, selectedMonth, 1);
+        start = startOfMonth(monthStart);
+        end = endOfMonth(monthStart);
+      } else if (dateRange === "year" && selectedYear !== undefined) {
+        start = startOfYear(new Date(selectedYear, 0, 1));
+        end = endOfYear(new Date(selectedYear, 0, 1));
       }
-      
-      return new Date(outage.occurrenceDate) >= cutoff;
+
+      const outageDate = new Date(outage.occurrenceDate);
+      if (outageDate < start || outageDate > end) {
+        return false;
+      }
     }
 
     // Filter by outage type (sustained/momentary)
@@ -432,17 +556,35 @@ export default function ControlSystemAnalyticsPage() {
 
   // Calculate metrics
   const calculateMetrics = () => {
-    const totalOutages = filteredOutages.length;
-    const totalCustomersAffected = filteredOutages.reduce((sum, outage) => {
+    // First, filter outages based on feeder trip count if needed
+    let filteredData = [...filteredOutages];
+    
+    if (minTripCount > 1) {
+      // Count trips per feeder
+      const feederTripCounts = filteredData.reduce((acc, outage) => {
+        if (outage.feederName) {
+          acc[outage.feederName] = (acc[outage.feederName] || 0) + 1;
+        }
+        return acc;
+      }, {} as Record<string, number>);
+
+      // Filter outages to only include those from feeders with enough trips
+      filteredData = filteredData.filter(outage => 
+        !outage.feederName || feederTripCounts[outage.feederName] >= minTripCount
+      );
+    }
+
+    const totalOutages = filteredData.length;
+    const totalCustomersAffected = filteredData.reduce((sum, outage) => {
       const { rural = 0, urban = 0, metro = 0 } = outage.customersAffected || {};
       return sum + rural + urban + metro;
     }, 0);
     
-    const totalUnservedEnergy = filteredOutages.reduce((sum, outage) => 
+    const totalUnservedEnergy = filteredData.reduce((sum, outage) => 
       sum + (outage.unservedEnergyMWh || 0), 0
     );
     
-    const avgOutageDuration = filteredOutages.reduce((sum, outage) => {
+    const avgOutageDuration = filteredData.reduce((sum, outage) => {
       if (outage.occurrenceDate && outage.restorationDate) {
         const duration = new Date(outage.restorationDate).getTime() - new Date(outage.occurrenceDate).getTime();
         return sum + duration;
@@ -451,7 +593,7 @@ export default function ControlSystemAnalyticsPage() {
     }, 0) / (totalOutages || 1);
 
     // Calculate Customer Interruption Duration (CID)
-    const customerInterruptionDuration = filteredOutages.reduce((sum, outage) => {
+    const customerInterruptionDuration = filteredData.reduce((sum, outage) => {
       if (outage.occurrenceDate && outage.restorationDate) {
         const duration = (new Date(outage.restorationDate).getTime() - new Date(outage.occurrenceDate).getTime()) / (1000 * 60 * 60); // hours
         const { rural = 0, urban = 0, metro = 0 } = outage.customersAffected || {};
@@ -461,19 +603,26 @@ export default function ControlSystemAnalyticsPage() {
     }, 0);
 
     // Calculate Customer Interruption Frequency (CIF)
-    const customerInterruptionFrequency = filteredOutages.reduce((sum, outage) => {
+    const customerInterruptionFrequency = filteredData.reduce((sum, outage) => {
       const { rural = 0, urban = 0, metro = 0 } = outage.customersAffected || {};
       return sum + (rural > 0 ? 1 : 0) + (urban > 0 ? 1 : 0) + (metro > 0 ? 1 : 0);
     }, 0);
 
     // Calculate Repair Durations
-    const repairDurations = filteredOutages.reduce((sum, outage) => {
+    const repairDurations = filteredData.reduce((sum, outage) => {
       if (outage.repairStartDate && outage.repairEndDate) {
         const duration = new Date(outage.repairEndDate).getTime() - new Date(outage.repairStartDate).getTime();
         return sum + duration;
       }
       return sum;
     }, 0) / (totalOutages || 1);
+
+    // Calculate fault type metrics
+    const faultTypeMetrics = filteredData.reduce((acc, outage) => {
+      const type = outage.faultType || 'Unknown';
+      acc[type] = (acc[type] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
 
     return {
       totalOutages,
@@ -482,35 +631,58 @@ export default function ControlSystemAnalyticsPage() {
       avgOutageDuration: avgOutageDuration / (1000 * 60 * 60), // Convert to hours
       customerInterruptionDuration,
       customerInterruptionFrequency,
-      repairDurations: repairDurations / (1000 * 60 * 60) // Convert to hours
+      repairDurations: repairDurations / (1000 * 60 * 60), // Convert to hours
+      faultTypeMetrics
     };
   };
 
   const metrics = calculateMetrics();
 
+  // Add state for feeder pagination
+  const [feederPage, setFeederPage] = useState(1);
+  const feedersPerPage = 5;
+
   // Prepare chart data
   const prepareChartData = () => {
+    // First, filter outages based on feeder trip count if needed
+    let filteredData = [...filteredOutages];
+    
+    if (minTripCount > 1) {
+      // Count trips per feeder
+      const feederTripCounts = filteredData.reduce((acc, outage) => {
+        if (outage.feederName) {
+          acc[outage.feederName] = (acc[outage.feederName] || 0) + 1;
+        }
+        return acc;
+      }, {} as Record<string, number>);
+
+      // Filter outages to only include those from feeders with enough trips
+      filteredData = filteredData.filter(outage => 
+        !outage.feederName || feederTripCounts[outage.feederName] >= minTripCount
+      );
+    }
+
     // Outages by type
-    const outagesByType = filteredOutages.reduce((acc, outage) => {
+    const outagesByType = filteredData.reduce((acc, outage) => {
       acc[outage.faultType] = (acc[outage.faultType] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
 
     // Outages by voltage level
-    const outagesByVoltage = filteredOutages.reduce((acc, outage) => {
+    const outagesByVoltage = filteredData.reduce((acc, outage) => {
       acc[outage.voltageLevel || 'Unknown'] = (acc[outage.voltageLevel || 'Unknown'] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
 
     // Monthly trend
-    const monthlyTrend = filteredOutages.reduce((acc, outage) => {
+    const monthlyTrend = filteredData.reduce((acc, outage) => {
       const month = format(new Date(outage.occurrenceDate), 'MMM yyyy');
       acc[month] = (acc[month] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
 
     // Add repair duration by type
-    const repairDurationByType = filteredOutages.reduce((acc, outage) => {
+    const repairDurationByType = filteredData.reduce((acc, outage) => {
       if (outage.repairStartDate && outage.repairEndDate) {
         const duration = (new Date(outage.repairEndDate).getTime() - new Date(outage.repairStartDate).getTime()) / (1000 * 60 * 60); // hours
         acc[outage.faultType] = (acc[outage.faultType] || 0) + duration;
@@ -518,8 +690,15 @@ export default function ControlSystemAnalyticsPage() {
       return acc;
     }, {} as Record<string, number>);
 
+    // Calculate average repair duration by type
+    const averageRepairDurationByType = Object.entries(repairDurationByType).reduce((acc, [type, totalDuration]) => {
+      const count = outagesByType[type] || 1;
+      acc[type] = Number((totalDuration / count).toFixed(2));
+      return acc;
+    }, {} as Record<string, number>);
+
     // Add customer interruption duration by type
-    const customerInterruptionDurationByType = filteredOutages.reduce((acc, outage) => {
+    const customerInterruptionDurationByType = filteredData.reduce((acc, outage) => {
       if (outage.occurrenceDate && outage.restorationDate) {
         const duration = (new Date(outage.restorationDate).getTime() - new Date(outage.occurrenceDate).getTime()) / (1000 * 60 * 60); // hours
         const { rural = 0, urban = 0, metro = 0 } = outage.customersAffected || {};
@@ -529,12 +708,57 @@ export default function ControlSystemAnalyticsPage() {
       return acc;
     }, {} as Record<string, number>);
 
+    // Count feeder trips
+    const feederTripCount = filteredData.reduce((acc, outage) => {
+      if (outage.feederName) {
+        if (!acc[outage.feederName]) {
+          acc[outage.feederName] = {
+            count: 0,
+            details: []
+          };
+        }
+        acc[outage.feederName].count += 1;
+        acc[outage.feederName].details.push({
+          date: format(new Date(outage.occurrenceDate), 'yyyy-MM-dd HH:mm'),
+          type: outage.faultType,
+          description: outage.description,
+          status: outage.status,
+          voltageLevel: outage.voltageLevel,
+          region: regions.find(r => r.id === outage.regionId)?.name || 'Unknown',
+          district: districts.find(d => d.id === outage.districtId)?.name || 'Unknown'
+        });
+      }
+      return acc;
+    }, {} as Record<string, { count: number; details: any[] }>);
+
+    // Convert to array and sort by trip count
+    const mostTrippedFeeders = Object.entries(feederTripCount)
+      .filter(([_, data]) => data.count >= 2) // Always filter for 2 or more trips
+      .map(([name, data]) => ({
+        name,
+        count: data.count,
+        details: data.details.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    // Calculate pagination
+    const totalFeeders = mostTrippedFeeders.length;
+    const totalPages = Math.ceil(totalFeeders / feedersPerPage);
+    const startIndex = (feederPage - 1) * feedersPerPage;
+    const paginatedFeeders = mostTrippedFeeders.slice(startIndex, startIndex + feedersPerPage);
+
     return {
       byType: Object.entries(outagesByType).map(([name, value]) => ({ name, value })),
       byVoltage: Object.entries(outagesByVoltage).map(([name, value]) => ({ name, value })),
       monthlyTrend: Object.entries(monthlyTrend).map(([name, value]) => ({ name, value })),
-      repairDurationByType: Object.entries(repairDurationByType).map(([name, value]) => ({ name, value })),
-      customerInterruptionDurationByType: Object.entries(customerInterruptionDurationByType).map(([name, value]) => ({ name, value }))
+      repairDurationByType: Object.entries(averageRepairDurationByType).map(([name, value]) => ({ name, value })),
+      customerInterruptionDurationByType: Object.entries(customerInterruptionDurationByType).map(([name, value]) => ({ name, value })),
+      frequentFeeders: paginatedFeeders,
+      feederPagination: {
+        totalFeeders,
+        totalPages,
+        currentPage: feederPage
+      }
     };
   };
 
@@ -656,23 +880,70 @@ export default function ControlSystemAnalyticsPage() {
   const renderChart = (data: any[], dataKey: string = 'value', nameKey: string = 'name') => {
     if (chartType === 'bar') {
       return (
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={data}>
+        <ResponsiveContainer width="100%" height={400} className="min-h-[400px] md:min-h-[300px]">
+          <BarChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 80 }}>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey={nameKey} />
+            <XAxis 
+              dataKey={nameKey} 
+              tickFormatter={(value) => `${value} (${data.find(d => d[nameKey] === value)?.[dataKey] || 0})`}
+              angle={-45}
+              textAnchor="end"
+              height={80}
+              interval={0}
+            />
             <YAxis />
-            <Tooltip />
+            <Tooltip 
+              content={({ active, payload, label }) => {
+                if (active && payload && payload.length) {
+                  const value = payload[0].value as number;
+                  const total = data.reduce((sum, item) => sum + item.value, 0);
+                  const percentage = ((value / total) * 100).toFixed(1);
+                  return (
+                    <div className="bg-background border rounded-lg p-3 shadow-lg">
+                      <p className="font-semibold">{label}</p>
+                      <p>Total Outages: {value}</p>
+                      <p>Percentage: {percentage}%</p>
+                    </div>
+                  );
+                }
+                return null;
+              }}
+            />
             <Legend />
-            <Bar dataKey={dataKey} fill="#8884d8" />
+            <Bar 
+              dataKey={dataKey} 
+              fill="#8884d8"
+              label={{ 
+                position: 'top',
+                fill: 'hsl(var(--foreground))',
+                fontSize: 12,
+                fontWeight: 500,
+                formatter: (value: any) => {
+                  const total = data.reduce((sum, item) => sum + item.value, 0);
+                  const percentage = ((value / total) * 100).toFixed(1);
+                  return `${value} (${percentage}%)`;
+                }
+              }}
+            >
+              {data.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+              ))}
+            </Bar>
           </BarChart>
         </ResponsiveContainer>
       );
     } else if (chartType === 'line') {
       return (
-        <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={data}>
+        <ResponsiveContainer width="100%" height={400} className="min-h-[400px] md:min-h-[300px]">
+          <LineChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey={nameKey} />
+            <XAxis 
+              dataKey={nameKey} 
+              angle={-45}
+              textAnchor="end"
+              height={60}
+              interval={0}
+            />
             <YAxis />
             <Tooltip />
             <Legend />
@@ -682,15 +953,15 @@ export default function ControlSystemAnalyticsPage() {
       );
     } else if (chartType === 'pie') {
       return (
-        <ResponsiveContainer width="100%" height={300}>
-          <PieChart>
+        <ResponsiveContainer width="100%" height={400} className="min-h-[400px] md:min-h-[300px]">
+          <PieChart margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
             <Pie
               data={data}
               cx="50%"
               cy="50%"
               labelLine={false}
               label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-              outerRadius={100}
+              outerRadius={120}
               fill="#8884d8"
               dataKey={dataKey}
             >
@@ -707,8 +978,9 @@ export default function ControlSystemAnalyticsPage() {
     return null;
   };
 
-  // Sort and filter table data
+  // Update the getSortedAndFilteredData function
   const getSortedAndFilteredData = () => {
+    // Start with the filtered outages instead of paginated outages
     let data = [...filteredOutages];
 
     // Apply search filter
@@ -720,6 +992,68 @@ export default function ControlSystemAnalyticsPage() {
         outage.feederName?.toLowerCase().includes(query) ||
         outage.voltageLevel?.toLowerCase().includes(query)
       );
+    }
+
+    // Apply feeder trip count filter only if minTripCount is greater than 1
+    if (minTripCount > 1) {
+      // Count trips per feeder
+      const feederTripCounts = data.reduce((acc, outage) => {
+        if (outage.feederName) {
+          acc[outage.feederName] = (acc[outage.feederName] || 0) + 1;
+        }
+        return acc;
+      }, {} as Record<string, number>);
+
+      // Filter outages to only include those from feeders with enough trips
+      data = data.filter(outage => 
+        !outage.feederName || feederTripCounts[outage.feederName] >= minTripCount
+      );
+    }
+
+    // Apply date filters
+    if (dateRange !== "all") {
+      const now = new Date();
+      let start, end;
+      
+      if (dateRange === "today") {
+        start = startOfDay(now);
+        end = endOfDay(now);
+      } else if (dateRange === "yesterday") {
+        const yesterday = subDays(now, 1);
+        start = startOfDay(yesterday);
+        end = endOfDay(yesterday);
+      } else if (dateRange === "7days") {
+        start = startOfDay(subDays(now, 7));
+        end = endOfDay(now);
+      } else if (dateRange === "30days") {
+        start = startOfDay(subDays(now, 30));
+        end = endOfDay(now);
+      } else if (dateRange === "90days") {
+        start = startOfDay(subDays(now, 90));
+        end = endOfDay(now);
+      } else if (dateRange === "custom" && startDate && endDate) {
+        start = startOfDay(startDate);
+        end = endOfDay(endDate);
+      } else if (dateRange === "week" && selectedWeek !== undefined && selectedWeekYear !== undefined) {
+        const yearStart = new Date(selectedWeekYear, 0, 1);
+        const firstWeekStart = startOfWeek(yearStart);
+        const weekStart = new Date(firstWeekStart);
+        weekStart.setDate(weekStart.getDate() + (selectedWeek * 7));
+        start = startOfWeek(weekStart);
+        end = endOfWeek(weekStart);
+      } else if (dateRange === "month" && selectedMonth !== undefined && selectedMonthYear !== undefined) {
+        const monthStart = new Date(selectedMonthYear, selectedMonth, 1);
+        start = startOfMonth(monthStart);
+        end = endOfMonth(monthStart);
+      } else if (dateRange === "year" && selectedYear !== undefined) {
+        start = startOfYear(new Date(selectedYear, 0, 1));
+        end = endOfYear(new Date(selectedYear, 0, 1));
+      }
+
+      data = data.filter(outage => {
+        const outageDate = new Date(outage.occurrenceDate);
+        return outageDate >= start && outageDate <= end;
+      });
     }
 
     // Apply sorting
@@ -749,7 +1083,12 @@ export default function ControlSystemAnalyticsPage() {
       }
     });
 
-    return data;
+    // Update pagination
+    const startIndex = (currentPage - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    const paginatedData = data.slice(startIndex, endIndex);
+    
+    return paginatedData;
   };
 
   const handleSort = (field: string) => {
@@ -761,7 +1100,12 @@ export default function ControlSystemAnalyticsPage() {
     }
   };
 
+  // Update the renderTable function to use the total count from filteredOutages
   const renderTable = () => {
+    // Get the filtered and sorted data
+    const tableData = getSortedAndFilteredData();
+    const totalCount = filteredOutages.length;
+
     return (
       <div className="space-y-4">
         <div className="flex items-center justify-between">
@@ -1016,16 +1360,16 @@ export default function ControlSystemAnalyticsPage() {
               <TableRow>
                 {columns.map((column) => 
                   visibleColumns[column.id as keyof typeof visibleColumns] && (
-                <TableHead 
+                    <TableHead 
                       key={column.id}
                       className={column.sortField ? "cursor-pointer" : ""}
                       onClick={() => column.sortField && handleSort(column.sortField)}
-                >
+                    >
                       {column.label}
                       {column.sortField && sortField === column.sortField && (
                         sortDirection === 'asc' ? ' ↑' : ' ↓'
                       )}
-                </TableHead>
+                    </TableHead>
                   )
                 )}
               </TableRow>
@@ -1040,15 +1384,15 @@ export default function ControlSystemAnalyticsPage() {
                     </div>
                   </TableCell>
                 </TableRow>
-              ) : paginatedOutages.length > 0 ? (
-                paginatedOutages.map((outage) => {
+              ) : tableData.length > 0 ? (
+                tableData.map((outage) => {
                   const totalCustomers = (outage.customersAffected?.rural || 0) + 
                                       (outage.customersAffected?.urban || 0) + 
                                       (outage.customersAffected?.metro || 0);
                 
-                const outageDuration = outage.occurrenceDate && outage.restorationDate
-                  ? (new Date(outage.restorationDate).getTime() - new Date(outage.occurrenceDate).getTime()) / (1000 * 60 * 60)
-                  : 0;
+                  const outageDuration = outage.occurrenceDate && outage.restorationDate
+                    ? (new Date(outage.restorationDate).getTime() - new Date(outage.occurrenceDate).getTime()) / (1000 * 60 * 60)
+                    : 0;
 
                   const customerInterruptionDuration = outage.occurrenceDate && outage.restorationDate
                     ? (outageDuration * totalCustomers)
@@ -1063,10 +1407,10 @@ export default function ControlSystemAnalyticsPage() {
                                             (outage.feederCustomers?.urban || 0) + 
                                             (outage.feederCustomers?.metro || 0);
 
-                return (
-                  <TableRow key={outage.id}>
+                  return (
+                    <TableRow key={outage.id}>
                       {visibleColumns.occurrenceDate && (
-                    <TableCell>{format(new Date(outage.occurrenceDate), 'yyyy-MM-dd HH:mm')}</TableCell>
+                        <TableCell>{format(new Date(outage.occurrenceDate), 'yyyy-MM-dd HH:mm')}</TableCell>
                       )}
                       {visibleColumns.region && (
                         <TableCell>{regions.find(r => r.id === outage.regionId)?.name || '-'}</TableCell>
@@ -1078,7 +1422,7 @@ export default function ControlSystemAnalyticsPage() {
                         <TableCell>{outage.faultType || '-'}</TableCell>
                       )}
                       {visibleColumns.specificFaultType && (
-                    <TableCell>{outage.specificFaultType || '-'}</TableCell>
+                        <TableCell>{outage.specificFaultType || '-'}</TableCell>
                       )}
                       {visibleColumns.description && (
                         <TableCell className="max-w-[200px] truncate" title={outage.description || ''}>
@@ -1101,7 +1445,7 @@ export default function ControlSystemAnalyticsPage() {
                         <TableCell>{outage.customersAffected?.metro || 0}</TableCell>
                       )}
                       {visibleColumns.totalCustomers && (
-                    <TableCell>{totalCustomers}</TableCell>
+                        <TableCell>{totalCustomers}</TableCell>
                       )}
                       {visibleColumns.ruralCID && (
                         <TableCell>
@@ -1165,11 +1509,11 @@ export default function ControlSystemAnalyticsPage() {
                         <TableCell>{outage.unservedEnergyMWh?.toFixed(2) || '0.00'}</TableCell>
                       )}
                       {visibleColumns.status && (
-                    <TableCell>
-                      <Badge variant={outage.status === 'resolved' ? 'default' : 'destructive'}>
-                        {outage.status}
-                      </Badge>
-                    </TableCell>
+                        <TableCell>
+                          <Badge variant={outage.status === 'resolved' ? 'default' : 'destructive'}>
+                            {outage.status}
+                          </Badge>
+                        </TableCell>
                       )}
                       {visibleColumns.controlPanelIndications && (
                         <TableCell className="max-w-[200px] truncate" title={outage.controlPanelIndications || ''}>
@@ -1186,13 +1530,13 @@ export default function ControlSystemAnalyticsPage() {
                           {outage.restorationDate ? format(new Date(outage.restorationDate), 'yyyy-MM-dd HH:mm') : '-'}
                         </TableCell>
                       )}
-                  </TableRow>
-                );
+                    </TableRow>
+                  );
                 })
               ) : (
                 <TableRow>
                   <TableCell colSpan={Object.values(visibleColumns).filter(Boolean).length} className="h-24 text-center text-muted-foreground">
-                    No outages found.
+                    No outages found matching the current filters.
                   </TableCell>
                 </TableRow>
               )}
@@ -1200,8 +1544,8 @@ export default function ControlSystemAnalyticsPage() {
           </TableComponent>
         </div>
         
-        {/* Pagination controls */}
-        {totalItems > 0 && (
+        {/* Update pagination controls */}
+        {totalCount > 0 && (
           <div className="flex items-center justify-between px-4 py-3 border-t">
             <div className="flex-1 text-sm text-muted-foreground">
               {isLoadingCount ? (
@@ -1210,7 +1554,7 @@ export default function ControlSystemAnalyticsPage() {
                   Loading total count...
                 </div>
               ) : (
-                `Showing ${((currentPage - 1) * pageSize) + 1} to ${Math.min(currentPage * pageSize, totalItems)} of ${totalItems} results`
+                `Showing ${((currentPage - 1) * pageSize) + 1} to ${Math.min(currentPage * pageSize, totalCount)} of ${totalCount} results`
               )}
             </div>
             <div className="flex items-center space-x-2">
@@ -1226,7 +1570,7 @@ export default function ControlSystemAnalyticsPage() {
                 variant="outline"
                 size="sm"
                 onClick={loadNextPage}
-                disabled={!hasMore || isLoading}
+                disabled={currentPage * pageSize >= totalCount || isLoading}
               >
                 Next
               </Button>
@@ -1270,9 +1614,18 @@ export default function ControlSystemAnalyticsPage() {
     }
   }, [isAuthenticated, user, navigate, regions, districts]);
 
+  // Update the district filter handler
+  const handleDistrictChange = (value: string) => {
+    console.log('District filter changed:', value);
+    const newDistrict = value === 'all' ? undefined : value;
+    setFilterDistrict(newDistrict);
+    // Force a data reload
+    loadData(true);
+  };
+
   return (
     <Layout>
-      <div className="container mx-auto py-8 space-y-8">
+      <div className="px-4 md:container md:mx-auto py-8 space-y-8">
         {/* Header Section */}
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div className="space-y-1">
@@ -1336,8 +1689,8 @@ export default function ControlSystemAnalyticsPage() {
                 <div className="space-y-2">
                   <Label>District</Label>
                   <Select
-                    value={filterDistrict || ""}
-                    onValueChange={setFilterDistrict}
+                    value={filterDistrict || "all"}
+                    onValueChange={handleDistrictChange}
                     disabled={user?.role === "district_engineer" || user?.role === "district_manager"}
                   >
                     <SelectTrigger>
@@ -1363,6 +1716,8 @@ export default function ControlSystemAnalyticsPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Time</SelectItem>
+                      <SelectItem value="today">Today</SelectItem>
+                      <SelectItem value="yesterday">Yesterday</SelectItem>
                       <SelectItem value="7days">Last 7 Days</SelectItem>
                       <SelectItem value="30days">Last 30 Days</SelectItem>
                       <SelectItem value="90days">Last 90 Days</SelectItem>
@@ -1528,6 +1883,27 @@ export default function ControlSystemAnalyticsPage() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="space-y-2">
+                  <Label>Most Trip Feeder Count</Label>
+                  <Select 
+                    value={minTripCount.toString()} 
+                    onValueChange={(value) => setMinTripCount(Number(value))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select feeder count" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">All Feeders</SelectItem>
+                      <SelectItem value="2">2 or more trips</SelectItem>
+                      <SelectItem value="3">3 or more trips</SelectItem>
+                      <SelectItem value="4">4 or more trips</SelectItem>
+                      <SelectItem value="5">5 or more trips</SelectItem>
+                      <SelectItem value="10">10 or more trips</SelectItem>
+                      <SelectItem value="20">20 or more trips</SelectItem>
+                      <SelectItem value="50">50 or more trips</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </Card>
 
@@ -1587,6 +1963,55 @@ export default function ControlSystemAnalyticsPage() {
                   <div className="text-2xl font-bold text-cyan-700 dark:text-cyan-300">{metrics.totalUnservedEnergy.toFixed(2)} MWh</div>
                 </CardContent>
               </Card>
+              
+              {/* Planned vs Unplanned Outages */}
+              <Card className="p-6 bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+                  <CardTitle className="text-sm font-medium text-emerald-700 dark:text-emerald-300">Planned Outages</CardTitle>
+                  <FileText className="h-4 w-4 text-emerald-500 dark:text-emerald-400" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-emerald-700 dark:text-emerald-300">{metrics.faultTypeMetrics['Planned'] || 0}</div>
+                </CardContent>
+              </Card>
+              <Card className="p-6 bg-red-50 dark:bg-red-950/50 hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+                  <CardTitle className="text-sm font-medium text-red-700 dark:text-red-300">Unplanned Outages</CardTitle>
+                  <AlertTriangle className="h-4 w-4 text-red-500 dark:text-red-400" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-red-700 dark:text-red-300">{metrics.faultTypeMetrics['Unplanned'] || 0}</div>
+                </CardContent>
+              </Card>
+              
+              {/* Emergency, Load Shedding, and Grid Outages */}
+              <Card className="p-6 bg-amber-50 dark:bg-amber-950/50 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+                  <CardTitle className="text-sm font-medium text-amber-700 dark:text-amber-300">Emergency Outages</CardTitle>
+                  <AlertTriangle className="h-4 w-4 text-amber-500 dark:text-amber-400" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-amber-700 dark:text-amber-300">{metrics.faultTypeMetrics['Emergency'] || 0}</div>
+                </CardContent>
+              </Card>
+              <Card className="p-6 bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+                  <CardTitle className="text-sm font-medium text-indigo-700 dark:text-indigo-300">ECG Load Shedding</CardTitle>
+                  <Zap className="h-4 w-4 text-indigo-500 dark:text-indigo-400" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-indigo-700 dark:text-indigo-300">{metrics.faultTypeMetrics['ECG Load Shedding'] || 0}</div>
+                </CardContent>
+              </Card>
+              <Card className="p-6 bg-violet-50 dark:bg-violet-950/50 hover:bg-violet-100 dark:hover:bg-violet-900/50 transition-colors">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+                  <CardTitle className="text-sm font-medium text-violet-700 dark:text-violet-300">GridCo Outages</CardTitle>
+                  <Zap className="h-4 w-4 text-violet-500 dark:text-violet-400" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-violet-700 dark:text-violet-300">{metrics.faultTypeMetrics['GridCo Outages'] || 0}</div>
+                </CardContent>
+              </Card>
             </div>
 
             {/* Charts Section */}
@@ -1620,20 +2045,86 @@ export default function ControlSystemAnalyticsPage() {
               </Card>
               <Card className="p-6 bg-slate-50 dark:bg-slate-950/50 hover:bg-slate-100 dark:hover:bg-slate-900/50 transition-colors">
                 <CardHeader className="pb-4">
-                  <CardTitle className="text-slate-700 dark:text-slate-300">Customer Interruption Duration by Type</CardTitle>
-                  <CardDescription className="text-slate-500 dark:text-slate-400">Total customer interruption duration by outage type</CardDescription>
+                  <CardTitle className="text-slate-700 dark:text-slate-300">Most Trip Feeders</CardTitle>
+                  <CardDescription className="text-slate-500 dark:text-slate-400">
+                    Showing feeders with {minTripCount} or more trips • {((feederPage - 1) * feedersPerPage) + 1} to {Math.min(feederPage * feedersPerPage, chartData.feederPagination.totalFeeders)} of {chartData.feederPagination.totalFeeders} feeders
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  {renderChart(chartData.customerInterruptionDurationByType)}
-                </CardContent>
-              </Card>
-              <Card className="lg:col-span-2 p-6 bg-slate-50 dark:bg-slate-950/50 hover:bg-slate-100 dark:hover:bg-slate-900/50 transition-colors">
-                <CardHeader className="pb-4">
-                  <CardTitle className="text-slate-700 dark:text-slate-300">Monthly Trend</CardTitle>
-                  <CardDescription className="text-slate-500 dark:text-slate-400">Number of outages over time</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {renderChart(chartData.monthlyTrend)}
+                  <div className="space-y-4">
+                    {chartData.frequentFeeders.length > 0 ? (
+                      <>
+                        {chartData.frequentFeeders.map((feeder) => (
+                          <div key={feeder.name} className="border rounded-lg p-4 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <h3 className="font-semibold">{feeder.name}</h3>
+                                <p className="text-sm text-muted-foreground">
+                                  {feeder.details[0]?.voltageLevel} • {feeder.details[0]?.region} • {feeder.details[0]?.district}
+                                </p>
+                              </div>
+                              <Badge variant="destructive">Tripped {feeder.count} times</Badge>
+                            </div>
+                            <div className="space-y-2">
+                              {feeder.details.slice(0, 3).map((detail, index) => (
+                                <div key={index} className="text-sm text-muted-foreground border-t pt-2">
+                                  <div className="flex items-center gap-2">
+                                    <span>{detail.date}</span>
+                                    <Badge variant={detail.status === 'resolved' ? 'default' : 'destructive'}>
+                                      {detail.status}
+                                    </Badge>
+                                  </div>
+                                  <div className="mt-1">
+                                    <span className="font-medium">{detail.type}</span>
+                                    {detail.description && (
+                                      <p className="text-xs mt-1">{detail.description}</p>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                              {feeder.details.length > 3 && (
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  className="w-full text-muted-foreground"
+                                  onClick={() => {
+                                    // TODO: Implement modal or expandable view for all trips
+                                    console.log('Show all trips for', feeder.name);
+                                  }}
+                                >
+                                  Show {feeder.details.length - 3} more trips
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                        {/* Pagination Controls */}
+                        <div className="flex items-center justify-between pt-4 border-t">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setFeederPage(prev => Math.max(1, prev - 1))}
+                            disabled={feederPage === 1}
+                          >
+                            Previous
+                          </Button>
+                          <span className="text-sm text-muted-foreground">
+                            Page {feederPage} of {chartData.feederPagination.totalPages}
+                          </span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setFeederPage(prev => Math.min(chartData.feederPagination.totalPages, prev + 1))}
+                            disabled={feederPage === chartData.feederPagination.totalPages}
+                          >
+                            Next
+                          </Button>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-muted-foreground text-center">No feeders with multiple trips</p>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             </div>

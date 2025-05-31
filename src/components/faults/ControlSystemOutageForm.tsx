@@ -332,6 +332,12 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
       toast.error("Please fill at least one affected population field");
       return;
     }
+
+    // Validate that at least one feeder customer field is filled
+    if (metroFeederCustomers === null && urbanFeederCustomers === null && ruralFeederCustomers === null) {
+      toast.error("Please fill at least one Feeder Customers field");
+      return;
+    }
     
     setIsSubmitting(true);
     
@@ -352,7 +358,7 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
         occurrenceDate: formattedOccurrenceDate,
         restorationDate: formattedRestorationDate,
         faultType: faultType as FaultType,
-        specificFaultType,
+        ...(faultType === "Unplanned" || faultType === "Emergency" ? { specificFaultType } : {}),
         status: formattedRestorationDate ? "resolved" : "pending",
         loadMW: loadMW || 0,
         unservedEnergyMWh: unservedEnergyMWh || 0,
@@ -877,7 +883,11 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
                     className="bg-background/50 border-muted h-9 sm:h-10"
                     required
                     placeholder="Enter number of affected customers"
+                    disabled={ruralFeederCustomers === null}
                   />
+                  {ruralFeederCustomers === null && (
+                    <p className="text-xs text-muted-foreground">Please fill Rural Feeder Customers first</p>
+                  )}
                 </div>
                 
                 <div className="space-y-2">
@@ -894,7 +904,11 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
                     className="bg-background/50 border-muted h-9 sm:h-10"
                     required
                     placeholder="Enter number of affected customers"
+                    disabled={urbanFeederCustomers === null}
                   />
+                  {urbanFeederCustomers === null && (
+                    <p className="text-xs text-muted-foreground">Please fill Urban Feeder Customers first</p>
+                  )}
                 </div>
                 
                 <div className="space-y-2">
@@ -911,7 +925,11 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
                     className="bg-background/50 border-muted h-9 sm:h-10"
                     required
                     placeholder="Enter number of affected customers"
+                    disabled={metroFeederCustomers === null}
                   />
+                  {metroFeederCustomers === null && (
+                    <p className="text-xs text-muted-foreground">Please fill Metro Feeder Customers first</p>
+                  )}
                 </div>
               </div>
               <p className="text-sm text-muted-foreground">
