@@ -97,27 +97,27 @@ export function InspectionDetailsView({
               </CardHeader>
               <CardContent className="pt-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="bg-muted/50 p-4 rounded-lg">
+                  <div className="bg-muted/50 p-4 rounded-lg border-l-4 border-blue-500">
                     <p className="text-sm font-medium text-muted-foreground mb-1">Region</p>
                     <p className="text-lg font-semibold">{inspection.region}</p>
                   </div>
-                  <div className="bg-muted/50 p-4 rounded-lg">
+                  <div className="bg-muted/50 p-4 rounded-lg border-l-4 border-blue-500">
                     <p className="text-sm font-medium text-muted-foreground mb-1">District</p>
                     <p className="text-lg font-semibold">{inspection.district}</p>
                   </div>
-                  <div className="bg-muted/50 p-4 rounded-lg">
+                  <div className="bg-muted/50 p-4 rounded-lg border-l-4 border-blue-500">
                     <p className="text-sm font-medium text-muted-foreground mb-1">Substation Number</p>
                     <p className="text-lg font-semibold">{inspection.substationNo}</p>
                   </div>
-                  <div className="bg-muted/50 p-4 rounded-lg">
+                  <div className="bg-muted/50 p-4 rounded-lg border-l-4 border-blue-500">
                     <p className="text-sm font-medium text-muted-foreground mb-1">Substation Name</p>
                     <p className="text-lg font-semibold">{inspection.substationName || "N/A"}</p>
                   </div>
-                  <div className="bg-muted/50 p-4 rounded-lg">
+                  <div className="bg-muted/50 p-4 rounded-lg border-l-4 border-blue-500">
                     <p className="text-sm font-medium text-muted-foreground mb-1">Type</p>
                     <p className="text-lg font-semibold capitalize">{inspection.type}</p>
                   </div>
-                  <div className="bg-muted/50 p-4 rounded-lg">
+                  <div className="bg-muted/50 p-4 rounded-lg border-l-4 border-blue-500">
                     <p className="text-sm font-medium text-muted-foreground mb-1">Date</p>
                     <p className="text-lg font-semibold">
                       {inspection.date && !isNaN(new Date(inspection.date).getTime()) 
@@ -125,7 +125,7 @@ export function InspectionDetailsView({
                         : "N/A"}
                     </p>
                   </div>
-                  <div className="bg-muted/50 p-4 rounded-lg">
+                  <div className="bg-muted/50 p-4 rounded-lg border-l-4 border-blue-500">
                     <p className="text-sm font-medium text-muted-foreground mb-1">Created By</p>
                     <p className="text-lg font-semibold">{inspection.createdBy || "N/A"}</p>
                   </div>

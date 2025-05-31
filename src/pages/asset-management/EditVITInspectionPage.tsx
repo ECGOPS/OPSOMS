@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Layout } from "@/components/layout/Layout";
@@ -60,7 +59,7 @@ export default function EditVITInspectionPage() {
   
   return (
     <Layout>
-      <div className="container py-8">
+      <div className="container px-2 sm:px-4 py-4 sm:py-8">
         <Button 
           variant="ghost" 
           onClick={() => navigate("/asset-management/vit-inspection-management")}
@@ -70,14 +69,14 @@ export default function EditVITInspectionPage() {
           Back to Inspection Management
         </Button>
         
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold tracking-tight">Edit VIT Inspection</h1>
+        <div className="mb-4 sm:mb-6">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Edit VIT Inspection</h1>
           <p className="text-muted-foreground mt-1">
             Update the inspection record details
           </p>
         </div>
         
-        <div className="bg-white rounded-lg border shadow-sm p-6">
+        <div className="rounded-lg border shadow-sm p-3 sm:p-6">
           <VITInspectionForm
             assetId={inspection.vitAssetId}
             inspectionData={inspection}

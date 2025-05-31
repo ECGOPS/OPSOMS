@@ -233,7 +233,7 @@ export default function LoadMonitoringDetailsPage() {
 
   return (
     <Layout>
-      <div className="container mx-auto py-8">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-7xl">
         <div className="flex items-center justify-between mb-6">
            <Button variant="outline" size="icon" onClick={() => navigate("/asset-management/load-monitoring")}>
              <ArrowLeft className="h-4 w-4" />
@@ -242,13 +242,13 @@ export default function LoadMonitoringDetailsPage() {
            <div className="w-10"></div> {/* Spacer */}
         </div>
 
-        <div className="grid gap-6">
+        <div className="grid gap-4 sm:gap-6">
             {/* Basic Information Card */}
-            <Card>
+            <Card className="w-full">
               <CardHeader>
                 <CardTitle>Basic Information</CardTitle>
               </CardHeader>
-              <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <CardContent className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
                  <DetailItem label="Date" value={formatDate(record.date)} />
                  <DetailItem label="Time" value={formatTime(record.time)} />
                  <DetailItem label="Region" value={record.region} />

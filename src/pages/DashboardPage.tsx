@@ -16,6 +16,8 @@ import { getUserRegionAndDistrict } from "@/utils/user-utils";
 import { PermissionService } from "@/services/PermissionService";
 import { DateRange } from "react-day-picker";
 import { format, isWithinInterval, isSameDay, isSameMonth, isSameYear } from "date-fns";
+import { BroadcastMessage } from "@/components/dashboard/BroadcastMessage";
+import { BroadcastMessageForm } from "@/components/dashboard/BroadcastMessageForm";
 
 interface FilterBarProps {
   setFilterRegion: (region: string | undefined) => void;
@@ -404,6 +406,16 @@ export default function DashboardPage() {
             </Button>
           </div>
         </div>
+        
+        {/* Add broadcast messages section */}
+        <BroadcastMessage />
+        
+        {/* Add broadcast message form for admins */}
+        {(user?.role === "system_admin" || user?.role === "global_engineer") && (
+          <div className="mb-8">
+            <BroadcastMessageForm />
+          </div>
+        )}
         
         <StatsOverview 
           op5Faults={faults.op5Faults} 

@@ -184,6 +184,13 @@ service cloud.firestore {
         resource.data.senderId == request.auth.uid;
     }
 
+    // Broadcast Messages collection
+    match /broadcastMessages/{messageId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && (isSystemAdmin() || isGlobalEngineer());
+      allow update, delete: if isAuthenticated() && (isSystemAdmin() || isGlobalEngineer());
+    }
+
     // Feeders collection
     match /feeders/{feederId} {
       allow read: if isAuthenticated();

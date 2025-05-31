@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -118,6 +118,46 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
   const [selectedFeeder, setSelectedFeeder] = useState<string>("");
   const [feeders, setFeeders] = useState<FeederInfo[]>([]);
   const [feederSearch, setFeederSearch] = useState("");
+  const [isFeederDropdownOpen, setIsFeederDropdownOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  
+  // Handle search input focus
+  const handleSearchFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (!isFeederDropdownOpen) {
+      setIsFeederDropdownOpen(true);
+    }
+  };
+
+  // Handle search input change
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    e.stopPropagation();
+    setFeederSearch(e.target.value);
+  };
+
+  // Handle search input keydown
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    e.stopPropagation();
+  };
+  
+  // Add this effect to handle focus
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+    if (isFeederDropdownOpen) {
+      // Use a longer timeout to ensure the input is mounted
+      timeoutId = setTimeout(() => {
+        if (searchInputRef.current) {
+          searchInputRef.current.focus();
+        }
+      }, 100);
+    }
+    return () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [isFeederDropdownOpen]);
   
   // Check if user has permission to report faults
   useEffect(() => {
@@ -596,23 +636,61 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
                   }
                 }}
                 disabled={!regionId}
+                open={isFeederDropdownOpen}
+                onOpenChange={setIsFeederDropdownOpen}
               >
                 <SelectTrigger className="h-12 text-base bg-background/50 border-muted">
                   <SelectValue placeholder="Select feeder" />
                 </SelectTrigger>
-                <SelectContent className="max-h-[300px] overflow-y-auto">
+                <SelectContent 
+                  className="max-h-[300px] overflow-y-auto"
+                  position="popper"
+                  sideOffset={4}
+                  onCloseAutoFocus={(e) => {
+                    e.preventDefault();
+                  }}
+                >
                   <div className="flex items-center px-3 py-2 sticky top-0 bg-background z-10 border-b">
                     <div className="relative flex-1">
                       <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        placeholder="Search feeders..."
-                        value={feederSearch}
-                        onChange={(e) => setFeederSearch(e.target.value)}
-                        className="h-9 pl-9 pr-9 bg-background/50 border-muted focus:border-primary focus:ring-1 focus:ring-primary/20 transition-colors"
-                      />
+                      <div 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                        }}
+                      >
+                        <Input
+                          ref={searchInputRef}
+                          placeholder="Search feeders..."
+                          value={feederSearch}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            setFeederSearch(e.target.value);
+                          }}
+                          onFocus={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                          }}
+                          onKeyDown={(e) => {
+                            e.stopPropagation();
+                            // Prevent the Select component from handling keyboard events
+                            if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter') {
+                              e.preventDefault();
+                            }
+                          }}
+                          className="h-9 pl-9 pr-9 bg-background/50 border-muted focus:border-primary focus:ring-1 focus:ring-primary/20 transition-colors"
+                        />
+                      </div>
                       {feederSearch && (
                         <button
-                          onClick={() => setFeederSearch("")}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            setFeederSearch("");
+                            if (searchInputRef.current) {
+                              searchInputRef.current.focus();
+                            }
+                          }}
                           className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                         >
                           <X className="h-4 w-4" />
@@ -626,7 +704,19 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
                     </div>
                   ) : (
                     filteredFeeders.map((feeder) => (
-                      <SelectItem key={feeder.id} value={feeder.id}>
+                      <SelectItem 
+                        key={feeder.id} 
+                        value={feeder.id}
+                        onSelect={(e) => {
+                          e.preventDefault();
+                          setSelectedFeeder(feeder.id);
+                          const selectedFeeder = feeders.find(f => f.id === feeder.id);
+                          if (selectedFeeder) {
+                            setBspPss(selectedFeeder.bspPss);
+                          }
+                          setIsFeederDropdownOpen(false);
+                        }}
+                      >
                         {feeder.name}
                       </SelectItem>
                     ))

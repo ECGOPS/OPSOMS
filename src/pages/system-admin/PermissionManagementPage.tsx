@@ -131,6 +131,31 @@ const featureCategories: FeatureCategory[] = [
     ]
   },
   {
+    name: "Feeder Management",
+    features: [
+      {
+        id: "feeder_management",
+        name: "Feeder Management",
+        description: "Manage feeders across regions and districts"
+      },
+      {
+        id: "feeder_management_update",
+        name: "Feeder Management Update",
+        description: "Update feeder information"
+      },
+      {
+        id: "feeder_management_delete",
+        name: "Feeder Management Delete",
+        description: "Delete individual feeders"
+      },
+      {
+        id: "feeder_management_delete_all",
+        name: "Delete All Feeders",
+        description: "Delete all feeders in a selected region"
+      }
+    ]
+  },
+  {
     name: "User Management",
     features: [
       {

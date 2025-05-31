@@ -5,7 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Pencil, Trash2, Upload, Download } from "lucide-react";
+import { Plus, Pencil, Trash2, Upload, Download, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/pagination";
 import { getUserRegionAndDistrict } from "@/utils/user-utils";
 import { useAuth } from "@/contexts/AuthContext";
+import { PermissionService } from "@/services/PermissionService";
 
 interface FeederInfo {
   id: string;
@@ -66,8 +67,10 @@ export function FeederManagement() {
   const [feeders, setFeeders] = useState<FeederInfo[]>([]);
   const [selectedRegion, setSelectedRegion] = useState<string>("");
   const [selectedDistrict, setSelectedDistrict] = useState<string>("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedFeeder, setSelectedFeeder] = useState<FeederInfo | null>(null);
   const [newFeeder, setNewFeeder] = useState<Partial<FeederInfo>>({
     name: "",
@@ -83,6 +86,7 @@ export function FeederManagement() {
   const itemsPerPage = 10;
 
   const { user } = useAuth();
+  const permissionService = PermissionService.getInstance();
 
   // Fetch feeders from Firebase
   useEffect(() => {
@@ -349,9 +353,49 @@ export function FeederManagement() {
     }
   };
 
+  const handleDeleteRegionFeeders = async () => {
+    if (selectedRegion === "all") {
+      toast.error("Please select a specific region to delete feeders");
+      return;
+    }
+
+    try {
+      const feedersToDelete = feeders.filter(f => f.regionId === selectedRegion);
+      const batch = writeBatch(db);
+
+      feedersToDelete.forEach(feeder => {
+        const feederRef = doc(db, "feeders", feeder.id);
+        batch.delete(feederRef);
+      });
+
+      await batch.commit();
+      setFeeders(feeders.filter(f => f.regionId !== selectedRegion));
+      toast.success(`Successfully deleted all feeders in ${regions.find(r => r.id === selectedRegion)?.name} region`);
+      setIsDeleteDialogOpen(false);
+    } catch (error) {
+      console.error("Error deleting region feeders:", error);
+      toast.error("Failed to delete region feeders");
+    }
+  };
+
   const filteredFeeders = feeders.filter(feeder => {
+    // First apply region and district filters
     if (selectedRegion && selectedRegion !== "all" && feeder.regionId !== selectedRegion) return false;
     if (selectedDistrict && selectedDistrict !== "all" && feeder.districtId !== selectedDistrict) return false;
+
+    // Then apply search filter if there's a search query
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      return (
+        feeder.name.toLowerCase().includes(query) ||
+        feeder.bspPss.toLowerCase().includes(query) ||
+        feeder.region.toLowerCase().includes(query) ||
+        feeder.district.toLowerCase().includes(query) ||
+        feeder.voltageLevel.toLowerCase().includes(query) ||
+        feeder.feederType.toLowerCase().includes(query)
+      );
+    }
+
     return true;
   });
 
@@ -615,27 +659,61 @@ export function FeederManagement() {
         </div>
       </CardHeader>
       <CardContent>
-        <div className="flex gap-4 mb-4">
-          <div className="w-1/3">
+        <div className="flex flex-col sm:flex-row gap-4 mb-4">
+          <div className="w-full sm:w-1/3">
             <Label>Region</Label>
-            <Select value={selectedRegion} onValueChange={setSelectedRegion} disabled={user?.role === 'regional_engineer' || user?.role === 'district_engineer' || user?.role === 'district_manager' || user?.role === 'regional_general_manager'}>
-              <SelectTrigger>
-                <SelectValue placeholder="All Regions" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Regions</SelectItem>
-                {regions.map((region) => (
-                  <SelectItem key={region.id} value={region.id}>
-                    {region.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex flex-col sm:flex-row gap-2 mt-1">
+              <Select value={selectedRegion} onValueChange={setSelectedRegion} disabled={user?.role === 'regional_engineer' || user?.role === 'district_engineer' || user?.role === 'district_manager' || user?.role === 'regional_general_manager'}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="All Regions" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Regions</SelectItem>
+                  {regions.map((region) => (
+                    <SelectItem key={region.id} value={region.id}>
+                      {region.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline" 
+                  size="icon"
+                  onClick={() => {
+                    setSelectedRegion("all");
+                    setSelectedDistrict("all");
+                    setCurrentPage(1);
+                  }}
+                  title="Clear filters"
+                  className="flex-shrink-0"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+                <Button 
+                  variant="destructive" 
+                  size="icon"
+                  onClick={() => setIsDeleteDialogOpen(true)}
+                  disabled={
+                    selectedRegion === "all" || 
+                    user?.role === 'regional_engineer' || 
+                    user?.role === 'district_engineer' || 
+                    user?.role === 'district_manager' || 
+                    user?.role === 'regional_general_manager' ||
+                    !permissionService.canAccessFeature(user?.role || null, 'feeder_management_delete_all')
+                  }
+                  title="Delete all feeders in selected region"
+                  className="flex-shrink-0"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
           </div>
-          <div className="w-1/3">
+          <div className="w-full sm:w-1/3">
             <Label>District</Label>
             <Select value={selectedDistrict} onValueChange={setSelectedDistrict} disabled={user?.role === 'district_engineer' || user?.role === 'district_manager'}>
-              <SelectTrigger>
+              <SelectTrigger className="w-full mt-1">
                 <SelectValue placeholder="All Districts" />
               </SelectTrigger>
               <SelectContent>
@@ -653,6 +731,32 @@ export function FeederManagement() {
         </div>
 
         <div className="rounded-md border">
+          <div className="p-4 border-b">
+            <div className="flex items-center gap-2">
+              <Input
+                placeholder="Search feeders..."
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setCurrentPage(1); // Reset to first page when searching
+                }}
+                className="max-w-sm"
+              />
+              {searchQuery && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setCurrentPage(1);
+                  }}
+                  title="Clear search"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+          </div>
           <Table>
             <TableHeader>
               <TableRow>
@@ -823,6 +927,43 @@ export function FeederManagement() {
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>Cancel</Button>
               <Button onClick={handleEditFeeder}>Save Changes</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Region Warning Dialog */}
+        <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="text-destructive">Delete Region Feeders</DialogTitle>
+              <DialogDescription>
+                You are about to delete all feeders in the {regions.find(r => r.id === selectedRegion)?.name} region.
+                This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              <div className="bg-destructive/10 p-4 rounded-lg">
+                <h4 className="font-medium text-destructive mb-2">Warning</h4>
+                <ul className="list-disc list-inside space-y-2 text-sm">
+                  <li>This will permanently delete all feeders in the selected region</li>
+                  <li>This action cannot be undone</li>
+                  <li>Any associated data with these feeders will also be affected</li>
+                  <li>Please ensure you have a backup if needed</li>
+                </ul>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button 
+                variant="destructive" 
+                onClick={handleDeleteRegionFeeders}
+                className="gap-2"
+              >
+                <Trash2 className="h-4 w-4" />
+                Delete All Feeders
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

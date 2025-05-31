@@ -42,6 +42,8 @@ import { db } from '@/config/firebase';
 import { LoadMonitoringData } from '@/lib/asset-types';
 import { Checkbox } from "@/components/ui/checkbox";
 import { Settings2 } from "lucide-react";
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuGroup, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuCheckboxItemProps } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 
 // Colors for charts
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
@@ -1900,6 +1902,14 @@ export default function AnalyticsPage() {
     }
   }, [user, regions]);
   
+  // Add toggleColumn function
+  const toggleColumn = (columnId: string) => {
+    setVisibleColumns(prev => ({
+      ...prev,
+      [columnId]: !prev[columnId as keyof typeof prev]
+    }));
+  };
+  
   if (!isAuthenticated) {
     return null;
   }
@@ -2549,50 +2559,202 @@ export default function AnalyticsPage() {
               {/* Recent Faults Card - Now uses filtered data */}
               <Card>
                 <CardHeader className="pt-2 pb-2">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <CardTitle className="text-base sm:text-lg">Recent Faults</CardTitle>
-                      <CardDescription className="text-xs sm:text-sm">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-4">
+                    <div className="w-full sm:w-auto">
+                      <CardTitle className="text-base sm:text-lg font-medium">Recent Faults</CardTitle>
+                      <CardDescription className="text-xs sm:text-sm mt-1">
                         Latest fault reports based on selected tab
                       </CardDescription>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Select
-                        value="columns"
-                        onValueChange={() => {}}
-                      >
-                        <SelectTrigger className="h-8 px-2">
-                          <Settings2 className="h-4 w-4 mr-2" />
-                          <span className="text-xs">Columns</span>
-                        </SelectTrigger>
-                        <SelectContent className="w-[200px]">
-                          <div className="p-2">
-                            <h4 className="text-sm font-medium mb-2">Visible Columns</h4>
-                            <div className="space-y-2">
-                              {columnOptions.map((column) => (
-                                <div key={column.id} className="flex items-center space-x-2">
+                    <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="outline" className="flex items-center gap-2">
+                            <Filter className="h-4 w-4" />
+                            Columns
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-[300px] max-h-[400px] overflow-y-auto">
+                          <DropdownMenuLabel>Toggle Columns</DropdownMenuLabel>
+                          <DropdownMenuSeparator />
+                          
+                          {/* Search input */}
+                          <div className="px-2 py-2">
+                            <Input
+                              placeholder="Search columns..."
+                              className="h-8"
+                              onChange={(e) => {
+                                const searchTerm = e.target.value.toLowerCase();
+                                const filteredColumns = columnOptions.filter(col => 
+                                  col.label.toLowerCase().includes(searchTerm)
+                                );
+                                // Update visible columns based on search
+                                const newVisibleColumns = { ...visibleColumns };
+                                Object.keys(newVisibleColumns).forEach(key => {
+                                  newVisibleColumns[key as keyof typeof newVisibleColumns] = 
+                                    filteredColumns.some(col => col.id === key);
+                                });
+                                setVisibleColumns(newVisibleColumns);
+                              }}
+                            />
+                          </div>
+                          
+                          {/* Basic Information */}
+                          <DropdownMenuGroup>
+                            <DropdownMenuLabel className="text-xs font-semibold text-muted-foreground">
+                              Basic Information
+                            </DropdownMenuLabel>
+                            {columnOptions.filter(col => 
+                              ['region', 'district', 'occurrenceDate', 'type', 'status'].includes(col.id)
+                            ).map(col => (
+                              <DropdownMenuCheckboxItem
+                                key={col.id}
+                                checked={visibleColumns[col.id as keyof typeof visibleColumns]}
+                                onCheckedChange={() => toggleColumn(col.id)}
+                                onSelect={(e) => e.preventDefault()}
+                                className="flex items-center gap-2 cursor-pointer"
+                              >
+                                <div className="flex items-center gap-2 w-full">
                                   <Checkbox
-                                    id={column.id}
-                                    checked={visibleColumns[column.id as keyof typeof visibleColumns]}
-                                    onCheckedChange={(checked) => {
-                                      setVisibleColumns(prev => ({
-                                        ...prev,
-                                        [column.id]: checked
-                                      }));
+                                    checked={visibleColumns[col.id as keyof typeof visibleColumns]}
+                                    onCheckedChange={() => toggleColumn(col.id)}
+                                    className="h-4 w-4"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
                                     }}
                                   />
-                                  <label
-                                    htmlFor={column.id}
-                                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                                  <span 
+                                    className="flex-1 cursor-pointer"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      toggleColumn(col.id);
+                                    }}
                                   >
-                                    {column.label}
-                                  </label>
+                                    {col.label}
+                                  </span>
                                 </div>
-                              ))}
-                            </div>
+                              </DropdownMenuCheckboxItem>
+                            ))}
+                          </DropdownMenuGroup>
+                          
+                          <DropdownMenuSeparator />
+                          
+                          {/* Duration & Impact */}
+                          <DropdownMenuGroup>
+                            <DropdownMenuLabel className="text-xs font-semibold text-muted-foreground">
+                              Duration & Impact
+                            </DropdownMenuLabel>
+                            {columnOptions.filter(col => 
+                              ['outageDuration', 'repairDuration', 'estimatedResolution', 'resolutionStatus', 'customersAffected'].includes(col.id)
+                            ).map(col => (
+                              <DropdownMenuCheckboxItem
+                                key={col.id}
+                                checked={visibleColumns[col.id as keyof typeof visibleColumns]}
+                                onCheckedChange={() => toggleColumn(col.id)}
+                                onSelect={(e) => e.preventDefault()}
+                                className="flex items-center gap-2 cursor-pointer"
+                              >
+                                <div className="flex items-center gap-2 w-full">
+                                  <Checkbox
+                                    checked={visibleColumns[col.id as keyof typeof visibleColumns]}
+                                    onCheckedChange={() => toggleColumn(col.id)}
+                                    className="h-4 w-4"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                    }}
+                                  />
+                                  <span 
+                                    className="flex-1 cursor-pointer"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      toggleColumn(col.id);
+                                    }}
+                                  >
+                                    {col.label}
+                                  </span>
+                                </div>
+                              </DropdownMenuCheckboxItem>
+                            ))}
+                          </DropdownMenuGroup>
+                          
+                          <DropdownMenuSeparator />
+                          
+                          {/* Additional Details */}
+                          <DropdownMenuGroup>
+                            <DropdownMenuLabel className="text-xs font-semibold text-muted-foreground">
+                              Additional Details
+                            </DropdownMenuLabel>
+                            {columnOptions.filter(col => 
+                              ['description', 'typeOfOutage', 'remarks'].includes(col.id)
+                            ).map(col => (
+                              <DropdownMenuCheckboxItem
+                                key={col.id}
+                                checked={visibleColumns[col.id as keyof typeof visibleColumns]}
+                                onCheckedChange={() => toggleColumn(col.id)}
+                                onSelect={(e) => e.preventDefault()}
+                                className="flex items-center gap-2 cursor-pointer"
+                              >
+                                <div className="flex items-center gap-2 w-full">
+                                  <Checkbox
+                                    checked={visibleColumns[col.id as keyof typeof visibleColumns]}
+                                    onCheckedChange={() => toggleColumn(col.id)}
+                                    className="h-4 w-4"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                    }}
+                                  />
+                                  <span 
+                                    className="flex-1 cursor-pointer"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      toggleColumn(col.id);
+                                    }}
+                                  >
+                                    {col.label}
+                                  </span>
+                                </div>
+                              </DropdownMenuCheckboxItem>
+                            ))}
+                          </DropdownMenuGroup>
+                          
+                          <DropdownMenuSeparator />
+                          
+                          {/* Quick Actions */}
+                          <div className="px-2 py-2 flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="flex-1"
+                              onClick={() => {
+                                const newVisibleColumns = { ...visibleColumns };
+                                Object.keys(newVisibleColumns).forEach(key => {
+                                  newVisibleColumns[key as keyof typeof newVisibleColumns] = true;
+                                });
+                                setVisibleColumns(newVisibleColumns);
+                              }}
+                            >
+                              Show All
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="flex-1"
+                              onClick={() => {
+                                const newVisibleColumns = { ...visibleColumns };
+                                Object.keys(newVisibleColumns).forEach(key => {
+                                  newVisibleColumns[key as keyof typeof newVisibleColumns] = false;
+                                });
+                                setVisibleColumns(newVisibleColumns);
+                              }}
+                            >
+                              Hide All
+                            </Button>
                           </div>
-                        </SelectContent>
-                      </Select>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                       <Button 
                         variant="outline" 
                         size="sm" 

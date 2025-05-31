@@ -89,6 +89,7 @@ export class PermissionService {
     'feeder_management': ['technician', 'district_engineer', 'district_manager', 'regional_engineer', 'regional_general_manager', 'global_engineer', 'system_admin'],
     'feeder_management_update': ['district_engineer', 'district_manager', 'regional_engineer', 'regional_general_manager', 'global_engineer', 'system_admin'],
     'feeder_management_delete': ['regional_engineer', 'regional_general_manager', 'global_engineer', 'system_admin'],
+    'feeder_management_delete_all': ['global_engineer', 'system_admin'],
     
     // User Management Features
     'user_management': ['global_engineer', 'system_admin'],

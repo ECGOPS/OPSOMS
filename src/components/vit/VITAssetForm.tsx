@@ -30,7 +30,7 @@ interface VITAssetFormProps {
 }
 
 export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
-  const { regions, districts, addVITAsset, updateVITAsset } = useData();
+  const { regions, districts, addVITAsset, updateVITAsset, vitAssets } = useData();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -42,6 +42,7 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
   const [isMobile, setIsMobile] = useState(false);
   const webcamRef = useRef<Webcam>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [serialNumberError, setSerialNumberError] = useState<string | null>(null);
   
   const [regionId, setRegionId] = useState<string>(
     asset ? regions.find(r => r.name === asset.region)?.id || "" : ""
@@ -422,12 +423,49 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
     tryGetLocation(highAccuracyOptions);
   };
   
+  // Add validation for serial number
+  const validateSerialNumber = (value: string) => {
+    if (!value) {
+      setSerialNumberError("Serial number is required");
+      return false;
+    }
+    
+    // Check for duplicates only when adding a new asset
+    if (!asset) {
+      const isDuplicate = vitAssets.some(
+        existingAsset => 
+          existingAsset.serialNumber.toLowerCase() === value.toLowerCase() &&
+          existingAsset.id !== asset?.id
+      );
+      
+      if (isDuplicate) {
+        setSerialNumberError("This serial number already exists. Please use a different one.");
+        return false;
+      }
+    }
+    
+    setSerialNumberError(null);
+    return true;
+  };
+
+  // Update serial number handler
+  const handleSerialNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setSerialNumber(value);
+    validateSerialNumber(value);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     console.log("Entering handleSubmit for VITAssetForm");
     e.preventDefault();
     
     if (!regionId || !districtId || !serialNumber || !typeOfUnit || !location || !voltageLevel) {
       toast.error("Please fill all required fields");
+      return;
+    }
+
+    // Validate serial number before submitting
+    if (!validateSerialNumber(serialNumber)) {
       return;
     }
     
@@ -720,11 +758,14 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
               <Input
                 id="serialNumber"
                 value={serialNumber}
-                onChange={(e) => setSerialNumber(e.target.value)}
+                onChange={handleSerialNumberChange}
                 placeholder="E.g., RMU2023-001"
                 required
-                className="w-full"
+                className={`w-full ${serialNumberError ? 'border-red-500' : ''}`}
               />
+              {serialNumberError && (
+                <p className="text-sm text-red-500 mt-1">{serialNumberError}</p>
+              )}
             </div>
           </div>
           

@@ -45,7 +45,7 @@ export default function ReportFaultPage() {
 
   return (
     <Layout>
-      <div className="container max-w-7xl py-6 space-y-6">
+      <div className="container mx-auto py-4 sm:py-6 md:py-8 space-y-4 sm:space-y-6 md:space-y-8 max-w-[90rem] px-4 sm:px-6 md:px-8">
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <div>

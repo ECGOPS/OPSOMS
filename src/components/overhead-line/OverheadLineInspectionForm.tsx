@@ -1838,17 +1838,18 @@ export function OverheadLineInspectionForm({ inspection, onSubmit, onCancel }: O
       <CardContent className="p-6">
         <h3 className="text-lg font-semibold mb-4">Images</h3>
         <div className="space-y-4">
-          <div className="flex gap-4">
+          <div className="flex flex-col sm:flex-row gap-4">
             <Button
               type="button"
               variant="outline"
               onClick={startCamera}
               disabled={isCapturing}
+              className="w-full sm:w-auto"
             >
               <Camera className="mr-2 h-4 w-4" />
               Take Photo
             </Button>
-            <div className="relative">
+            <div className="relative w-full sm:w-auto">
               <Input
                 type="file"
                 accept="image/*"
@@ -1861,6 +1862,7 @@ export function OverheadLineInspectionForm({ inspection, onSubmit, onCancel }: O
                 type="button"
                 variant="outline"
                 onClick={() => document.getElementById('image-upload')?.click()}
+                className="w-full sm:w-auto"
               >
                 <Upload className="mr-2 h-4 w-4" />
                 Upload Images

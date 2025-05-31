@@ -19,9 +19,9 @@ import { ConditionStatus, InspectionItem } from "@/lib/types";
 import { SubstationInspection } from "@/lib/asset-types";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, Link } from "react-router-dom";
 import { SubstationInspectionService } from "@/services/SubstationInspectionService";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronRightIcon } from "lucide-react";
 
 interface Category {
   id: string;
@@ -1164,7 +1164,16 @@ export default function SubstationInspectionPage() {
 
   return (
     <Layout>
-      <div className="container py-8">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-7xl">
+        {/* Add breadcrumb navigation */}
+        <nav className="flex items-center space-x-1 text-sm text-muted-foreground mb-6">
+          <Link to="/asset-management/inspection-management" className="hover:text-foreground transition-colors">
+            Inspection Management
+          </Link>
+          <ChevronRightIcon className="h-4 w-4" />
+          <span className="text-foreground">New Substation Inspection</span>
+        </nav>
+
         <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">New Substation Inspection</h1>

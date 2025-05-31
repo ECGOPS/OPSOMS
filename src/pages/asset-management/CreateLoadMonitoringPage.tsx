@@ -452,7 +452,7 @@ export default function CreateLoadMonitoringPage() {
 
  return (
     <Layout>
-      <div className="container mx-auto py-8">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-7xl">
         <div className="mb-8">
           <h1 className="text-3xl font-bold tracking-tight">Create New Load Record</h1>
           <p className="text-muted-foreground mt-2">
@@ -463,7 +463,7 @@ export default function CreateLoadMonitoringPage() {
         <form onSubmit={handleSubmit}>
           <div className="grid gap-4 sm:gap-6">
             {/* Basic Information Card */}
-            <Card>
+            <Card className="w-full">
               <CardHeader>
                 <CardTitle>Basic Information</CardTitle>
                 <CardDescription>

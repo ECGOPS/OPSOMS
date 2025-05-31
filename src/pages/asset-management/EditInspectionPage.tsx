@@ -23,12 +23,28 @@ import { useData } from "@/contexts/DataContext";
 import { ChevronLeft } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 
+// Hook to detect if screen is mobile size (you might need to define breakpoints based on your project's needs)
+const useIsMobile = (breakpoint = 768) => {
+  const [isMobile, setIsMobile] = useState(window.innerWidth < breakpoint);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < breakpoint);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [breakpoint]);
+
+  return isMobile;
+};
+
 export default function EditInspectionPage() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const { getSavedInspection, updateSubstationInspection, regions, districts } = useData();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState("general");
+  const [activeTab, setActiveTab] = useState<string>("general");
   const [formData, setFormData] = useState<Partial<SubstationInspection>>({
     region: "",
     district: "",
@@ -37,6 +53,7 @@ export default function EditInspectionPage() {
     items: []
   });
   const [loading, setLoading] = useState(true);
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     if (id) {
@@ -392,243 +409,251 @@ export default function EditInspectionPage() {
                 <CardTitle>Inspection Checklist</CardTitle>
               </CardHeader>
               <CardContent>
-                <Tabs 
-                  defaultValue="general" 
-                  value={activeTab}
-                  onValueChange={setActiveTab}
-                  className="w-full"
-                >
-                  <TabsList className="grid grid-cols-6 gap-4">
-                    <TabsTrigger value="general">General Building</TabsTrigger>
-                    <TabsTrigger value="control">Control Equipment</TabsTrigger>
-                    <TabsTrigger value="transformer">Power Transformer</TabsTrigger>
-                    <TabsTrigger value="outdoor">Outdoor Equipment</TabsTrigger>
-                    <TabsTrigger value="site">Site Condition</TabsTrigger>
-                    <TabsTrigger value="basement">Basement</TabsTrigger>
-                  </TabsList>
-                  
-                  {/* General Building */}
-                  <TabsContent value="general" className="space-y-4">
-                    {getItemsByCategory("general").map((item) => (
-                      <div key={item.id} className="border rounded-lg p-4">
-                        <div className="flex justify-between items-start">
-                          <div className="space-y-1">
-                            <h4 className="font-medium">{item.name}</h4>
-                          </div>
-                          <RadioGroup
-                            value={item.status}
-                            onValueChange={(value) => updateInspectionItem(item.id, 'status', value as ConditionStatus)}
-                            className="flex items-center space-x-4"
-                          >
-                            <div className="flex items-center space-x-2">
-                              <RadioGroupItem value="good" id={`${item.id}-good`} />
-                              <Label htmlFor={`${item.id}-good`}>Good</Label>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <RadioGroupItem value="bad" id={`${item.id}-bad`} />
-                              <Label htmlFor={`${item.id}-bad`}>Bad</Label>
-                            </div>
-                          </RadioGroup>
-                        </div>
-                        <div className="mt-4">
-                          <Label htmlFor={`remarks-${item.id}`}>Remarks</Label>
-                          <Textarea
-                            id={`remarks-${item.id}`}
-                            value={item.remarks || ''}
-                            onChange={(e) => updateInspectionItem(item.id, 'remarks', e.target.value)}
-                            placeholder="Add remarks about this item"
-                            className="mt-1"
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </TabsContent>
+                {isMobile ? (
+                  <div className="space-y-4">
+                    <Label htmlFor="inspection-category">Inspection Category</Label>
+                    <Select value={activeTab} onValueChange={setActiveTab}>
+                      <SelectTrigger id="inspection-category">
+                        <SelectValue placeholder="Select a category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="general">General Building</SelectItem>
+                        <SelectItem value="control">Control Equipment</SelectItem>
+                        <SelectItem value="transformer">Power Transformer</SelectItem>
+                        <SelectItem value="outdoor">Outdoor Equipment</SelectItem>
+                        <SelectItem value="site">Site Condition</SelectItem>
+                        <SelectItem value="basement">Basement</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : (
+                  <Tabs 
+                    defaultValue="general" 
+                    value={activeTab}
+                    onValueChange={setActiveTab}
+                    className="w-full"
+                  >
+                    <TabsList className="grid grid-cols-6 gap-4">
+                      <TabsTrigger value="general">General Building</TabsTrigger>
+                      <TabsTrigger value="control">Control Equipment</TabsTrigger>
+                      <TabsTrigger value="transformer">Power Transformer</TabsTrigger>
+                      <TabsTrigger value="outdoor">Outdoor Equipment</TabsTrigger>
+                      <TabsTrigger value="site">Site Condition</TabsTrigger>
+                      <TabsTrigger value="basement">Basement</TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+                )}
 
-                  {/* Control Equipment */}
-                  <TabsContent value="control" className="space-y-4">
-                    {getItemsByCategory("control").map((item) => (
-                      <div key={item.id} className="border rounded-lg p-4">
-                        <div className="flex justify-between items-start">
-                          <div className="space-y-1">
-                            <h4 className="font-medium">{item.name}</h4>
-                          </div>
-                          <RadioGroup
-                            value={item.status}
-                            onValueChange={(value) => updateInspectionItem(item.id, 'status', value as ConditionStatus)}
-                            className="flex items-center space-x-4"
-                          >
-                            <div className="flex items-center space-x-2">
-                              <RadioGroupItem value="good" id={`${item.id}-good`} />
-                              <Label htmlFor={`${item.id}-good`}>Good</Label>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <RadioGroupItem value="bad" id={`${item.id}-bad`} />
-                              <Label htmlFor={`${item.id}-bad`}>Bad</Label>
-                            </div>
-                          </RadioGroup>
-                        </div>
-                        <div className="mt-4">
-                          <Label htmlFor={`remarks-${item.id}`}>Remarks</Label>
-                          <Textarea
-                            id={`remarks-${item.id}`}
-                            value={item.remarks || ''}
-                            onChange={(e) => updateInspectionItem(item.id, 'remarks', e.target.value)}
-                            placeholder="Add remarks about this item"
-                            className="mt-1"
-                          />
-                        </div>
+                {/* Render content based on active tab regardless of mobile/desktop */}
+                {/* General Building */}
+                {activeTab === "general" && getItemsByCategory("general").map((item) => (
+                  <div key={item.id} className="border rounded-lg p-4">
+                    <div className="flex justify-between items-start">
+                      <div className="space-y-1">
+                        <h4 className="font-medium">{item.name}</h4>
                       </div>
-                    ))}
-                  </TabsContent>
+                      <RadioGroup
+                        value={item.status}
+                        onValueChange={(value) => updateInspectionItem(item.id, 'status', value as ConditionStatus)}
+                        className="flex items-center space-x-4"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="good" id={`${item.id}-good`} />
+                          <Label htmlFor={`${item.id}-good`}>Good</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="bad" id={`${item.id}-bad`} />
+                          <Label htmlFor={`${item.id}-bad`}>Bad</Label>
+                        </div>
+                      </RadioGroup>
+                    </div>
+                    <div className="mt-4">
+                      <Label htmlFor={`remarks-${item.id}`}>Remarks</Label>
+                      <Textarea
+                        id={`remarks-${item.id}`}
+                        value={item.remarks || ''}
+                        onChange={(e) => updateInspectionItem(item.id, 'remarks', e.target.value)}
+                        placeholder="Add remarks about this item"
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
+                ))}
 
-                  {/* Power Transformer */}
-                  <TabsContent value="transformer" className="space-y-4">
-                    {getItemsByCategory("transformer").map((item) => (
-                      <div key={item.id} className="border rounded-lg p-4">
-                        <div className="flex justify-between items-start">
-                          <div className="space-y-1">
-                            <h4 className="font-medium">{item.name}</h4>
-                          </div>
-                          <RadioGroup
-                            value={item.status}
-                            onValueChange={(value) => updateInspectionItem(item.id, 'status', value as ConditionStatus)}
-                            className="flex items-center space-x-4"
-                          >
-                            <div className="flex items-center space-x-2">
-                              <RadioGroupItem value="good" id={`${item.id}-good`} />
-                              <Label htmlFor={`${item.id}-good`}>Good</Label>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <RadioGroupItem value="bad" id={`${item.id}-bad`} />
-                              <Label htmlFor={`${item.id}-bad`}>Bad</Label>
-                            </div>
-                          </RadioGroup>
-                        </div>
-                        <div className="mt-4">
-                          <Label htmlFor={`remarks-${item.id}`}>Remarks</Label>
-                          <Textarea
-                            id={`remarks-${item.id}`}
-                            value={item.remarks || ''}
-                            onChange={(e) => updateInspectionItem(item.id, 'remarks', e.target.value)}
-                            placeholder="Add remarks about this item"
-                            className="mt-1"
-                          />
-                        </div>
+                {/* Control Equipment */}
+                {activeTab === "control" && getItemsByCategory("control").map((item) => (
+                  <div key={item.id} className="border rounded-lg p-4">
+                    <div className="flex justify-between items-start">
+                      <div className="space-y-1">
+                        <h4 className="font-medium">{item.name}</h4>
                       </div>
-                    ))}
-                  </TabsContent>
+                      <RadioGroup
+                        value={item.status}
+                        onValueChange={(value) => updateInspectionItem(item.id, 'status', value as ConditionStatus)}
+                        className="flex items-center space-x-4"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="good" id={`${item.id}-good`} />
+                          <Label htmlFor={`${item.id}-good`}>Good</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="bad" id={`${item.id}-bad`} />
+                          <Label htmlFor={`${item.id}-bad`}>Bad</Label>
+                        </div>
+                      </RadioGroup>
+                    </div>
+                    <div className="mt-4">
+                      <Label htmlFor={`remarks-${item.id}`}>Remarks</Label>
+                      <Textarea
+                        id={`remarks-${item.id}`}
+                        value={item.remarks || ''}
+                        onChange={(e) => updateInspectionItem(item.id, 'remarks', e.target.value)}
+                        placeholder="Add remarks about this item"
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
+                ))}
 
-                  {/* Outdoor Equipment */}
-                  <TabsContent value="outdoor" className="space-y-4">
-                    {getItemsByCategory("outdoor").map((item) => (
-                      <div key={item.id} className="border rounded-lg p-4">
-                        <div className="flex justify-between items-start">
-                          <div className="space-y-1">
-                            <h4 className="font-medium">{item.name}</h4>
-                          </div>
-                          <RadioGroup
-                            value={item.status}
-                            onValueChange={(value) => updateInspectionItem(item.id, 'status', value as ConditionStatus)}
-                            className="flex items-center space-x-4"
-                          >
-                            <div className="flex items-center space-x-2">
-                              <RadioGroupItem value="good" id={`${item.id}-good`} />
-                              <Label htmlFor={`${item.id}-good`}>Good</Label>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <RadioGroupItem value="bad" id={`${item.id}-bad`} />
-                              <Label htmlFor={`${item.id}-bad`}>Bad</Label>
-                            </div>
-                          </RadioGroup>
-                        </div>
-                        <div className="mt-4">
-                          <Label htmlFor={`remarks-${item.id}`}>Remarks</Label>
-                          <Textarea
-                            id={`remarks-${item.id}`}
-                            value={item.remarks || ''}
-                            onChange={(e) => updateInspectionItem(item.id, 'remarks', e.target.value)}
-                            placeholder="Add remarks about this item"
-                            className="mt-1"
-                          />
-                        </div>
+                {/* Power Transformer */}
+                {activeTab === "transformer" && getItemsByCategory("transformer").map((item) => (
+                  <div key={item.id} className="border rounded-lg p-4">
+                    <div className="flex justify-between items-start">
+                      <div className="space-y-1">
+                        <h4 className="font-medium">{item.name}</h4>
                       </div>
-                    ))}
-                  </TabsContent>
+                      <RadioGroup
+                        value={item.status}
+                        onValueChange={(value) => updateInspectionItem(item.id, 'status', value as ConditionStatus)}
+                        className="flex items-center space-x-4"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="good" id={`${item.id}-good`} />
+                          <Label htmlFor={`${item.id}-good`}>Good</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="bad" id={`${item.id}-bad`} />
+                          <Label htmlFor={`${item.id}-bad`}>Bad</Label>
+                        </div>
+                      </RadioGroup>
+                    </div>
+                    <div className="mt-4">
+                      <Label htmlFor={`remarks-${item.id}`}>Remarks</Label>
+                      <Textarea
+                        id={`remarks-${item.id}`}
+                        value={item.remarks || ''}
+                        onChange={(e) => updateInspectionItem(item.id, 'remarks', e.target.value)}
+                        placeholder="Add remarks about this item"
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
+                ))}
 
-                  {/* Site Condition */}
-                  <TabsContent value="site" className="space-y-4">
-                    {getItemsByCategory("site").map((item) => (
-                      <div key={item.id} className="border rounded-lg p-4">
-                        <div className="flex justify-between items-start">
-                          <div className="space-y-1">
-                            <h4 className="font-medium">{item.name}</h4>
-                          </div>
-                          <RadioGroup
-                            value={item.status}
-                            onValueChange={(value) => updateInspectionItem(item.id, 'status', value as ConditionStatus)}
-                            className="flex items-center space-x-4"
-                          >
-                            <div className="flex items-center space-x-2">
-                              <RadioGroupItem value="good" id={`${item.id}-good`} />
-                              <Label htmlFor={`${item.id}-good`}>Good</Label>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <RadioGroupItem value="bad" id={`${item.id}-bad`} />
-                              <Label htmlFor={`${item.id}-bad`}>Bad</Label>
-                            </div>
-                          </RadioGroup>
-                        </div>
-                        <div className="mt-4">
-                          <Label htmlFor={`remarks-${item.id}`}>Remarks</Label>
-                          <Textarea
-                            id={`remarks-${item.id}`}
-                            value={item.remarks || ''}
-                            onChange={(e) => updateInspectionItem(item.id, 'remarks', e.target.value)}
-                            placeholder="Add remarks about this item"
-                            className="mt-1"
-                          />
-                        </div>
+                {/* Outdoor Equipment */}
+                {activeTab === "outdoor" && getItemsByCategory("outdoor").map((item) => (
+                  <div key={item.id} className="border rounded-lg p-4">
+                    <div className="flex justify-between items-start">
+                      <div className="space-y-1">
+                        <h4 className="font-medium">{item.name}</h4>
                       </div>
-                    ))}
-                  </TabsContent>
+                      <RadioGroup
+                        value={item.status}
+                        onValueChange={(value) => updateInspectionItem(item.id, 'status', value as ConditionStatus)}
+                        className="flex items-center space-x-4"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="good" id={`${item.id}-good`} />
+                          <Label htmlFor={`${item.id}-good`}>Good</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="bad" id={`${item.id}-bad`} />
+                          <Label htmlFor={`${item.id}-bad`}>Bad</Label>
+                        </div>
+                      </RadioGroup>
+                    </div>
+                    <div className="mt-4">
+                      <Label htmlFor={`remarks-${item.id}`}>Remarks</Label>
+                      <Textarea
+                        id={`remarks-${item.id}`}
+                        value={item.remarks || ''}
+                        onChange={(e) => updateInspectionItem(item.id, 'remarks', e.target.value)}
+                        placeholder="Add remarks about this item"
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
+                ))}
 
-                  {/* Basement */}
-                  <TabsContent value="basement" className="space-y-4">
-                    {getItemsByCategory("basement").map((item) => (
-                      <div key={item.id} className="border rounded-lg p-4">
-                        <div className="flex justify-between items-start">
-                          <div className="space-y-1">
-                            <h4 className="font-medium">{item.name}</h4>
-                          </div>
-                          <RadioGroup
-                            value={item.status}
-                            onValueChange={(value) => updateInspectionItem(item.id, 'status', value as ConditionStatus)}
-                            className="flex items-center space-x-4"
-                          >
-                            <div className="flex items-center space-x-2">
-                              <RadioGroupItem value="good" id={`${item.id}-good`} />
-                              <Label htmlFor={`${item.id}-good`}>Good</Label>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <RadioGroupItem value="bad" id={`${item.id}-bad`} />
-                              <Label htmlFor={`${item.id}-bad`}>Bad</Label>
-                            </div>
-                          </RadioGroup>
-                        </div>
-                        <div className="mt-4">
-                          <Label htmlFor={`remarks-${item.id}`}>Remarks</Label>
-                          <Textarea
-                            id={`remarks-${item.id}`}
-                            value={item.remarks || ''}
-                            onChange={(e) => updateInspectionItem(item.id, 'remarks', e.target.value)}
-                            placeholder="Add remarks about this item"
-                            className="mt-1"
-                          />
-                        </div>
+                {/* Site Condition */}
+                {activeTab === "site" && getItemsByCategory("site").map((item) => (
+                  <div key={item.id} className="border rounded-lg p-4">
+                    <div className="flex justify-between items-start">
+                      <div className="space-y-1">
+                        <h4 className="font-medium">{item.name}</h4>
                       </div>
-                    ))}
-                  </TabsContent>
-                </Tabs>
+                      <RadioGroup
+                        value={item.status}
+                        onValueChange={(value) => updateInspectionItem(item.id, 'status', value as ConditionStatus)}
+                        className="flex items-center space-x-4"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="good" id={`${item.id}-good`} />
+                          <Label htmlFor={`${item.id}-good`}>Good</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="bad" id={`${item.id}-bad`} />
+                          <Label htmlFor={`${item.id}-bad`}>Bad</Label>
+                        </div>
+                      </RadioGroup>
+                    </div>
+                    <div className="mt-4">
+                      <Label htmlFor={`remarks-${item.id}`}>Remarks</Label>
+                      <Textarea
+                        id={`remarks-${item.id}`}
+                        value={item.remarks || ''}
+                        onChange={(e) => updateInspectionItem(item.id, 'remarks', e.target.value)}
+                        placeholder="Add remarks about this item"
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
+                ))}
+
+                {/* Basement */}
+                {activeTab === "basement" && getItemsByCategory("basement").map((item) => (
+                  <div key={item.id} className="border rounded-lg p-4">
+                    <div className="flex justify-between items-start">
+                      <div className="space-y-1">
+                        <h4 className="font-medium">{item.name}</h4>
+                      </div>
+                      <RadioGroup
+                        value={item.status}
+                        onValueChange={(value) => updateInspectionItem(item.id, 'status', value as ConditionStatus)}
+                        className="flex items-center space-x-4"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="good" id={`${item.id}-good`} />
+                          <Label htmlFor={`${item.id}-good`}>Good</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="bad" id={`${item.id}-bad`} />
+                          <Label htmlFor={`${item.id}-bad`}>Bad</Label>
+                        </div>
+                      </RadioGroup>
+                    </div>
+                    <div className="mt-4">
+                      <Label htmlFor={`remarks-${item.id}`}>Remarks</Label>
+                      <Textarea
+                        id={`remarks-${item.id}`}
+                        value={item.remarks || ''}
+                        onChange={(e) => updateInspectionItem(item.id, 'remarks', e.target.value)}
+                        placeholder="Add remarks about this item"
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
+                ))}
               </CardContent>
             </Card>
 
@@ -653,15 +678,16 @@ export default function EditInspectionPage() {
               </CardContent>
             </Card>
 
-            <div className="flex justify-end space-x-4">
+            <div className="flex flex-col sm:flex-row justify-center sm:justify-end space-y-4 sm:space-y-0 sm:space-x-4 mt-8 max-w-sm mx-auto sm:max-w-none sm:w-auto sm:mx-0">
               <Button 
                 type="button" 
                 variant="outline" 
                 onClick={() => navigate(`/asset-management/inspection-details/${id}`)}
+                className="w-full sm:w-auto"
               >
                 Cancel
               </Button>
-              <Button type="submit" size="lg">
+              <Button type="submit" size="lg" className="w-full sm:w-auto">
                 Save Changes
               </Button>
             </div>
