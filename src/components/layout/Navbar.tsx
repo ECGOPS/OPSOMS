@@ -1,21 +1,8 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Link, useNavigate, useLocation, NavLink } from "react-router-dom";
-import { Menu, X, User, LogOut, Database, ChevronDown, BarChart3 } from "lucide-react";
-import { useState } from "react";
+import { Menu, User, LogOut } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Separator } from "@/components/ui/separator";
-import { hasRequiredRole } from "@/utils/security";
-import { UserRole } from "@/lib/types";
-import {
-  NavigationMenu,
-  NavigationMenuContent,
-  NavigationMenuItem,
-  NavigationMenuLink,
-  NavigationMenuList,
-  NavigationMenuTrigger,
-  navigationMenuTriggerStyle,
-} from "@/components/ui/navigation-menu";
 import { cn } from "@/lib/utils";
 import { useTheme } from "next-themes";
 
@@ -23,7 +10,6 @@ export function Navbar() {
   const { user, logout, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { theme, setTheme } = useTheme();
 
   const handleLogout = () => {
@@ -40,307 +26,23 @@ export function Navbar() {
     return location.pathname.startsWith(route);
   };
 
-  const showMenuItem = (requiredRole: UserRole) => {
+  const showMenuItem = (requiredRole: string) => {
     if (!user?.role) return false;
     if (user.role === "system_admin") return true;
-    // For technicians, only show specific menu items
     if (user.role === "technician") {
       return requiredRole === "district_engineer" && !location.pathname.startsWith("/analytics");
     }
-    // For district engineers, allow access to analytics and district population
     if (user.role === "district_engineer") {
       return requiredRole === "district_engineer" || requiredRole === "global_engineer";
     }
-    // For regional engineers, allow access to analytics and district population
     if (user.role === "regional_engineer") {
       return requiredRole === "district_engineer" || requiredRole === "regional_engineer" || requiredRole === "global_engineer";
     }
-    // For global engineers, allow access to all features
     if (user.role === "global_engineer") {
       return true;
     }
-    return hasRequiredRole(user.role, requiredRole);
+    return false;
   };
-
-  const NavLinks = () => (
-    <>
-      <NavLink
-        to="/"
-        className={({ isActive }: { isActive: boolean }) =>
-          cn(
-            "px-3 py-2 rounded-md transition-colors",
-            isActive 
-              ? "bg-primary/10 text-primary font-medium" 
-              : "text-foreground hover:text-primary hover:bg-primary/5"
-          )
-        }
-      >
-        Home
-      </NavLink>
-      {isAuthenticated && (
-        <>
-          <NavLink 
-            to="/dashboard"
-            end
-            className={({ isActive }) =>
-              cn(
-                "px-3 py-2 rounded-md transition-colors",
-                isActive 
-                  ? "bg-primary/20 text-primary font-medium border border-primary/30" 
-                  : "text-foreground hover:text-primary hover:bg-primary/5"
-              )
-            }
-          >
-            Dashboard
-          </NavLink>
-          <NavLink 
-            to="/report-fault" 
-            className={({ isActive }) =>
-              cn(
-                "px-3 py-2 rounded-md transition-colors",
-                isActive 
-                  ? "bg-primary/10 text-primary font-medium" 
-                  : "text-foreground hover:text-primary hover:bg-primary/5"
-              )
-            }
-          >
-            Report Fault
-          </NavLink>
-          
-          {/* Analytics Menu - Show for district engineers and above */}
-          {showMenuItem("district_engineer") && (
-            <div className="hidden md:block">
-              <NavigationMenu>
-                <NavigationMenuList>
-                  <NavigationMenuItem>
-                    <NavigationMenuTrigger className={cn(
-                      "text-foreground hover:text-primary transition-colors",
-                      (isActiveRoute("/analytics") || isActiveRoute("/control-system-analytics")) && "bg-accent text-primary dark:bg-blue-700 dark:text-white"
-                    )}>
-                      Analytics
-                    </NavigationMenuTrigger>
-                    <NavigationMenuContent>
-                      <ul className="grid w-[200px] gap-3 p-4">
-                        <li>
-                          <NavigationMenuLink asChild>
-                            <NavLink
-                              to="/analytics"
-                              className={cn(
-                                "block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
-                                isActiveRoute("/analytics") && "bg-accent"
-                              )}
-                            >
-                              <div className="text-sm font-medium leading-none">Fault Analytics</div>
-                              <div className="line-clamp-2 text-sm leading-snug text-muted-foreground">
-                                View fault statistics and trends
-                              </div>
-                            </NavLink>
-                          </NavigationMenuLink>
-                        </li>
-                        <li>
-                          <NavigationMenuLink asChild>
-                            <NavLink
-                              to="/control-system-analytics"
-                              className={cn(
-                                "block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
-                                isActiveRoute("/control-system-analytics") && "bg-accent"
-                              )}
-                            >
-                              <div className="text-sm font-medium leading-none">Control System Analytics</div>
-                              <div className="line-clamp-2 text-sm leading-snug text-muted-foreground">
-                                View control system outage statistics
-                              </div>
-                            </NavLink>
-                          </NavigationMenuLink>
-                        </li>
-                      </ul>
-                    </NavigationMenuContent>
-                  </NavigationMenuItem>
-                </NavigationMenuList>
-              </NavigationMenu>
-            </div>
-          )}
-          
-          {/* Asset Management Dropdown - Show for technicians and other roles */}
-          {showMenuItem("district_engineer") && (
-            <div className="hidden md:block">
-              <NavigationMenu>
-                <NavigationMenuList>
-                  <NavigationMenuItem>
-                    <NavigationMenuTrigger className={cn(
-                      "text-foreground hover:text-primary transition-colors",
-                      isActiveRoute("/asset-management") && "bg-accent text-primary dark:bg-blue-700 dark:text-white"
-                    )}>
-                      Asset Management
-                    </NavigationMenuTrigger>
-                    <NavigationMenuContent>
-                      <ul className="grid w-[200px] gap-3 p-4">
-                        <li>
-                          <NavigationMenuLink asChild>
-                            <NavLink
-                              to="/asset-management/load-monitoring"
-                              className={cn(
-                                "block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
-                                isActiveRoute("/asset-management/load-monitoring") && "bg-accent"
-                              )}
-                            >
-                              <div className="text-sm font-medium leading-none">Load Monitoring</div>
-                              <div className="line-clamp-2 text-sm leading-snug text-muted-foreground">
-                                Monitor load distribution across the grid
-                              </div>
-                            </NavLink>
-                          </NavigationMenuLink>
-                        </li>
-                        <li>
-                          <NavigationMenuLink asChild>
-                            <NavLink
-                              to="/asset-management/inspection-management"
-                              className={cn(
-                                "block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
-                                isActiveRoute("/asset-management/inspection-management") && "bg-accent"
-                              )}
-                            >
-                              <div className="text-sm font-medium leading-none">Substation Inspection</div>
-                              <div className="line-clamp-2 text-sm leading-snug text-muted-foreground">
-                                Manage and track substation inspections
-                              </div>
-                            </NavLink>
-                          </NavigationMenuLink>
-                        </li>
-                        <li>
-                          <NavigationMenuLink asChild>
-                            <NavLink
-                              to="/asset-management/vit-inspection"
-                              className={cn(
-                                "block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
-                                isActiveRoute("/asset-management/vit-inspection") && "bg-accent"
-                              )}
-                            >
-                              <div className="text-sm font-medium leading-none">VITs Inspection</div>
-                              <div className="line-clamp-2 text-sm leading-snug text-muted-foreground">
-                                Manage and monitor VIT assets and inspections
-                              </div>
-                            </NavLink>
-                          </NavigationMenuLink>
-                        </li>
-                        <li>
-                          <NavigationMenuLink asChild>
-                            <NavLink
-                              to="/asset-management/overhead-line"
-                              className={cn(
-                                "block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
-                                isActiveRoute("/asset-management/overhead-line") && "bg-accent"
-                              )}
-                            >
-                              <div className="text-sm font-medium leading-none">Overhead Line Inspection</div>
-                              <div className="line-clamp-2 text-sm leading-snug text-muted-foreground">
-                                Manage and monitor overhead line inspections
-                              </div>
-                            </NavLink>
-                          </NavigationMenuLink>
-                        </li>
-                      </ul>
-                    </NavigationMenuContent>
-                  </NavigationMenuItem>
-                </NavigationMenuList>
-              </NavigationMenu>
-            </div>
-          )}
-          
-          {/* District Population Menu - Show for district engineers and above */}
-          {showMenuItem("district_engineer") && (
-            <NavLink 
-              to="/district-population" 
-              className={({ isActive }) =>
-                cn(
-                  "px-3 py-2 rounded-md transition-colors",
-                  isActive 
-                    ? "bg-primary/10 text-primary font-medium" 
-                    : "text-foreground hover:text-primary hover:bg-primary/5"
-                )
-              }
-            >
-              District Population
-            </NavLink>
-          )}
-          
-          {/* Admin Menu Items - Only for system admin */}
-          {user?.role === "system_admin" && (
-            <>
-              <NavLink 
-                to="/user-management" 
-                className={({ isActive }) =>
-                  cn(
-                    "px-3 py-2 rounded-md transition-colors",
-                    isActive 
-                      ? "bg-primary/10 text-primary font-medium" 
-                      : "text-foreground hover:text-primary hover:bg-primary/5"
-                  )
-                }
-              >
-                User Management
-              </NavLink>
-              <NavLink 
-                to="/system-admin/permissions" 
-                className={({ isActive }) =>
-                  cn(
-                    "px-3 py-2 rounded-md transition-colors",
-                    isActive 
-                      ? "bg-primary/10 text-primary font-medium" 
-                      : "text-foreground hover:text-primary hover:bg-primary/5"
-                  )
-                }
-              >
-                Permission Management
-              </NavLink>
-              <NavLink 
-                to="/system-admin/security" 
-                className={({ isActive }) =>
-                  cn(
-                    "px-3 py-2 rounded-md transition-colors",
-                    isActive 
-                      ? "bg-primary/10 text-primary font-medium" 
-                      : "text-foreground hover:text-primary hover:bg-primary/5"
-                  )
-                }
-              >
-                Security Monitoring
-              </NavLink>
-              <NavLink 
-                to="/test/security" 
-                className={({ isActive }) =>
-                  cn(
-                    "px-3 py-2 rounded-md transition-colors",
-                    isActive 
-                      ? "bg-primary/10 text-primary font-medium" 
-                      : "text-foreground hover:text-primary hover:bg-primary/5"
-                  )
-                }
-              >
-                Security Testing
-              </NavLink>
-            </>
-          )}
-
-          {user?.role === "global_engineer" && (
-            <NavLink 
-              to="/user-management" 
-              className={({ isActive }) =>
-                cn(
-                  "px-3 py-2 rounded-md transition-colors",
-                  isActive 
-                    ? "bg-primary/10 text-primary font-medium" 
-                    : "text-foreground hover:text-primary hover:bg-primary/5"
-                )
-              }
-            >
-              User Management
-            </NavLink>
-          )}
-        </>
-      )}
-    </>
-  );
 
   return (
     <header className="sticky top-0 z-40 w-full bg-background/95 backdrop-blur-sm border-b border-border">
@@ -348,46 +50,11 @@ export function Navbar() {
         <div className="flex items-center gap-2">
           <Link to="/" className="flex items-center gap-2">
             <img src="/ecg-images/ecg-logo.png" alt="ECG Logo" className="h-10 w-auto" />
-            <span className="font-bold text-base md:text-lg">ECG Outage Management System</span>
+            <span className="font-bold text-base">ECG Outage Management System</span>
           </Link>
         </div>
         
-        <div className="hidden md:flex items-center gap-6">
-          <nav className="flex items-center gap-6">
-            <NavLinks />
-          </nav>
-          
-          <div className="ml-4 flex items-center gap-2">
-            {isAuthenticated ? (
-              <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm" asChild>
-                  <Link to="/profile" className="flex items-center gap-2">
-                    <User size={16} />
-                    <span>{user?.name || "User"}</span>
-                  </Link>
-                </Button>
-                <Button variant="ghost" size="icon" onClick={handleLogout}>
-                  <LogOut size={18} />
-                </Button>
-              </div>
-            ) : (
-              <>
-                <Button variant="ghost" size="sm" asChild>
-                  <Link to="/login">Log In</Link>
-                </Button>
-                <Button size="sm" asChild>
-                  <Link to="/signup">Sign Up</Link>
-                </Button>
-              </>
-            )}
-            {/* Desktop Dark Mode Toggle Button */}
-            <Button variant="ghost" onClick={toggleTheme} className="ml-2">
-              {theme === "dark" ? "Light Mode" : "Dark Mode"}
-            </Button>
-          </div>
-        </div>
-        
-        <div className="md:hidden flex items-center">
+        <div className="flex items-center">
           <Sheet>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon">
@@ -395,7 +62,7 @@ export function Navbar() {
               </Button>
             </SheetTrigger>
             <SheetContent side="left" className="flex flex-col overflow-y-auto">
-              {/* Move Log Out button to the top for mobile */}
+              {/* User Profile and Logout */}
               {isAuthenticated && (
                 <div className="flex items-center justify-between mb-4">
                   <Button variant="ghost" size="sm" asChild>
@@ -456,7 +123,7 @@ export function Navbar() {
                       Report Fault
                     </NavLink>
                     
-                    {/* Analytics Links for Mobile */}
+                    {/* Analytics Links */}
                     {showMenuItem("district_engineer") && (
                       <>
                         <NavLink 
@@ -488,7 +155,7 @@ export function Navbar() {
                       </>
                     )}
                     
-                    {/* Asset Management Links for Mobile */}
+                    {/* Asset Management Links */}
                     {showMenuItem("district_engineer") && (
                       <>
                         <NavLink 
@@ -546,7 +213,7 @@ export function Navbar() {
                       </>
                     )}
                     
-                    {/* District Population Link for Mobile */}
+                    {/* District Population Link */}
                     {showMenuItem("district_engineer") && (
                       <NavLink 
                         to="/district-population" 
@@ -563,7 +230,7 @@ export function Navbar() {
                       </NavLink>
                     )}
                     
-                    {/* Admin Menu Items for Mobile */}
+                    {/* Admin Menu Items */}
                     {user?.role === "system_admin" && (
                       <>
                         <NavLink 
@@ -605,19 +272,6 @@ export function Navbar() {
                         >
                           Security Monitoring
                         </NavLink>
-                        <NavLink 
-                          to="/test/security" 
-                          className={({ isActive }) =>
-                            cn(
-                              "px-3 py-2 rounded-md transition-colors",
-                              isActive 
-                                ? "bg-primary/10 text-primary font-medium" 
-                                : "text-foreground hover:text-primary hover:bg-primary/5"
-                            )
-                          }
-                        >
-                          Security Testing
-                        </NavLink>
                       </>
                     )}
                     
@@ -640,7 +294,7 @@ export function Navbar() {
                 )}
               </nav>
               
-              {/* Mobile Dark Mode Toggle Button */}
+              {/* Mobile Dark Mode Toggle */}
               <div className="mt-auto pt-4 border-t">
                 <Button variant="ghost" onClick={toggleTheme} className="w-full justify-start">
                   {theme === "dark" ? "Light Mode" : "Dark Mode"}

@@ -316,16 +316,15 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
 
   // Add this function to check if district population is set
   const isDistrictPopulationSet = () => {
-    if (!districtId) return true; // No district selected yet
-    
+    if (!districtId) return false;
     const selectedDistrict = districts.find(d => d.id === districtId);
-    if (!selectedDistrict) return true; // District not found
-    
-    // Check if any population value is set
-    return selectedDistrict.population && 
-           (selectedDistrict.population.rural > 0 || 
-            selectedDistrict.population.urban > 0 || 
-            selectedDistrict.population.metro > 0);
+    return selectedDistrict?.population !== undefined;
+  };
+
+  const getDistrictPopulation = () => {
+    if (!districtId) return { rural: 0, urban: 0, metro: 0 };
+    const selectedDistrict = districts.find(d => d.id === districtId);
+    return selectedDistrict?.population || { rural: 0, urban: 0, metro: 0 };
   };
 
   // Add this after the district selection dropdown
@@ -345,6 +344,13 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
     }
     
     return null;
+  };
+
+  // Add this function after getDistrictPopulation
+  const validateAffectedPopulation = (type: 'rural' | 'urban' | 'metro', value: number | null) => {
+    if (value === null) return true;
+    const districtPop = getDistrictPopulation();
+    return value <= (districtPop[type] || 0);
   };
 
   const resetForm = () => {
@@ -396,6 +402,21 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
       return;
     }
 
+    // Validate that affected customers don't exceed district population
+    const districtPop = getDistrictPopulation();
+    if (ruralAffected && ruralAffected > (districtPop.rural || 0)) {
+      toast.error(`Failed to create OP5 fault: Affected rural customers (${ruralAffected}) cannot exceed district rural population (${districtPop.rural})`);
+      return;
+    }
+    if (urbanAffected && urbanAffected > (districtPop.urban || 0)) {
+      toast.error(`Failed to create OP5 fault: Affected urban customers (${urbanAffected}) cannot exceed district urban population (${districtPop.urban})`);
+      return;
+    }
+    if (metroAffected && metroAffected > (districtPop.metro || 0)) {
+      toast.error(`Failed to create OP5 fault: Affected metro customers (${metroAffected}) cannot exceed district metro population (${districtPop.metro})`);
+      return;
+    }
+
     // Validate fuse-specific fields if Replace Fuse is selected
     if (specificFaultType === "REPLACE FUSE") {
       if (!fuseCircuit) {
@@ -433,14 +454,6 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
 
     if (!occurrenceDate) {
       toast.error("Failed to create OP5 fault: Occurrence date is required");
-      return;
-    }
-
-    // Validate that at least one population type has affected customers
-    if ((!ruralAffected || ruralAffected <= 0) && 
-        (!urbanAffected || urbanAffected <= 0) && 
-        (!metroAffected || metroAffected <= 0)) {
-      toast.error("Failed to create OP5 fault: At least one population type must have affected customers");
       return;
     }
 
@@ -1217,11 +1230,23 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
                       id="ruralControl"
                       type="number"
                       min="0"
+                      max={getDistrictPopulation().rural || 0}
                       value={ruralAffected === null ? "" : ruralAffected}
-                      onChange={(e) => setRuralAffected(e.target.value === "" ? null : parseInt(e.target.value))}
+                      onChange={(e) => {
+                        const value = e.target.value === "" ? null : parseInt(e.target.value);
+                        if (value === null || validateAffectedPopulation('rural', value)) {
+                          setRuralAffected(value);
+                        } else {
+                          toast.error(`Affected rural customers cannot exceed district rural population (${getDistrictPopulation().rural})`);
+                        }
+                      }}
                       className="bg-background/50 border-muted"
                       placeholder="Enter number of affected customers"
+                      disabled={!getDistrictPopulation().rural}
                     />
+                    {!getDistrictPopulation().rural && (
+                      <p className="text-xs text-muted-foreground">No rural population data available for this district</p>
+                    )}
                   </div>
                   
                   <div className="space-y-3">
@@ -1233,11 +1258,23 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
                       id="urbanControl"
                     type="number"
                     min="0"
+                      max={getDistrictPopulation().urban || 0}
                       value={urbanAffected === null ? "" : urbanAffected}
-                      onChange={(e) => setUrbanAffected(e.target.value === "" ? null : parseInt(e.target.value))}
+                      onChange={(e) => {
+                        const value = e.target.value === "" ? null : parseInt(e.target.value);
+                        if (value === null || validateAffectedPopulation('urban', value)) {
+                          setUrbanAffected(value);
+                        } else {
+                          toast.error(`Affected urban customers cannot exceed district urban population (${getDistrictPopulation().urban})`);
+                        }
+                      }}
                     className="bg-background/50 border-muted"
                       placeholder="Enter number of affected customers"
+                    disabled={!getDistrictPopulation().urban}
                   />
+                  {!getDistrictPopulation().urban && (
+                    <p className="text-xs text-muted-foreground">No urban population data available for this district</p>
+                  )}
                 </div>
                 
                 <div className="space-y-3">
@@ -1249,11 +1286,23 @@ export function OP5Form({ defaultRegionId = "", defaultDistrictId = "", onSubmit
                       id="metroControl"
                     type="number"
                     min="0"
+                      max={getDistrictPopulation().metro || 0}
                       value={metroAffected === null ? "" : metroAffected}
-                      onChange={(e) => setMetroAffected(e.target.value === "" ? null : parseInt(e.target.value))}
+                      onChange={(e) => {
+                        const value = e.target.value === "" ? null : parseInt(e.target.value);
+                        if (value === null || validateAffectedPopulation('metro', value)) {
+                          setMetroAffected(value);
+                        } else {
+                          toast.error(`Affected metro customers cannot exceed district metro population (${getDistrictPopulation().metro})`);
+                        }
+                      }}
                     className="bg-background/50 border-muted"
                       placeholder="Enter number of affected customers"
+                    disabled={!getDistrictPopulation().metro}
                     />
+                  {!getDistrictPopulation().metro && (
+                    <p className="text-xs text-muted-foreground">No metro population data available for this district</p>
+                  )}
                   </div>
                 </div>
                 <p className="text-sm text-muted-foreground">

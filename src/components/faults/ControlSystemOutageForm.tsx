@@ -334,6 +334,20 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
       toast.error("Please fill at least one Feeder Customers field");
       return;
     }
+
+    // Validate that affected customers don't exceed feeder customers in each category
+    if (ruralAffected !== null && ruralFeederCustomers !== null && ruralAffected > ruralFeederCustomers) {
+      toast.error("Rural affected customers cannot exceed rural feeder customers");
+      return;
+    }
+    if (urbanAffected !== null && urbanFeederCustomers !== null && urbanAffected > urbanFeederCustomers) {
+      toast.error("Urban affected customers cannot exceed urban feeder customers");
+      return;
+    }
+    if (metroAffected !== null && metroFeederCustomers !== null && metroAffected > metroFeederCustomers) {
+      toast.error("Metro affected customers cannot exceed metro feeder customers");
+      return;
+    }
     
     setIsSubmitting(true);
     
@@ -879,7 +893,14 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
                     type="number"
                     min="0"
                     value={ruralAffected === null ? "" : ruralAffected}
-                    onChange={(e) => setRuralAffected(e.target.value === "" ? null : parseInt(e.target.value))}
+                    onChange={(e) => {
+                      const value = e.target.value === "" ? null : parseInt(e.target.value);
+                      if (value !== null && ruralFeederCustomers !== null && value > ruralFeederCustomers) {
+                        toast.error("Rural affected customers cannot exceed rural feeder customers");
+                        return;
+                      }
+                      setRuralAffected(value);
+                    }}
                     className="bg-background/50 border-muted h-9 sm:h-10"
                     required
                     placeholder="Enter number of affected customers"
@@ -900,7 +921,14 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
                     type="number"
                     min="0"
                     value={urbanAffected === null ? "" : urbanAffected}
-                    onChange={(e) => setUrbanAffected(e.target.value === "" ? null : parseInt(e.target.value))}
+                    onChange={(e) => {
+                      const value = e.target.value === "" ? null : parseInt(e.target.value);
+                      if (value !== null && urbanFeederCustomers !== null && value > urbanFeederCustomers) {
+                        toast.error("Urban affected customers cannot exceed urban feeder customers");
+                        return;
+                      }
+                      setUrbanAffected(value);
+                    }}
                     className="bg-background/50 border-muted h-9 sm:h-10"
                     required
                     placeholder="Enter number of affected customers"
@@ -921,7 +949,14 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
                     type="number"
                     min="0"
                     value={metroAffected === null ? "" : metroAffected}
-                    onChange={(e) => setMetroAffected(e.target.value === "" ? null : parseInt(e.target.value))}
+                    onChange={(e) => {
+                      const value = e.target.value === "" ? null : parseInt(e.target.value);
+                      if (value !== null && metroFeederCustomers !== null && value > metroFeederCustomers) {
+                        toast.error("Metro affected customers cannot exceed metro feeder customers");
+                        return;
+                      }
+                      setMetroAffected(value);
+                    }}
                     className="bg-background/50 border-muted h-9 sm:h-10"
                     required
                     placeholder="Enter number of affected customers"
