@@ -5,7 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { db } from "@/config/firebase";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, doc, getDoc } from "firebase/firestore";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
@@ -26,11 +26,19 @@ export function BroadcastMessageForm() {
     setIsSubmitting(true);
 
     try {
+      // Get user's name from Firestore
+      const userDocRef = doc(db, 'users', user?.uid || '');
+      const userDoc = await getDoc(userDocRef);
+      const userData = userDoc.data();
+      
+      // Use the name field from the user object in auth context
+      const userName = user?.name || userData?.name || "Unknown User";
+
       await addDoc(collection(db, "broadcastMessages"), {
         message: message.trim(),
         priority,
         createdAt: serverTimestamp(),
-        createdBy: user?.email || "unknown"
+        createdBy: userName
       });
 
       setMessage("");
