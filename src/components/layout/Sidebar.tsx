@@ -152,6 +152,12 @@ export function Sidebar({ onCollapseChange }: SidebarProps) {
           show: user?.role === "system_admin" || user?.role === "global_engineer",
         },
         {
+          title: "User Logs",
+          icon: LogOut,
+          href: "/user-logs",
+          show: user?.role === "system_admin" || user?.role === "global_engineer",
+        },
+        {
           title: "Permission Management",
           icon: Shield,
           href: "/system-admin/permissions",

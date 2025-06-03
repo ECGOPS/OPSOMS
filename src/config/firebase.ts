@@ -1,5 +1,5 @@
 import { initializeApp, getApps } from 'firebase/app';
-import { getFirestore, disableNetwork, enableNetwork, initializeFirestore, CACHE_SIZE_UNLIMITED, enableIndexedDbPersistence, connectFirestoreEmulator } from 'firebase/firestore';
+import { getFirestore, enableIndexedDbPersistence } from 'firebase/firestore';
 import { getAuth, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { getAnalytics, isSupported } from 'firebase/analytics';
 import { getFunctions } from 'firebase/functions';
@@ -23,14 +23,6 @@ for (const envVar of requiredEnvVars) {
   }
 }
 
-// Security configuration
-const securityConfig = {
-  sessionTimeout: parseInt(import.meta.env.VITE_SESSION_TIMEOUT || '3600', 10),
-  maxLoginAttempts: parseInt(import.meta.env.VITE_MAX_LOGIN_ATTEMPTS || '5', 10),
-  rateLimitWindow: parseInt(import.meta.env.VITE_RATE_LIMIT_WINDOW || '900', 10),
-  rateLimitMaxRequests: parseInt(import.meta.env.VITE_RATE_LIMIT_MAX_REQUESTS || '100', 10)
-};
-
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -49,14 +41,11 @@ if (!getApps().length) {
   app = getApps()[0];
 }
 
-// Initialize Auth first
+// Initialize Auth
 const auth = getAuth(app);
 
-// Initialize Firestore with memory-only cache to prevent state issues
-const db = initializeFirestore(app, {
-  cacheSizeBytes: CACHE_SIZE_UNLIMITED,
-  experimentalForceLongPolling: true, // Use long polling to avoid WebSocket issues
-});
+// Initialize Firestore
+const db = getFirestore(app);
 
 // Enable offline persistence
 if (typeof window !== 'undefined') {
@@ -68,48 +57,6 @@ if (typeof window !== 'undefined') {
     }
   });
 }
-
-// Reset Firestore connection to ensure clean state
-const resetFirestoreConnection = async () => {
-  try {
-    if (!navigator.onLine) {
-      return;
-    }
-
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    try {
-      await disableNetwork(db);
-    } catch (disableError) {
-      console.warn('[Firebase] Error disabling network:', disableError);
-    }
-    
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    try {
-      await enableNetwork(db);
-    } catch (enableError) {
-      console.error('[Firebase] Error enabling network:', enableError);
-      if (typeof window !== 'undefined') {
-        window.location.reload();
-      }
-    }
-  } catch (error) {
-    console.error('[Firebase] Error resetting Firestore connection:', error);
-    if (typeof window !== 'undefined' && error.message?.includes('INTERNAL ASSERTION FAILED')) {
-      window.location.reload();
-    }
-  }
-}
-
-// Add error handler for Firestore
-const handleFirestoreError = (error: any) => {
-  console.error('[Firebase] Firestore error detected:', error);
-  
-  if (error.message && error.message.includes('INTERNAL ASSERTION FAILED: Unexpected state')) {
-    resetFirestoreConnection();
-  }
-};
 
 // Initialize Functions
 const functions = getFunctions(app);
@@ -124,14 +71,6 @@ if (typeof window !== 'undefined') {
   });
 
   const analytics = isSupported().then(yes => yes ? getAnalytics(app) : null);
-  
-  window.addEventListener('unhandledrejection', (event) => {
-    if (event.reason && event.reason.message && 
-        event.reason.message.includes('INTERNAL ASSERTION FAILED: Unexpected state')) {
-      resetFirestoreConnection();
-      event.preventDefault();
-    }
-  });
 }
 
 // Add auth state listener for debugging
@@ -146,4 +85,4 @@ auth.onAuthStateChanged((user) => {
   }
 });
 
-export { auth, db, functions, storage, securityConfig, resetFirestoreConnection, handleFirestoreError }; 
+export { auth, db, functions, storage }; 

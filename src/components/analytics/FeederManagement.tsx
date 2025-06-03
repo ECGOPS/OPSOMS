@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/table";
 import { ControlSystemOutage } from "@/lib/types";
 import { db } from "@/config/firebase";
-import { collection, addDoc, updateDoc, deleteDoc, doc, getDocs, query, where, writeBatch } from "firebase/firestore";
+import { collection, addDoc, updateDoc, deleteDoc, doc, getDocs, query, where, writeBatch, getDoc } from "firebase/firestore";
 import { toast } from "sonner";
 import Papa from 'papaparse';
 import {
@@ -40,6 +40,7 @@ import {
 import { getUserRegionAndDistrict } from "@/utils/user-utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { PermissionService } from "@/services/PermissionService";
+import LoggingService from "@/services/LoggingService";
 
 interface FeederInfo {
   id: string;
@@ -299,6 +300,33 @@ export function FeederManagement() {
         voltageLevel: "",
         feederType: ""
       });
+
+      // Log the action
+      if (user?.uid && user?.name && user?.role) {
+        console.log("[Add] LoggingService.logAction will be called with:", {
+          userId: user.uid,
+          userName: user.name,
+          userRole: user.role,
+          id: docRef.id,
+          feederName: newFeeder.name,
+          bspPss: newFeeder.bspPss,
+          region: newFeeder.region,
+          district: newFeeder.district
+        });
+        const loggingService = LoggingService.getInstance();
+        await loggingService.logAction(
+          user.uid,
+          user.name,
+          user.role,
+          "Create",
+          "Feeder",
+          docRef.id,
+          `Created new feeder ${newFeeder.name} in ${newFeeder.region}${newFeeder.district ? `, ${newFeeder.district}` : ''}`,
+          newFeeder.region,
+          newFeeder.district
+        );
+      }
+
       toast.success("Feeder added successfully");
     } catch (error) {
       console.error("Error adding feeder:", error);
@@ -330,6 +358,32 @@ export function FeederManagement() {
       
       await updateDoc(feederRef, updateData);
 
+      // Log the action
+      if (user?.uid && user?.name && user?.role) {
+        console.log("[Update] LoggingService.logAction will be called with:", {
+          userId: user.uid,
+          userName: user.name,
+          userRole: user.role,
+          id: selectedFeeder.id,
+          feederName: selectedFeeder.name,
+          bspPss: selectedFeeder.bspPss,
+          region: selectedFeeder.region,
+          district: selectedFeeder.district
+        });
+        const loggingService = LoggingService.getInstance();
+        await loggingService.logAction(
+          user.uid,
+          user.name,
+          user.role,
+          "Update",
+          "Feeder",
+          selectedFeeder.id,
+          `Updated feeder ${selectedFeeder.name} in ${selectedFeeder.region}${selectedFeeder.district ? `, ${selectedFeeder.district}` : ''}`,
+          selectedFeeder.region,
+          selectedFeeder.district
+        );
+      }
+
       setFeeders(feeders.map(f => f.id === selectedFeeder.id ? selectedFeeder : f));
       setIsEditDialogOpen(false);
       setSelectedFeeder(null);
@@ -344,8 +398,43 @@ export function FeederManagement() {
     if (!confirm("Are you sure you want to delete this feeder?")) return;
 
     try {
-      await deleteDoc(doc(db, "feeders", id));
+      // Get the feeder data before deleting
+      const feederRef = doc(db, "feeders", id);
+      const feederDoc = await getDoc(feederRef);
+      if (!feederDoc.exists()) {
+        throw new Error("Feeder not found");
+      }
+      const feederData = feederDoc.data();
+
+      await deleteDoc(feederRef);
       setFeeders(feeders.filter(f => f.id !== id));
+
+      // Log the action
+      if (user?.uid && user?.name && user?.role) {
+        console.log("[Delete] LoggingService.logAction will be called with:", {
+          userId: user.uid,
+          userName: user.name,
+          userRole: user.role,
+          id,
+          feederName: feederData.name,
+          bspPss: feederData.bspPss,
+          region: feederData.region,
+          district: feederData.district
+        });
+        const loggingService = LoggingService.getInstance();
+        await loggingService.logAction(
+          user.uid,
+          user.name,
+          user.role,
+          "Delete",
+          "Feeder",
+          id,
+          `Deleted feeder ${feederData.name} from ${feederData.region}${feederData.district ? `, ${feederData.district}` : ''}`,
+          feederData.region,
+          feederData.district
+        );
+      }
+
       toast.success("Feeder deleted successfully");
     } catch (error) {
       console.error("Error deleting feeder:", error);
@@ -362,6 +451,7 @@ export function FeederManagement() {
     try {
       const feedersToDelete = feeders.filter(f => f.regionId === selectedRegion);
       const batch = writeBatch(db);
+      const regionName = regions.find(r => r.id === selectedRegion)?.name || '';
 
       feedersToDelete.forEach(feeder => {
         const feederRef = doc(db, "feeders", feeder.id);
@@ -370,7 +460,32 @@ export function FeederManagement() {
 
       await batch.commit();
       setFeeders(feeders.filter(f => f.regionId !== selectedRegion));
-      toast.success(`Successfully deleted all feeders in ${regions.find(r => r.id === selectedRegion)?.name} region`);
+
+      // Log the action
+      if (user?.uid && user?.name && user?.role) {
+        console.log("[BulkDelete] LoggingService.logAction will be called with:", {
+          userId: user.uid,
+          userName: user.name,
+          userRole: user.role,
+          regionId: selectedRegion,
+          regionName,
+          deletedCount: feedersToDelete.length
+        });
+        const loggingService = LoggingService.getInstance();
+        await loggingService.logAction(
+          user.uid,
+          user.name,
+          user.role,
+          "BulkDelete",
+          "Feeder",
+          selectedRegion,
+          `Deleted ${feedersToDelete.length} feeders from region ${regionName}`,
+          regionName,
+          ""
+        );
+      }
+
+      toast.success(`Successfully deleted all feeders in ${regionName} region`);
       setIsDeleteDialogOpen(false);
     } catch (error) {
       console.error("Error deleting region feeders:", error);

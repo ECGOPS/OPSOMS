@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useData } from '../../contexts/DataContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -7,9 +8,11 @@ import { toast } from 'react-hot-toast';
 import { db } from '../../config/firebase';
 import { collection, doc, updateDoc, getDocs, query, where } from 'firebase/firestore';
 import { RegionPopulation } from '../../lib/types';
+import LoggingService from '../../services/LoggingService';
 
 export function DistrictPopulationReset() {
   const { regions } = useData();
+  const { user } = useAuth();
   const [selectedRegion, setSelectedRegion] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -29,11 +32,39 @@ export function DistrictPopulationReset() {
       // Update each district with proper population structure
       const updates = querySnapshot.docs.map(async (docSnapshot) => {
         const districtRef = doc(db, 'districts', docSnapshot.id);
+        const districtData = docSnapshot.data();
         const resetPopulation: RegionPopulation = {
           rural: 0,
           urban: 0,
           metro: 0
         };
+
+        // Log the reset action for each district
+        if (user?.uid && user?.name && user?.role) {
+          console.log("[Reset] LoggingService.logAction will be called with:", {
+            userId: user.uid,
+            userName: user.name,
+            userRole: user.role,
+            id: docSnapshot.id,
+            districtName: districtData.name,
+            region: selectedRegion,
+            oldPopulation: districtData.population,
+            newPopulation: resetPopulation
+          });
+          const loggingService = LoggingService.getInstance();
+          await loggingService.logAction(
+            user.uid,
+            user.name,
+            user.role,
+            "Reset",
+            "DistrictPopulation",
+            docSnapshot.id,
+            `Reset population for district ${districtData.name}`,
+            selectedRegion,
+            districtData.name
+          );
+        }
+
         await updateDoc(districtRef, {
           population: resetPopulation,
           lastPopulationReset: new Date().toISOString()

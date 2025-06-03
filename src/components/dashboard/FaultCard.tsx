@@ -135,7 +135,7 @@ export function FaultCard({ fault, type }: FaultCardProps) {
   const canDelete = () => {
     // Check if user has permission to manage faults
     const feature = isOP5 ? 'fault_reporting_delete' : 'fault_reporting_delete';
-    if (!user || !permissionService.canAccessFeature(user.role, feature)) {
+    if (user && !permissionService.canAccessFeature(user.role, feature)) {
       return false;
     }
     
@@ -226,7 +226,7 @@ export function FaultCard({ fault, type }: FaultCardProps) {
 
   const handleDelete = () => {
     // Check if user has permission to manage faults
-    const feature = isOP5 ? 'fault_reporting' : 'fault_reporting';
+    const feature = isOP5 ? 'fault_reporting_delete' : 'fault_reporting_delete';
     if (user && !permissionService.canAccessFeature(user.role, feature)) {
       toast.error("You don't have permission to delete faults");
       return;

@@ -34,6 +34,7 @@ import { PermissionService } from "@/services/PermissionService";
 import OfflineStorageService from "@/services/OfflineStorageService";
 import { db } from "@/config/firebase";
 import { collection, getDocs, query, where } from "firebase/firestore";
+import LoggingService from "@/services/LoggingService";
 
 interface ControlSystemOutageFormProps {
   defaultRegionId?: string;
@@ -410,7 +411,22 @@ export function ControlSystemOutageForm({ defaultRegionId = "", defaultDistrictI
 
       if (isOnline) {
         console.log('[ControlSystemOutageForm] Submitting outage online...');
-        await addControlSystemOutage(formDataToSubmit as Omit<ControlSystemOutage, "id">);
+        const outageId = await addControlSystemOutage(formDataToSubmit as Omit<ControlSystemOutage, "id">);
+        
+        // Log the action
+        const loggingService = LoggingService.getInstance();
+        await loggingService.logAction(
+          user?.id || "",
+          user?.name || "",
+          user?.role || "",
+          "Create",
+          "Outage",
+          outageId,
+          `Created new control system outage for feeder ${formDataToSubmit.feederName}`,
+          formDataToSubmit.region,
+          formDataToSubmit.district
+        );
+
         toast.success("Outage report submitted successfully");
         resetForm();
         navigate("/dashboard");

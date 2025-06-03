@@ -73,6 +73,13 @@ service cloud.firestore {
       allow read, write: if true;  // Allow public access
     }
 
+    // User Logs collection
+    match /userLogs/{logId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() && (isSystemAdmin() || isGlobalEngineer());
+    }
+
     // Regions collection
     match /regions/{regionId} {
       allow read: if isAuthenticated();

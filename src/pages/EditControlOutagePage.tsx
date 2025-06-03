@@ -30,6 +30,7 @@ import {
 } from "@/utils/calculations";
 import { toast } from "@/components/ui/sonner";
 import { Layout } from "@/components/layout/Layout";
+import LoggingService from "@/services/LoggingService";
 
 // Helper function to format date for input field safely
 const formatDateForInput = (dateString: string | null | undefined): string => {
@@ -233,11 +234,12 @@ export default function EditControlOutagePage() {
       };
 
       await updateControlSystemOutage(outage.id, formDataToSubmit);
+      
       toast.success("Control System Outage updated successfully");
       navigate("/dashboard");
     } catch (error) {
-      console.error("[handleSubmit] Error updating control outage:", error);
-      toast.error(`Failed to update outage: ${error instanceof Error ? error.message : String(error)}`);
+      console.error("Error updating outage:", error);
+      toast.error("Failed to update outage. Please try again.");
     } finally {
       setIsSubmitting(false);
     }

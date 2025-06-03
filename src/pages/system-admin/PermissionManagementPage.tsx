@@ -199,6 +199,31 @@ const featureCategories: FeatureCategory[] = [
         description: "Test security configurations"
       }
     ]
+  },
+  {
+    name: "User Activity",
+    features: [
+      {
+        id: "user_logs",
+        name: "User Activity Logs",
+        description: "View and manage user activity logs"
+      },
+      {
+        id: "user_logs_update",
+        name: "Update User Logs",
+        description: "Update user activity log entries"
+      },
+      {
+        id: "user_logs_delete",
+        name: "Delete User Logs",
+        description: "Delete individual user activity logs"
+      },
+      {
+        id: "user_logs_delete_all",
+        name: "Delete All User Logs",
+        description: "Delete all user activity logs"
+      }
+    ]
   }
 ];
 

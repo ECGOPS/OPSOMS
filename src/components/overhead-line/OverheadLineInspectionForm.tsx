@@ -22,11 +22,25 @@ import { showNotification, showServiceWorkerNotification } from '@/utils/notific
 import { serverTimestamp } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 import { OfflineInspectionService } from '@/services/OfflineInspectionService';
+import { collection, getDocs, query, where } from "firebase/firestore";
+import { db } from "@/config/firebase";
 
 interface OverheadLineInspectionFormProps {
   inspection?: OverheadLineInspection | null;
   onSubmit: (inspection: OverheadLineInspection) => void;
   onCancel: () => void;
+}
+
+interface FeederInfo {
+  id: string;
+  name: string;
+  bspPss: string;
+  region: string;
+  district: string;
+  regionId: string;
+  districtId: string;
+  voltageLevel: string;
+  feederType: string;
 }
 
 export function OverheadLineInspectionForm({ inspection, onSubmit, onCancel }: OverheadLineInspectionFormProps) {
@@ -44,6 +58,7 @@ export function OverheadLineInspectionForm({ inspection, onSubmit, onCancel }: O
   const streamRef = useRef<MediaStream | null>(null);
   const [isVideoReady, setIsVideoReady] = useState(false);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [feeders, setFeeders] = useState<FeederInfo[]>([]);
 
   const defaultInsulatorCondition = {
     brokenOrCracked: false,
@@ -130,6 +145,7 @@ export function OverheadLineInspectionForm({ inspection, onSubmit, onCancel }: O
       },
       transformerCondition: {
         leakingOil: false,
+        lowOilLevel: false,
         missingEarthLeads: false,
         linkedHVFuses: false,
         rustedTank: false,
@@ -412,6 +428,7 @@ export function OverheadLineInspectionForm({ inspection, onSubmit, onCancel }: O
         },
         transformerCondition: {
           leakingOil: formData.transformerCondition?.leakingOil || false,
+          lowOilLevel: formData.transformerCondition?.lowOilLevel || false,
           missingEarthLeads: formData.transformerCondition?.missingEarthLeads || false,
           linkedHVFuses: formData.transformerCondition?.linkedHVFuses || false,
           rustedTank: formData.transformerCondition?.rustedTank || false,
@@ -534,6 +551,74 @@ export function OverheadLineInspectionForm({ inspection, onSubmit, onCancel }: O
     loadDistricts();
   }, [formData.region, toast]);
 
+  // Fetch feeders when region changes
+  useEffect(() => {
+    const fetchFeeders = async () => {
+      if (!formData.region) return;
+      
+      try {
+        const region = regions.find(r => r.name === formData.region);
+        console.log('Selected region:', formData.region);
+        console.log('Found region:', region);
+        
+        if (!region) {
+          console.log('No region found for:', formData.region);
+          return;
+        }
+
+        const feedersRef = collection(db, "feeders");
+        const q = query(
+          feedersRef,
+          where("regionId", "==", region.id)
+        );
+        
+        console.log('Querying feeders for region:', region.id);
+        const querySnapshot = await getDocs(q);
+        const feedersData = querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as FeederInfo[];
+        
+        console.log('Fetched feeders:', feedersData);
+        setFeeders(feedersData);
+
+        // If we have feeders and no feeder is selected, select the first one
+        if (feedersData.length > 0 && !formData.feederName) {
+          const firstFeeder = feedersData[0];
+          setFormData(prev => ({
+            ...prev,
+            feederName: firstFeeder.name,
+            voltageLevel: firstFeeder.voltageLevel
+          }));
+        }
+      } catch (error) {
+        console.error("Error fetching feeders:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load feeders",
+          variant: "destructive",
+        });
+      }
+    };
+
+    fetchFeeders();
+  }, [formData.region, regions]);
+
+  // Handle feeder selection
+  const handleFeederChange = (feederName: string) => {
+    console.log('Selected feeder name:', feederName); // Debug log
+    const selectedFeeder = feeders.find(f => f.name === feederName);
+    console.log('Found feeder:', selectedFeeder); // Debug log
+    
+    if (selectedFeeder) {
+      setFormData(prev => ({
+        ...prev,
+        feederName: selectedFeeder.name,
+        voltageLevel: selectedFeeder.voltageLevel
+      }));
+    }
+  };
+
   // Memoize form sections
   const renderInspectorInfo = useMemo(() => (
     <Card>
@@ -617,13 +702,24 @@ export function OverheadLineInspectionForm({ inspection, onSubmit, onCancel }: O
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="feederName">Feeder Name *</Label>
-            <Input
-              id="feederName"
+            <Label htmlFor="feeder">Feeder *</Label>
+            <Select
               value={formData.feederName}
-              onChange={(e) => setFormData({ ...formData, feederName: e.target.value })}
-              placeholder="Enter feeder name"
-            />
+              onValueChange={handleFeederChange}
+              disabled={!formData.region}
+              required
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select feeder" />
+              </SelectTrigger>
+              <SelectContent>
+                {feeders.map((feeder) => (
+                  <SelectItem key={`${feeder.id}-${feeder.name}`} value={feeder.name}>
+                    {feeder.name} ({feeder.voltageLevel})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-2">
@@ -631,8 +727,8 @@ export function OverheadLineInspectionForm({ inspection, onSubmit, onCancel }: O
             <Input
               id="voltageLevel"
               value={formData.voltageLevel}
-              onChange={(e) => setFormData({ ...formData, voltageLevel: e.target.value })}
-              placeholder="Enter voltage level"
+              readOnly
+              placeholder="Voltage level will be set automatically"
             />
           </div>
 
@@ -700,7 +796,7 @@ export function OverheadLineInspectionForm({ inspection, onSubmit, onCancel }: O
         </div>
       </CardContent>
     </Card>
-  ), [formData, filteredRegions, filteredDistricts, handleGetLocation, isGettingLocation]);
+  ), [formData, filteredRegions, filteredDistricts, feeders, handleGetLocation, isGettingLocation]);
 
   // Add pole information section
   const renderPoleInformation = useMemo(() => (
@@ -1153,19 +1249,6 @@ export function OverheadLineInspectionForm({ inspection, onSubmit, onCancel }: O
             />
             <Label htmlFor="conductorUndersized">Undersized</Label>
           </div>
-          <div className="flex items-center gap-2">
-            <Checkbox
-              id="conductorLinked"
-              checked={formData.conductorCondition.linked}
-              onCheckedChange={(checked) => 
-                setFormData({
-                  ...formData,
-                  conductorCondition: { ...formData.conductorCondition, linked: checked as boolean },
-                })
-              }
-            />
-            <Label htmlFor="conductorLinked">Linked</Label>
-          </div>
           <div className="space-y-2">
             <Label htmlFor="conductorNotes">Notes</Label>
             <Textarea
@@ -1210,19 +1293,6 @@ export function OverheadLineInspectionForm({ inspection, onSubmit, onCancel }: O
               }
             />
             <Label htmlFor="arresterFlashOver">Flash over</Label>
-          </div>
-          <div className="flex items-center gap-2">
-            <Checkbox
-              id="arresterMissing"
-              checked={formData.lightningArresterCondition.missing}
-              onCheckedChange={(checked) => 
-                setFormData({
-                  ...formData,
-                  lightningArresterCondition: { ...formData.lightningArresterCondition, missing: checked as boolean },
-                })
-              }
-            />
-            <Label htmlFor="arresterMissing">Missing</Label>
           </div>
           <div className="flex items-center gap-2">
             <Checkbox
@@ -1404,6 +1474,19 @@ export function OverheadLineInspectionForm({ inspection, onSubmit, onCancel }: O
               }
             />
             <Label htmlFor="transformerLeakingOil">Leaking Oil</Label>
+          </div>
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="transformerLowOilLevel"
+              checked={formData.transformerCondition.lowOilLevel}
+              onCheckedChange={(checked) => 
+                setFormData({
+                  ...formData,
+                  transformerCondition: { ...formData.transformerCondition, lowOilLevel: checked as boolean },
+                })
+              }
+            />
+            <Label htmlFor="transformerLowOilLevel">Low Oil Level</Label>
           </div>
           <div className="flex items-center gap-2">
             <Checkbox

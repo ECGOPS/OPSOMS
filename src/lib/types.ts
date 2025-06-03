@@ -479,14 +479,12 @@ export interface OverheadLineInspection {
     burntLugs: boolean;
     saggedLine: boolean;
     undersized: boolean;
-    linked: boolean;
     notes: string;
   };
   
   lightningArresterCondition: {
     brokenOrCracked: boolean;
     flashOver: boolean;
-    missing: boolean;
     noEarthing: boolean;
     bypassed: boolean;
     noArrester: boolean;
@@ -506,6 +504,7 @@ export interface OverheadLineInspection {
   
   transformerCondition: {
     leakingOil: boolean;
+    lowOilLevel: boolean;
     missingEarthLeads: boolean;
     linkedHVFuses: boolean;
     rustedTank: boolean;

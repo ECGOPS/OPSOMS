@@ -37,18 +37,23 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredRole,
   }
 
   // Check feature-based access
-  if (requiredFeature && !permissionService.canAccessFeature(user.role, requiredFeature)) {
-    return <Navigate to="/unauthorized" replace />;
+  if (requiredFeature && user?.role) {
+    const hasAccess = permissionService.canAccessFeature(user.role, requiredFeature);
+    if (!hasAccess) {
+      console.log(`Access denied: User ${user.role} does not have access to feature ${requiredFeature}`);
+      return <Navigate to="/unauthorized" replace />;
+    }
   }
 
   // Check role-based access
-  if (requiredRole) {
+  if (requiredRole && user?.role) {
     const roles = Array.isArray(requiredRole) ? requiredRole : [requiredRole];
     if (!roles.some(role => permissionService.hasRequiredRole(user.role, role))) {
       // Allow technicians to access asset management pages
       if (location.pathname.startsWith('/asset-management') && user.role === 'technician') {
         return <>{children}</>;
       }
+      console.log(`Access denied: User ${user.role} does not have required role`);
       return <Navigate to="/unauthorized" replace />;
     }
   }
@@ -56,6 +61,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredRole,
   // Check region-based access
   if (allowedRegion && user?.role !== 'global_engineer' && user?.role !== 'system_admin') {
     if (user?.region !== allowedRegion) {
+      console.log(`Access denied: User's region ${user?.region} does not match required region ${allowedRegion}`);
       return <Navigate to="/unauthorized" replace />;
     }
   }
@@ -63,6 +69,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredRole,
   // Check district-based access
   if (allowedDistrict && user?.role === 'district_engineer') {
     if (user?.district !== allowedDistrict) {
+      console.log(`Access denied: User's district ${user?.district} does not match required district ${allowedDistrict}`);
       return <Navigate to="/unauthorized" replace />;
     }
   }

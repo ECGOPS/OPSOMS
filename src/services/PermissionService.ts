@@ -1,7 +1,7 @@
 import { UserRole } from "@/lib/types";
 import { LoadMonitoringData } from "@/lib/asset-types";
-import { getFirestore, doc, onSnapshot, updateDoc, setDoc, deleteDoc, getDoc, enableNetwork, disableNetwork } from "firebase/firestore";
-import { db, resetFirestoreConnection } from "@/config/firebase";
+import { getFirestore, doc, onSnapshot, updateDoc, setDoc, deleteDoc, getDoc, enableNetwork, disableNetwork, collection, addDoc } from "firebase/firestore";
+import { db } from "@/config/firebase";
 
 const STORAGE_KEY = "feature_permissions";
 const MAX_RETRIES = 3;
@@ -31,6 +31,12 @@ export class PermissionService {
     'asset_management': ['technician', 'district_engineer', 'district_manager', 'regional_engineer', 'regional_general_manager', 'global_engineer', 'system_admin'],
     'asset_management_update': ['district_engineer', 'district_manager', 'regional_engineer', 'regional_general_manager', 'global_engineer', 'system_admin'],
     'asset_management_delete': ['regional_engineer', 'regional_general_manager', 'global_engineer', 'system_admin'],
+    
+    // User Logs Features
+    'user_logs': ['system_admin'],
+    'user_logs_update': ['system_admin'],
+    'user_logs_delete': ['system_admin'],
+    'user_logs_delete_all': ['system_admin'],
     
     // SMS Notification Features
     'sms_notification': ['technician', 'district_engineer', 'district_manager', 'regional_engineer', 'regional_general_manager', 'global_engineer', 'system_admin'],
@@ -114,6 +120,62 @@ export class PermissionService {
 
   private permissionCache: Map<string, boolean> = new Map();
 
+  private readonly rolePermissions: Record<string, string[]> = {
+    system_admin: [
+      'user_management',
+      'fault_reporting',
+      'fault_approval',
+      'broadcast_messages',
+      'view_analytics',
+      'view_logs',
+      'asset_management'
+    ],
+    global_engineer: [
+      'fault_reporting',
+      'fault_approval',
+      'broadcast_messages',
+      'view_analytics',
+      'view_logs',
+      'asset_management'
+    ],
+    regional_general_manager: [
+      'fault_reporting',
+      'fault_approval',
+      'broadcast_messages',
+      'view_analytics',
+      'view_logs',
+      'asset_management'
+    ],
+    regional_engineer: [
+      'fault_reporting',
+      'fault_approval',
+      'broadcast_messages',
+      'view_analytics',
+      'view_logs',
+      'asset_management'
+    ],
+    district_manager: [
+      'fault_reporting',
+      'fault_approval',
+      'broadcast_messages',
+      'view_analytics',
+      'view_logs',
+      'asset_management'
+    ],
+    district_engineer: [
+      'fault_reporting',
+      'view_analytics',
+      'view_logs',
+      'asset_management'
+    ],
+    technician: [
+      'fault_reporting',
+      'view_analytics',
+      'view_logs',
+      'asset_management'
+    ]
+  };
+
   private constructor() {
     this.loadPermissions();
   }
@@ -132,7 +194,7 @@ export class PermissionService {
       // If we're offline, try to reset the connection
       if (!navigator.onLine) {
         console.log('Device is offline, attempting to reset Firestore connection...');
-        await resetFirestoreConnection();
+        await disableNetwork(this.db);
       }
 
       const docSnap = await getDoc(this.permissionsRef);
@@ -179,7 +241,7 @@ export class PermissionService {
         await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
         
         // Try to reset the connection and load again
-        await resetFirestoreConnection();
+        await disableNetwork(this.db);
         return this.loadPermissions();
       }
       
@@ -556,5 +618,25 @@ export class PermissionService {
       return this.defaultFeaturePermissions[`${feature}_delete`] || [];
     }
     return this.featurePermissions[`${feature}_delete`] || [];
+  }
+
+  async addPermission(permission: Partial<Permission>): Promise<string> {
+    try {
+      const docRef = await addDoc(collection(db, "permissions"), permission);
+      return docRef.id;
+    } catch (error) {
+      console.error("Error adding permission:", error);
+      throw error;
+    }
+  }
+
+  async updatePermission(id: string, permission: Partial<Permission>): Promise<void> {
+    try {
+      const docRef = doc(db, "permissions", id);
+      await updateDoc(docRef, permission);
+    } catch (error) {
+      console.error("Error updating permission:", error);
+      throw error;
+    }
   }
 } 

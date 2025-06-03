@@ -46,7 +46,6 @@ import {
   getCountFromServer
 } from "firebase/firestore";
 import { getUserRegionAndDistrict } from "@/utils/user-utils";
-import { resetFirestoreConnection } from "@/config/firebase";
 import { 
   StoreName,
   safeAddItem, 
@@ -72,6 +71,8 @@ import { syncPendingChanges } from '@/utils/sync';
 import { getAllItems } from "@/lib/indexedDB";
 import { SMSService } from "@/services/SMSService";
 import { VITSyncService } from "@/services/VITSyncService";
+import LoggingService from "@/services/LoggingService";
+import { COLLECTIONS } from '@/lib/constants';
 
 const DB_NAME = 'ecg-oms-db';
 const DB_VERSION = 4;  // Update from 3 to 4
@@ -1183,10 +1184,49 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const deleteOP5Fault = async (id: string) => {
     try {
-      await deleteDoc(doc(db, "op5Faults", id));
-      toast.success("Fault deleted successfully");
+      if (!user) {
+        console.error("[Delete] No authenticated user found");
+        toast.error("You must be logged in to delete faults");
+        return;
+      }
+
+      // Get the fault data before deleting
+      const faultRef = doc(db, "op5Faults", id);
+      const faultDoc = await getDoc(faultRef);
+      if (!faultDoc.exists()) {
+        throw new Error("Fault not found");
+      }
+      const faultData = faultDoc.data();
+
+      // Delete the fault
+      await deleteDoc(faultRef);
+
+      // Log the action
+      console.log("[Delete] LoggingService.logAction will be called with:", {
+        userId: user.uid,
+        userName: user.name,
+        userRole: user.role,
+        id,
+        feeder: faultData.feeder,
+        region: faultData.region,
+        district: faultData.district
+      });
+      const loggingService = LoggingService.getInstance();
+      await loggingService.logAction(
+        user.uid,
+        user.name,
+        user.role,
+        "Delete",
+        "OP5Fault",
+        id,
+        `Deleted OP5 fault for feeder ${faultData.feeder || 'Unknown'}`,
+        faultData.region,
+        faultData.district
+      );
+
+      toast.success("OP5 Fault deleted successfully");
     } catch (error) {
-      console.error("Error deleting OP5 fault:", error);
+      console.error("[Delete] Error during delete or logging:", error);
       toast.error("Failed to delete fault");
     }
   };
@@ -1211,11 +1251,36 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const updateControlSystemOutage = async (id: string, data: Partial<ControlSystemOutage>) => {
     try {
+      // Get the outage data before updating
       const outageRef = doc(db, "controlOutages", id);
+      const outageDoc = await getDoc(outageRef);
+      if (!outageDoc.exists()) {
+        throw new Error("Outage not found");
+      }
+      const outageData = outageDoc.data();
+
+      // Update the outage
       await updateDoc(outageRef, {
         ...data,
         updatedAt: serverTimestamp()
       });
+
+      // Log the action
+      if (user?.id && user?.name && user?.role) {
+        const loggingService = LoggingService.getInstance();
+        await loggingService.logAction(
+          user.id,
+          user.name,
+          user.role,
+          "Update",
+          "Outage",
+          id,
+          `Updated control system outage for feeder ${outageData.feederName || 'Unknown'}`,
+          outageData.region,
+          outageData.district
+        );
+      }
+
       toast.success("Outage updated successfully");
     } catch (error) {
       console.error("Error updating control system outage:", error);
@@ -1225,10 +1290,49 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const deleteControlSystemOutage = async (id: string) => {
     try {
-      await deleteDoc(doc(db, "controlOutages", id));
+      if (!user) {
+        console.error("[Delete] No authenticated user found");
+        toast.error("You must be logged in to delete outages");
+        return;
+      }
+
+      // Get the outage data before deleting
+      const outageRef = doc(db, "controlOutages", id);
+      const outageDoc = await getDoc(outageRef);
+      if (!outageDoc.exists()) {
+        throw new Error("Outage not found");
+      }
+      const outageData = outageDoc.data();
+
+      // Delete the outage
+      await deleteDoc(outageRef);
+
+      // Log the action
+      console.log("[Delete] LoggingService.logAction will be called with:", {
+        userId: user.uid,
+        userName: user.name,
+        userRole: user.role,
+        id,
+        feeder: outageData.feeder,
+        region: outageData.region,
+        district: outageData.district
+      });
+      const loggingService = LoggingService.getInstance();
+      await loggingService.logAction(
+        user.uid,
+        user.name,
+        user.role,
+        "Delete",
+        "ControlSystemOutage",
+        id,
+        `Deleted control system outage for feeder ${outageData.feeder || 'Unknown'}`,
+        outageData.region,
+        outageData.district
+      );
+
       toast.success("Outage deleted successfully");
     } catch (error) {
-      console.error("Error deleting control system outage:", error);
+      console.error("[Delete] Error during delete or logging:", error);
       toast.error("Failed to delete outage");
     }
   };
@@ -1310,9 +1414,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const deleteFault = useCallback(async (id: string, isOP5: boolean) => {
     try {
-      const collectionName = isOP5 ? "op5Faults" : "controlOutages";
-      await deleteDoc(doc(db, collectionName, id));
-      toast.success(`${isOP5 ? "OP5 Fault" : "Control System Outage"} deleted successfully`);
+      if (isOP5) {
+        await deleteOP5Fault(id);
+      } else {
+        await deleteControlSystemOutage(id);
+      }
     } catch (error) {
       console.error("Error deleting fault:", error);
       toast.error("Failed to delete fault");
@@ -1370,7 +1476,42 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const deleteLoadMonitoringRecord = async (id: string) => {
     try {
-      await deleteDoc(doc(db, "loadMonitoring", id));
+      // Get the record data before deleting
+      const docRef = doc(db, "loadMonitoring", id);
+      const docSnap = await getDoc(docRef);
+      if (!docSnap.exists()) {
+        throw new Error("Load monitoring record not found");
+      }
+      const recordData = docSnap.data();
+
+      await deleteDoc(docRef);
+
+      // Log the action
+      if (user?.uid && user?.name && user?.role) {
+        console.log("[Delete] LoggingService.logAction will be called with:", {
+          userId: user.uid,
+          userName: user.name,
+          userRole: user.role,
+          id,
+          substationName: recordData.substationName,
+          substationNumber: recordData.substationNumber,
+          region: recordData.region,
+          district: recordData.district
+        });
+        const loggingService = LoggingService.getInstance();
+        await loggingService.logAction(
+          user.uid,
+          user.name,
+          user.role,
+          "Delete",
+          "LoadMonitoring",
+          id,
+          `Deleted load monitoring record for substation ${recordData.substationName} (${recordData.substationNumber}) in ${recordData.region}${recordData.district ? `, ${recordData.district}` : ''}`,
+          recordData.region,
+          recordData.district
+        );
+      }
+
       toast.success("Record deleted successfully");
     } catch (error) {
       console.error("Error deleting load monitoring record:", error);
@@ -1478,11 +1619,46 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   // Add this function to actually update a district in Firestore
   const updateDistrict = async (id: string, updates: Partial<District>) => {
     try {
+      // Get the district data before updating
       const districtRef = doc(db, "districts", id);
+      const districtDoc = await getDoc(districtRef);
+      if (!districtDoc.exists()) {
+        throw new Error("District not found");
+      }
+      const districtData = districtDoc.data();
+
+      // Update the district
       await updateDoc(districtRef, {
         ...updates,
         updatedAt: serverTimestamp(),
       });
+
+      // Log the action if it's a population update
+      if (updates.population && user?.uid && user?.name && user?.role) {
+        console.log("[Update] LoggingService.logAction will be called with:", {
+          userId: user.uid,
+          userName: user.name,
+          userRole: user.role,
+          id,
+          districtName: districtData.name,
+          region: districtData.regionId,
+          oldPopulation: districtData.population,
+          newPopulation: updates.population
+        });
+        const loggingService = LoggingService.getInstance();
+        await loggingService.logAction(
+          user.uid,
+          user.name,
+          user.role,
+          "Update",
+          "DistrictPopulation",
+          id,
+          `Updated population for district ${districtData.name}`,
+          districtData.regionId,
+          districtData.name
+        );
+      }
+
       toast.success("District updated successfully");
       // Optionally update local state immediately for responsiveness
       setDistricts((prev) =>
@@ -1642,6 +1818,32 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             const docRef = doc(db, "substationInspections", docId);
             await deleteDoc(docRef);
             console.log('Deleted inspection from Firebase:', docId);
+
+            // Log the action
+            if (user?.uid && user?.name && user?.role) {
+              console.log("[Delete] LoggingService.logAction will be called with:", {
+                userId: user.uid,
+                userName: user.name,
+                userRole: user.role,
+                id,
+                substationName: existingInspection.substationName,
+                substationNumber: existingInspection.substationNumber,
+                region: existingInspection.region,
+                district: existingInspection.district
+              });
+              const loggingService = LoggingService.getInstance();
+              await loggingService.logAction(
+                user.uid,
+                user.name,
+                user.role,
+                "Delete",
+                "SubstationInspection",
+                id,
+                `Deleted substation inspection for ${existingInspection.substationName}${existingInspection.substationNumber ? ` (${existingInspection.substationNumber})` : ''} in ${existingInspection.region}${existingInspection.district ? `, ${existingInspection.district}` : ''}`,
+                existingInspection.region,
+                existingInspection.district
+              );
+            }
           } else {
             console.log('Document not found in Firestore with local ID:', id);
           }
@@ -1879,8 +2081,43 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     },
     deleteOverheadLineInspection: async (id) => {
       try {
+        // Get the inspection data before deleting
         const docRef = doc(db, "overheadLineInspections", id);
+        const docSnap = await getDoc(docRef);
+        if (!docSnap.exists()) {
+          throw new Error("Overhead line inspection not found");
+        }
+        const inspectionData = docSnap.data();
+
+        // Delete the inspection
         await deleteDoc(docRef);
+
+        // Log the action
+        if (user?.uid && user?.name && user?.role) {
+          console.log("[Delete] LoggingService.logAction will be called with:", {
+            userId: user.uid,
+            userName: user.name,
+            userRole: user.role,
+            id,
+            lineName: inspectionData.lineName,
+            region: inspectionData.region,
+            district: inspectionData.district
+          });
+          const loggingService = LoggingService.getInstance();
+          await loggingService.logAction(
+            user.uid,
+            user.name,
+            user.role,
+            "Delete",
+            "OverheadLineInspection",
+            id,
+            `Deleted overhead line inspection for ${inspectionData.lineName} in ${inspectionData.region}${inspectionData.district ? `, ${inspectionData.district}` : ''}`,
+            inspectionData.region,
+            inspectionData.district
+          );
+        }
+
+        toast.success("Inspection deleted successfully");
       } catch (error) {
         console.error("Error deleting overhead line inspection:", error);
         toast.error("Failed to delete inspection");

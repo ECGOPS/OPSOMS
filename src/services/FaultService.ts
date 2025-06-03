@@ -1,14 +1,18 @@
 import { OP5Fault, ControlSystemOutage } from '@/lib/types';
 import { db } from '@/config/firebase';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, getDoc, doc } from 'firebase/firestore';
 import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
 import { COLLECTIONS } from '@/lib/constants';
+import LoggingService from './LoggingService';
 
 export class FaultService {
   private static instance: FaultService;
   private auth = getAuth();
+  private loggingService: LoggingService;
 
-  private constructor() {}
+  private constructor() {
+    this.loggingService = LoggingService.getInstance();
+  }
 
   public static getInstance(): FaultService {
     if (!FaultService.instance) {
@@ -29,15 +33,17 @@ export class FaultService {
       throw new Error('User not authenticated');
     }
 
-    // Force token refresh to ensure it's valid
-    try {
-      await user.getIdToken(true);
-    } catch (error) {
-      console.error('Error refreshing token:', error);
-      throw new Error('Authentication token expired');
+    // Get user data from Firestore
+    const userDoc = await getDoc(doc(db, 'users', user.uid));
+    if (!userDoc.exists()) {
+      throw new Error('User data not found');
     }
 
-    return user;
+    const userData = userDoc.data();
+    return {
+      ...user,
+      role: userData.role || 'Unknown Role'
+    };
   }
 
   private async ensureAuthenticated() {
@@ -74,6 +80,20 @@ export class FaultService {
       });
       
       const docRef = await addDoc(collection(db, COLLECTIONS.OP5_FAULTS), cleanFault);
+      
+      // Log the action
+      await this.loggingService.logAction(
+        user.uid,
+        user.displayName || 'Unknown User',
+        user.role || 'Unknown Role',
+        "Create",
+        "OP5Fault",
+        docRef.id,
+        `Created new OP5 fault for feeder ${fault.feeder || 'Unknown'}`,
+        fault.region,
+        fault.district
+      );
+      
       return docRef.id;
     } catch (error) {
       console.error('Error creating OP5 fault:', error);
@@ -102,6 +122,20 @@ export class FaultService {
       });
       
       const docRef = await addDoc(collection(db, COLLECTIONS.CONTROL_OUTAGES), cleanOutage);
+      
+      // Log the action
+      await this.loggingService.logAction(
+        user.uid,
+        user.displayName || 'Unknown User',
+        user.role || 'Unknown Role',
+        "Create",
+        "Outage",
+        docRef.id,
+        `Created new control system outage for feeder ${outage.feederName || 'Unknown'}`,
+        outage.region,
+        outage.district
+      );
+      
       return docRef.id;
     } catch (error) {
       console.error('Error creating control system outage:', error);

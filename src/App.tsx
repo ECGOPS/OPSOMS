@@ -44,6 +44,7 @@ import SecurityTestPage from './pages/system-admin/SecurityTestPage';
 import DistrictPopulationPage from './pages/DistrictPopulationPage';
 import UserProfilePage from "./pages/UserProfilePage";
 import EditVITAssetPage from "./pages/asset-management/EditVITAssetPage";
+import UserLogsPage from "@/pages/UserLogsPage";
 
 const queryClient = new QueryClient();
 
@@ -238,6 +239,12 @@ function App() {
                 } />
 
                 <Route path="/profile" element={<UserProfilePage />} />
+
+                <Route path="/user-logs" element={
+                  <ProtectedRoute requiredFeature="user_logs">
+                    <UserLogsPage />
+                  </ProtectedRoute>
+                } />
 
                 {/* Catch all */}
                 <Route path="*" element={<NotFound />} />

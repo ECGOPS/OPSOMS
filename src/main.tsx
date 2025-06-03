@@ -30,8 +30,8 @@ if (process.env.NODE_ENV === 'production') {
   console.info = () => {};
   console.debug = () => {};
 
-  // Disable logging service
-  LoggingService.getInstance().disableLogging();
+  // Keep user activity logging enabled in production
+  // LoggingService.getInstance().disableLogging(); // Removed this line
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
