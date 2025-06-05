@@ -87,6 +87,12 @@ export function LocationMap({ coordinates, assetName, onLocationChange, isEditab
       content: pinElement
     });
 
+    // Add click listener to open navigation
+    markerView.addListener('click', () => {
+      const url = `https://www.google.com/maps/dir/?api=1&destination=${position.lat},${position.lng}`;
+      window.open(url, '_blank');
+    });
+
     // Add drag end listener if editable
     if (isEditable) {
       markerView.addListener('dragend', handleMarkerDragEnd);
@@ -133,10 +139,15 @@ export function LocationMap({ coordinates, assetName, onLocationChange, isEditab
 
   return (
     <div className="relative h-[300px] w-full rounded-md overflow-hidden border border-border">
-      <div className="absolute top-2 left-2 right-2 z-10 bg-background/60 backdrop-blur-sm p-2 text-xs text-foreground rounded-md">
-        <span className="font-medium">Lat:</span> {position.lat.toFixed(6)}
-        <span className="mx-2">|</span>
-        <span className="font-medium">Long:</span> {position.lng.toFixed(6)}
+      <div 
+        className="absolute top-2 left-2 z-10 bg-red-500/80 backdrop-blur-sm px-2 py-1 text-xs text-white rounded-md cursor-pointer hover:bg-red-600/80 transition-colors"
+        onClick={() => {
+          const url = `https://www.google.com/maps/dir/?api=1&destination=${position.lat},${position.lng}`;
+          window.open(url, '_blank');
+        }}
+        title="Click to open in Google Maps"
+      >
+        {position.lat.toFixed(6)}, {position.lng.toFixed(6)}
       </div>
       <GoogleMap
         mapContainerStyle={mapContainerStyle}

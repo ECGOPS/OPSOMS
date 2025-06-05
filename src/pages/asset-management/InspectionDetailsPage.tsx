@@ -2,10 +2,11 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Layout } from "@/components/layout/Layout";
 import { Card, CardContent } from "@/components/ui/card";
-import { SubstationInspection } from "@/lib/types";
+import { SubstationInspection } from "@/lib/asset-types";
 import { useData } from "@/contexts/DataContext";
 import { toast } from "@/components/ui/sonner";
 import { InspectionDetailsView } from "@/components/inspection/InspectionDetailsView";
+import SecondarySubstationInspectionDetailsPage from "./SecondarySubstationInspectionDetailsPage";
 
 export default function InspectionDetailsPage() {
   const { id } = useParams<{ id: string }>();
@@ -42,13 +43,17 @@ export default function InspectionDetailsPage() {
   return (
     <Layout>
       <div className="container mx-auto py-8">
-        <InspectionDetailsView
-          inspection={inspection}
-          showHeader={true}
-          showBackButton={true}
-          onBack={() => navigate("/asset-management/inspection-management")}
-          onEdit={() => navigate(`/asset-management/edit-inspection/${id}`)}
-        />
+        {String(inspection.type) === "secondary" ? (
+          <SecondarySubstationInspectionDetailsPage inspection={inspection as any} />
+        ) : (
+          <InspectionDetailsView
+            inspection={inspection}
+            showHeader={true}
+            showBackButton={true}
+            onBack={() => navigate("/asset-management/inspection-management")}
+            onEdit={() => navigate(`/asset-management/edit-inspection/${id}`)}
+          />
+        )}
       </div>
     </Layout>
   );

@@ -455,29 +455,16 @@ export function FilterBar({
               {dateFilterType === "day" && (
                 <div>
                   <Label htmlFor="day-picker" className="text-xs text-muted-foreground">Select Day</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        id="day-picker"
-                        variant={"outline"}
-                        className={cn(
-                          "w-full justify-start text-left font-normal mt-1",
-                          !selectedDay && "text-muted-foreground"
-                        )}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {selectedDay ? format(selectedDay, "PPP") : <span>Pick a day</span>}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0">
-                      <Calendar
-                        mode="single"
-                        selected={selectedDay}
-                        onSelect={handleDaySelect}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
+                  <input
+                    id="day-picker"
+                    type="date"
+                    className="border rounded px-2 py-1 w-full mt-1 dark:bg-gray-800 dark:text-white dark:border-gray-700"
+                    value={selectedDay ? selectedDay.toISOString().split('T')[0] : ''}
+                    onChange={e => {
+                      const date = e.target.value ? new Date(e.target.value) : undefined;
+                      setSelectedDay(date);
+                    }}
+                  />
                 </div>
               )}
               

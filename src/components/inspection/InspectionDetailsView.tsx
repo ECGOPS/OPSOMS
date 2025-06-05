@@ -5,6 +5,8 @@ import { CheckCircle2, AlertCircle, ChevronLeft, Pencil, ChevronRight } from "lu
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 
 interface InspectionDetailsViewProps {
   inspection: SubstationInspection | OverheadLineInspection;
@@ -23,6 +25,7 @@ export function InspectionDetailsView({
 }: InspectionDetailsViewProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 1;
+  const [showFullImage, setShowFullImage] = useState<string | null>(null);
 
   const isSubstationInspection = (inspection: SubstationInspection | OverheadLineInspection): inspection is SubstationInspection => {
     return 'substationNo' in inspection;
@@ -128,6 +131,22 @@ export function InspectionDetailsView({
                   <div className="bg-muted/50 p-4 rounded-lg border-l-4 border-blue-500">
                     <p className="text-sm font-medium text-muted-foreground mb-1">Created By</p>
                     <p className="text-lg font-semibold">{inspection.createdBy || "N/A"}</p>
+                  </div>
+                  <div className="bg-muted/50 p-4 rounded-lg border-l-4 border-blue-500">
+                    <p className="text-sm font-medium text-muted-foreground mb-1">GPS Location</p>
+                    {inspection.gpsLocation ? (
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(inspection.gpsLocation)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 underline hover:text-blue-800"
+                        title="Open in Google Maps"
+                      >
+                        {inspection.gpsLocation}
+                      </a>
+                    ) : (
+                      <p className="text-lg font-semibold text-muted-foreground">N/A</p>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -326,8 +345,28 @@ export function InspectionDetailsView({
                 <CardTitle>Additional Notes</CardTitle>
               </CardHeader>
               <CardContent className="pt-6">
-                <div className="bg-muted/50 p-4 rounded-lg">
-                  <p className="text-lg font-semibold">{inspection.remarks}</p>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Additional Notes</Label>
+                    <p className="text-muted-foreground whitespace-pre-line">{inspection.remarks || "-"}</p>
+                  </div>
+                  {inspection.images && inspection.images.length > 0 && (
+                    <div className="space-y-2">
+                      <Label>Photos</Label>
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                        {inspection.images.map((image, index) => (
+                          <div key={index} className="relative group">
+                            <img
+                              src={image}
+                              alt={`Inspection image ${index + 1}`}
+                              className="w-full h-32 object-cover rounded-lg cursor-pointer"
+                              onClick={() => setShowFullImage(image)}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -854,6 +893,19 @@ export function InspectionDetailsView({
           <ChevronRight className="ml-2 h-4 w-4" />
         </Button>
       </div>
+
+      {/* Full Image Dialog */}
+      <Dialog open={!!showFullImage} onOpenChange={(open) => !open && setShowFullImage(null)}>
+        <DialogContent className="max-w-4xl">
+          {showFullImage && (
+            <img
+              src={showFullImage}
+              alt="Full size inspection image"
+              className="w-full h-auto rounded-lg"
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 } 

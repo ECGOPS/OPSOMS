@@ -258,13 +258,13 @@ export default function LoadMonitoringDetailsPage() {
                  <DetailItem label="Location" value={record.location} />
                  <DetailItem label="Rating (KVA)" value={record.rating} />
                  <DetailItem label="Peak Load Status" value={record.peakLoadStatus} />
-                 <div className="flex flex-col space-y-1.5">
+                 <div className="flex flex-col space-y-1">
                    <Label className="text-sm font-medium text-muted-foreground">Load Status</Label>
-                   <Badge className={
+                   <Badge className={`w-fit ${
                      record.percentageLoad >= 70 ? "bg-red-500" :
                      record.percentageLoad >= 45 ? "bg-yellow-500" :
                      "bg-green-500"
-                   }>
+                   }`}>
                      {record.percentageLoad >= 70 ? "OVERLOAD" :
                       record.percentageLoad >= 45 ? "AVERAGE" :
                       "OKAY"}

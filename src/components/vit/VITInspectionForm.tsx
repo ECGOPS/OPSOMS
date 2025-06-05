@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useData } from "@/contexts/DataContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,11 +22,13 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuth } from "@/contexts/AuthContext";
-import { AlertTriangle, CheckCircle2, ClipboardList, Loader2, WifiOff } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ClipboardList, Loader2, WifiOff, Camera, Upload, X } from "lucide-react";
 import { VITInspectionChecklist, VITAsset, YesNoOption, GoodBadOption } from "@/lib/types";
 import { toast } from "react-hot-toast";
 import { serverTimestamp } from "firebase/firestore";
 import { OfflineInspectionService } from "@/services/OfflineInspectionService";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import Webcam from "react-webcam";
 
 interface VITInspectionFormProps {
   inspectionData?: VITInspectionChecklist;
@@ -47,6 +49,14 @@ export function VITInspectionForm({
   const offlineStorage = OfflineInspectionService.getInstance();
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const [offlineInspections, setOfflineInspections] = useState<VITInspectionChecklist[]>([]);
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [capturedImages, setCapturedImages] = useState<string[]>(
+    inspectionData?.photoUrls || []
+  );
+  const [showFullImage, setShowFullImage] = useState<string | null>(null);
+  const webcamRef = useRef<Webcam>(null);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
 
   // Form fields
   const [selectedAssetId, setSelectedAssetId] = useState<string>(assetId || inspectionData?.vitAssetId || "");
@@ -247,6 +257,65 @@ export function VITInspectionForm({
     return count;
   };
 
+  // Check if device is mobile
+  useEffect(() => {
+    setIsMobile(/iPhone|iPad|iPod|Android/i.test(navigator.userAgent));
+  }, []);
+
+  const videoConstraints = {
+    width: 1280,
+    height: 720,
+    facingMode: isMobile ? "environment" : "user"
+  };
+
+  const handleCameraError = useCallback((error: any) => {
+    console.error('Camera Error:', error);
+    setCameraError(error.message || 'Failed to access camera');
+    toast.error(
+      'Camera access failed. Please check permissions and try again.',
+      {
+        duration: 5000,
+        description: error.message || "Make sure your camera is not being used by another application"
+      }
+    );
+  }, []);
+
+  const captureImage = useCallback(() => {
+    if (webcamRef.current) {
+      try {
+        const imageSrc = webcamRef.current.getScreenshot();
+        if (imageSrc) {
+          setCapturedImages(prev => [...prev, imageSrc]);
+          setIsCapturing(false);
+          toast.success('Photo captured successfully!');
+        } else {
+          toast.error('Failed to capture image. Please try again.');
+        }
+      } catch (error) {
+        console.error('Error capturing image:', error);
+        toast.error('Failed to capture image. Please try again.');
+      }
+    }
+  }, []);
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files) {
+      Array.from(files).forEach(file => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64String = reader.result as string;
+          setCapturedImages(prev => [...prev, base64String]);
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+  };
+
+  const removeImage = (index: number) => {
+    setCapturedImages(prev => prev.filter((_, i) => i !== index));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -261,7 +330,7 @@ export function VITInspectionForm({
     }
 
     if (isSubmitting) {
-      return; // Prevent duplicate submissions
+      return;
     }
 
     setIsSubmitting(true);
@@ -275,6 +344,7 @@ export function VITInspectionForm({
         inspectionDate,
         inspectedBy,
         remarks,
+        photoUrls: capturedImages,
         rodentTermiteEncroachment: rodentTermiteEncroachment || "No",
         cleanDustFree: cleanDustFree || "No",
         protectionButtonEnabled: protectionButtonEnabled || "No",
@@ -333,8 +403,11 @@ export function VITInspectionForm({
         }
       }
 
-      // Call onSubmit to close the form
-      onSubmit(newInspectionData);
+      // Call onSubmit with the complete data including the photo
+      onSubmit({
+        ...newInspectionData,
+        photoUrls: capturedImages
+      });
     } catch (error) {
       console.error("Error saving inspection:", error);
       toast.error("Failed to save inspection. Please try again.");
@@ -374,7 +447,7 @@ export function VITInspectionForm({
                 <Select
                   value={selectedAssetId}
                   onValueChange={handleAssetChange}
-                  disabled={user?.role === "district_engineer" && !inspectionData}
+                  disabled={true}
                   required
                 >
                   <SelectTrigger className="w-full h-8 sm:h-9 text-xs sm:text-sm">
@@ -398,6 +471,7 @@ export function VITInspectionForm({
                   value={inspectionDate}
                   onChange={(e) => setInspectionDate(e.target.value)}
                   required
+                  disabled={true}
                   className="w-full h-8 sm:h-9 text-xs sm:text-sm"
                 />
               </div>
@@ -411,6 +485,7 @@ export function VITInspectionForm({
                 onChange={(e) => setInspectedBy(e.target.value)}
                 placeholder="Enter name of inspector"
                 required
+                disabled={true}
                 className="w-full h-8 sm:h-9 text-xs sm:text-sm"
               />
             </div>
@@ -901,6 +976,63 @@ export function VITInspectionForm({
                 className="w-full"
               />
             </div>
+
+            <div className="space-y-2">
+              <Label>Inspection Photos</Label>
+              <div className="flex flex-col gap-4">
+                {capturedImages.length > 0 && (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                    {capturedImages.map((image, index) => (
+                      <div key={index} className="relative group">
+                        <img 
+                          src={image} 
+                          alt={`Inspection photo ${index + 1}`} 
+                          className="w-full h-32 object-cover rounded-md cursor-pointer hover:opacity-90 transition-opacity"
+                          onClick={() => setShowFullImage(image)}
+                        />
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="icon"
+                          className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={() => removeImage(index)}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsCapturing(true)}
+                    className="w-full sm:flex-1"
+                  >
+                    <Camera className="mr-2 h-4 w-4" />
+                    Take Photo
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full sm:flex-1"
+                    onClick={() => document.getElementById('file-upload')?.click()}
+                  >
+                    <Upload className="mr-2 h-4 w-4" />
+                    Upload Photos
+                    <input
+                      id="file-upload"
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={handleFileUpload}
+                    />
+                  </Button>
+                </div>
+              </div>
+            </div>
           </div>
           <CardFooter className="flex flex-col sm:flex-row justify-end gap-2 w-full px-0">
             <Button type="button" variant="outline" onClick={onCancel} className="w-full sm:w-auto">
@@ -919,6 +1051,82 @@ export function VITInspectionForm({
           </CardFooter>
         </form>
       </CardContent>
+
+      {/* Camera Dialog */}
+      <Dialog open={isCapturing} onOpenChange={(open) => {
+        if (!open) {
+          setCameraError(null);
+        }
+        setIsCapturing(open);
+      }}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Take Photo</DialogTitle>
+            <DialogDescription>
+              Take a photo of the inspection. Make sure the area is clearly visible and well-lit.
+            </DialogDescription>
+            {cameraError && (
+              <p className="text-sm text-red-500 mt-2">
+                Error: {cameraError}
+              </p>
+            )}
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="relative aspect-video bg-black">
+              <Webcam
+                audio={false}
+                ref={webcamRef}
+                screenshotFormat="image/jpeg"
+                videoConstraints={videoConstraints}
+                onUserMediaError={handleCameraError}
+                className="w-full h-full rounded-md object-cover"
+                mirrored={!isMobile}
+                imageSmoothing={true}
+              />
+            </div>
+            <div className="flex justify-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsCapturing(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={captureImage}
+                disabled={!!cameraError}
+              >
+                Capture
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Full Image Dialog */}
+      <Dialog open={!!showFullImage} onOpenChange={(open) => !open && setShowFullImage(null)}>
+        <DialogContent className="max-w-[90vw] max-h-[90vh] p-0">
+          <div className="relative w-full h-full">
+            {showFullImage && (
+              <img 
+                src={showFullImage} 
+                alt="Full inspection view" 
+                className="w-full h-full object-contain"
+              />
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="absolute top-2 right-2 bg-background/80 hover:bg-background"
+              onClick={() => setShowFullImage(null)}
+            >
+              Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

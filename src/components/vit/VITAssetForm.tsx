@@ -14,19 +14,28 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { VITAsset, VITStatus, VoltageLevel } from "@/lib/types";
-import { Loader2, MapPin, Camera, Upload, Info } from "lucide-react";
+import { Loader2, MapPin, Camera, Upload, Info, Search, X } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import Webcam from "react-webcam";
 import { db } from "@/config/firebase";
-import { collection, addDoc, updateDoc, doc, serverTimestamp } from "firebase/firestore";
+import { collection, addDoc, updateDoc, doc, serverTimestamp, getDocs, query, where } from "firebase/firestore";
 import { LocationMap } from "./LocationMap";
 
 interface VITAssetFormProps {
   asset?: VITAsset;
   onSubmit: () => void;
   onCancel: () => void;
+}
+
+interface FeederInfo {
+  id: string;
+  name: string;
+  bsp: string;
+  bspPss: string;
+  regionId: string;
+  districtId: string;
 }
 
 export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
@@ -43,6 +52,11 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
   const webcamRef = useRef<Webcam>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [serialNumberError, setSerialNumberError] = useState<string | null>(null);
+  const [feeders, setFeeders] = useState<FeederInfo[]>([]);
+  const [selectedFeeder, setSelectedFeeder] = useState<string>("");
+  const [feederSearch, setFeederSearch] = useState("");
+  const [isFeederDropdownOpen, setIsFeederDropdownOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   
   const [regionId, setRegionId] = useState<string>(
     asset ? regions.find(r => r.name === asset.region)?.id || "" : ""
@@ -58,6 +72,7 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
   const [status, setStatus] = useState<VITStatus>(asset?.status || "Operational");
   const [protection, setProtection] = useState(asset?.protection || "");
   const [photoUrl, setPhotoUrl] = useState(asset?.photoUrl || "");
+  const [feederName, setFeederName] = useState(asset?.feederName || "");
   const [formData, setFormData] = useState<Partial<VITAsset>>({
     region: asset?.region || "",
     district: asset?.district || "",
@@ -69,6 +84,7 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
     status: asset?.status || "Operational",
     protection: asset?.protection || "",
     photoUrl: asset?.photoUrl || "",
+    feederName: asset?.feederName || "",
     createdBy: user?.email || "unknown"
   });
 
@@ -186,6 +202,91 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
       isMounted = false;
     };
   }, [user, regions, districts, districtId, asset]);
+
+  // Fetch feeders when region changes
+  useEffect(() => {
+    const fetchFeeders = async () => {
+      if (!regionId) {
+        setFeeders([]);
+        return;
+      }
+
+      try {
+        const feedersRef = collection(db, "feeders");
+        const q = query(feedersRef, where("regionId", "==", regionId));
+        const querySnapshot = await getDocs(q);
+        const feedersData = querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as FeederInfo[];
+        setFeeders(feedersData);
+
+        // If editing an existing asset, find and set the selected feeder
+        if (asset?.feederName) {
+          const existingFeeder = feedersData.find(f => f.name === asset.feederName);
+          if (existingFeeder) {
+            setSelectedFeeder(existingFeeder.id);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching feeders:", error);
+        toast.error("Failed to load feeders");
+      }
+    };
+
+    fetchFeeders();
+  }, [regionId, asset?.feederName]);
+
+  // Update feeder name when feeder changes
+  useEffect(() => {
+    if (selectedFeeder) {
+      const feeder = feeders.find(f => f.id === selectedFeeder);
+      if (feeder) {
+        setFeederName(feeder.name);
+      }
+    } else {
+      setFeederName("");
+    }
+  }, [selectedFeeder, feeders]);
+
+  // Filter feeders based on search
+  const filteredFeeders = feeders.filter(feeder => 
+    feeder.name.toLowerCase().includes(feederSearch.toLowerCase())
+  );
+
+  // Handle search input focus
+  const handleSearchFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+    if (!isFeederDropdownOpen) {
+      setIsFeederDropdownOpen(true);
+    }
+  };
+
+  // Handle search input change
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFeederSearch(e.target.value);
+  };
+
+  // Handle search input keydown
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    e.stopPropagation();
+  };
+
+  // Add this effect to handle focus
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+    if (isFeederDropdownOpen && window.innerWidth > 768) { // Only auto-focus on desktop
+      timeoutId = setTimeout(() => {
+        if (searchInputRef.current) {
+          searchInputRef.current.focus();
+        }
+      }, 100);
+    }
+    return () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [isFeederDropdownOpen]);
 
   // Filter regions and districts based on user role
   const filteredRegions = user?.role === "global_engineer"
@@ -492,6 +593,7 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
         status,
         protection,
         photoUrl: capturedImage || photoUrl,
+        feederName,
         createdBy: user?.email || "unknown",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -702,6 +804,111 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
             </div>
           </div>
           
+          <div className="space-y-2">
+            <Label htmlFor="feederName">Feeder Name *</Label>
+            <Select
+              value={selectedFeeder}
+              onValueChange={(value) => {
+                setSelectedFeeder(value);
+                const feeder = feeders.find(f => f.id === value);
+                if (feeder) {
+                  setFeederName(feeder.name);
+                }
+              }}
+              disabled={!regionId}
+              open={isFeederDropdownOpen}
+              onOpenChange={(open) => {
+                if (window.innerWidth > 768) { // Only auto-close on desktop
+                  setIsFeederDropdownOpen(open);
+                } else {
+                  setIsFeederDropdownOpen(true); // Keep open on mobile
+                }
+              }}
+            >
+              <SelectTrigger id="feederName" className="w-full">
+                <SelectValue placeholder="Select feeder" />
+              </SelectTrigger>
+              <SelectContent 
+                className="max-h-[300px]"
+                position="popper"
+                sideOffset={4}
+                onCloseAutoFocus={(e) => {
+                  e.preventDefault();
+                }}
+                onPointerDownOutside={(e) => {
+                  if (window.innerWidth > 768) { // Only close on desktop
+                    e.preventDefault();
+                    setIsFeederDropdownOpen(false);
+                  }
+                }}
+              >
+                <div className="sticky top-0 bg-background z-10 border-b p-2">
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      ref={searchInputRef}
+                      placeholder="Search feeders..."
+                      value={feederSearch}
+                      onChange={handleSearchChange}
+                      onFocus={handleSearchFocus}
+                      onKeyDown={handleSearchKeyDown}
+                      className="h-9 pl-9 pr-9 bg-background/50 border-muted focus:border-primary focus:ring-1 focus:ring-primary/20 transition-colors"
+                      autoFocus={window.innerWidth > 768}
+                    />
+                    {feederSearch && (
+                      <button
+                        onClick={() => {
+                          setFeederSearch("");
+                          if (searchInputRef.current) {
+                            searchInputRef.current.focus();
+                          }
+                        }}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                  {window.innerWidth <= 768 && (
+                    <button
+                      onClick={() => setIsFeederDropdownOpen(false)}
+                      className="absolute right-2 top-2 p-2 text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+                <div className="overflow-y-auto max-h-[250px]">
+                  {filteredFeeders.length === 0 ? (
+                    <div className="py-6 text-center text-sm text-muted-foreground">
+                      No feeders found
+                    </div>
+                  ) : (
+                    filteredFeeders.map((feeder) => (
+                      <SelectItem 
+                        key={feeder.id} 
+                        value={feeder.id}
+                        onSelect={(e) => {
+                          e.preventDefault();
+                          setSelectedFeeder(feeder.id);
+                          const selectedFeeder = feeders.find(f => f.id === feeder.id);
+                          if (selectedFeeder) {
+                            setFeederName(selectedFeeder.name);
+                          }
+                          if (window.innerWidth > 768) { // Only close on desktop
+                            setIsFeederDropdownOpen(false);
+                          }
+                        }}
+                      >
+                        {feeder.name}
+                      </SelectItem>
+                    ))
+                  )}
+                </div>
+              </SelectContent>
+            </Select>
+          </div>
+          
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-4">
             <div className="space-y-2">
               <Label htmlFor="voltageLevel">Voltage Level *</Label>
@@ -822,13 +1029,18 @@ export function VITAssetForm({ asset, onSubmit, onCancel }: VITAssetFormProps) {
           
           <div className="space-y-2">
             <Label htmlFor="protection">Protection</Label>
-            <Input
-              id="protection"
-              value={protection}
-              onChange={(e) => setProtection(e.target.value)}
-              placeholder="E.g., Overcurrent, Earth Fault"
-              className="w-full"
-            />
+            <Select 
+              value={protection} 
+              onValueChange={(val) => setProtection(val)}
+            >
+              <SelectTrigger id="protection" className="w-full">
+                <SelectValue placeholder="Select protection status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Protection Enable">Protection Enable</SelectItem>
+                <SelectItem value="Protection Disable">Protection Disable</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           
           <div className="space-y-2">

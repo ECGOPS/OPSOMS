@@ -1184,9 +1184,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const deleteOP5Fault = async (id: string) => {
     try {
-      if (!user) {
-        console.error("[Delete] No authenticated user found");
-        toast.error("You must be logged in to delete faults");
+      if (!user?.uid || !user?.name || !user?.role) {
+        console.error("[Delete] User authentication required:", { user });
+        toast.error("Authentication required. Please log in again.");
         return;
       }
 
@@ -1217,7 +1217,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         user.name,
         user.role,
         "Delete",
-        "OP5Fault",
+        "Outage",
         id,
         `Deleted OP5 fault for feeder ${faultData.feeder || 'Unknown'}`,
         faultData.region,
@@ -1227,7 +1227,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       toast.success("OP5 Fault deleted successfully");
     } catch (error) {
       console.error("[Delete] Error during delete or logging:", error);
-      toast.error("Failed to delete fault");
+      toast.error("Failed to delete fault. Please try again.");
+      throw error;
     }
   };
 
@@ -1290,9 +1291,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const deleteControlSystemOutage = async (id: string) => {
     try {
-      if (!user) {
-        console.error("[Delete] No authenticated user found");
-        toast.error("You must be logged in to delete outages");
+      if (!user?.uid || !user?.name || !user?.role) {
+        console.error("[Delete] User authentication required:", { user });
+        toast.error("Authentication required. Please log in again.");
         return;
       }
 
@@ -1323,7 +1324,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         user.name,
         user.role,
         "Delete",
-        "ControlSystemOutage",
+        "Outage",
         id,
         `Deleted control system outage for feeder ${outageData.feeder || 'Unknown'}`,
         outageData.region,
@@ -1333,7 +1334,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       toast.success("Outage deleted successfully");
     } catch (error) {
       console.error("[Delete] Error during delete or logging:", error);
-      toast.error("Failed to delete outage");
+      toast.error("Failed to delete outage. Please try again.");
+      throw error;
     }
   };
 
@@ -1749,6 +1751,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         voltageLevel: updates.voltageLevel || existingInspection.voltageLevel,
         status: updates.status || existingInspection.status,
         remarks: updates.remarks || existingInspection.remarks,
+        images: updates.images || existingInspection.images, // Preserve images field
         // Preserve checklist items if they exist in updates
         cleanDustFree: updates.cleanDustFree,
         protectionButtonEnabled: updates.protectionButtonEnabled,

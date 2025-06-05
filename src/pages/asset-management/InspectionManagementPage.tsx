@@ -55,6 +55,9 @@ export default function InspectionManagementPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
+  // New state for Substation Type filter
+  const [selectedSubstationType, setSelectedSubstationType] = useState<string | null>(null);
+
   // Filter districts based on selected region
   const filteredDistricts = useMemo(() => {
     if (!selectedRegion) return districts;
@@ -121,6 +124,25 @@ export default function InspectionManagementPage() {
       );
     }
     
+    // Apply Substation Type filter
+    if (selectedSubstationType) {
+      filtered = filtered.filter(inspection => {
+        const isSecondary = inspection.substationType === 'secondary' ||
+                          (inspection.transformer && inspection.transformer.length > 0) ||
+                          (inspection.areaFuse && inspection.areaFuse.length > 0) ||
+                          (inspection.arrestors && inspection.arrestors.length > 0) ||
+                          (inspection.switchgear && inspection.switchgear.length > 0) ||
+                          (inspection.paintWork && inspection.paintWork.length > 0);
+        
+        if (selectedSubstationType === 'primary') {
+          return !isSecondary; // Include if NOT secondary
+        } else if (selectedSubstationType === 'secondary') {
+          return isSecondary; // Include if secondary
+        }
+        return true; // Should not happen if selectedSubstationType is not null
+      });
+    }
+    
     // Sort by date (and inspectionDate) descending so most recent is first
     filtered = filtered.slice().sort((a, b) => {
       // Prefer inspectionDate if available, else fallback to date
@@ -130,7 +152,7 @@ export default function InspectionManagementPage() {
     });
     
     return filtered;
-  }, [savedInspections, user, selectedDate, selectedMonth, selectedRegion, selectedDistrict, searchTerm]);
+  }, [savedInspections, user, selectedDate, selectedMonth, selectedRegion, selectedDistrict, searchTerm, selectedSubstationType]);
 
   // Calculate pagination
   const totalPages = Math.ceil(filteredInspections.length / itemsPerPage);
@@ -142,7 +164,7 @@ export default function InspectionManagementPage() {
   // Reset pagination when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedDate, selectedMonth, selectedRegion, selectedDistrict, searchTerm]);
+  }, [selectedDate, selectedMonth, selectedRegion, selectedDistrict, searchTerm, selectedSubstationType]);
 
   // Reset all filters
   const handleResetFilters = () => {
@@ -151,6 +173,7 @@ export default function InspectionManagementPage() {
     setSelectedRegion(null);
     setSelectedDistrict(null);
     setSearchTerm("");
+    setSelectedSubstationType(null);
   };
 
   const handleView = (id: string) => {
@@ -189,23 +212,79 @@ export default function InspectionManagementPage() {
       ["Substation Inspection Report"],
       ["Date", formatDate(inspection.date)],
       ["Substation No", inspection.substationNo],
+      ["Substation Name", inspection.substationName || "Not specified"],
       ["Region", inspection.region],
       ["District", inspection.district],
       ["Type", inspection.type],
+      ["Substation Type", inspection.substationType || "primary"],
+      ["Location", inspection.location || "Not specified"],
+      ["GPS Location", inspection.gpsLocation || "Not specified"],
+      ["Voltage Level", inspection.voltageLevel || "Not specified"],
+      ["Inspected By", inspection.inspectedBy || "Not specified"],
       [],
       ["Inspection Items"],
       ["Category", "Item", "Status", "Remarks"]
     ];
 
-    // Add inspection items
-    inspection.items.forEach(item => {
-      csvContent.push([
-        item.category,
-        item.name,
-        item.status,
-        item.remarks || ""
-      ]);
-    });
+    // Add inspection items based on substation type
+    if (inspection.substationType === "secondary") {
+      // Handle secondary substation items
+      const categories = [
+        { name: "Site Condition", items: inspection.siteCondition || [] },
+        { name: "Transformer", items: inspection.transformer || [] },
+        { name: "Area Fuse", items: inspection.areaFuse || [] },
+        { name: "Arrestors", items: inspection.arrestors || [] },
+        { name: "Switchgear", items: inspection.switchgear || [] },
+        { name: "Paint Work", items: inspection.paintWork || [] }
+      ];
+
+      categories.forEach(category => {
+        if (category.items && category.items.length > 0) {
+          category.items.forEach(item => {
+            if (item && item.name) {  // Add null check for item and item.name
+              csvContent.push([
+                category.name,
+                item.name,
+                item.status || "Not specified",
+                item.remarks || ""
+              ]);
+            }
+          });
+        }
+      });
+    } else {
+      // Handle primary substation items
+      const categories = [
+        { name: "Site Condition", items: inspection.siteCondition || [] },
+        { name: "General Building", items: inspection.generalBuilding || [] },
+        { name: "Control Equipment", items: inspection.controlEquipment || [] },
+        { name: "Basement", items: inspection.basement || [] },
+        { name: "Power Transformer", items: inspection.powerTransformer || [] },
+        { name: "Outdoor Equipment", items: inspection.outdoorEquipment || [] }
+      ];
+
+      categories.forEach(category => {
+        if (category.items && category.items.length > 0) {
+          category.items.forEach(item => {
+            if (item && item.name) {  // Add null check for item and item.name
+              csvContent.push([
+                category.name,
+                item.name,
+                item.status || "Not specified",
+                item.remarks || ""
+              ]);
+            }
+          });
+        }
+      });
+    }
+
+    // Add remarks if available
+    if (inspection.remarks) {
+      csvContent.push([]);
+      csvContent.push(["Remarks"]);
+      csvContent.push([inspection.remarks]);
+    }
 
     // Convert to CSV string
     const csvString = csvContent.map(row => row.join(",")).join("\n");
@@ -225,56 +304,176 @@ export default function InspectionManagementPage() {
   };
 
   const handleExportAllToCSV = () => {
-    // Create CSV content
-    const csvContent = [
-      ["Substation Inspections Report"],
-      ["Generated on", new Date().toLocaleDateString()],
-      [],
-      ["Inspection Details"],
-      ["Date", "Substation No", "Substation Name", "Region", "District", "Type", "Created By", "Created At", "Good Items", "Bad Items", "Total Items", "Percentage Good"]
+    // Create CSV content with headers
+    const headers = [
+      "Inspection No",
+      "Date",
+      "Substation No",
+      "Substation Name",
+      "Region",
+      "District",
+      "Type",
+      "Substation Type",
+      "Location",
+      "GPS Location",
+      "Voltage Level",
+      "Inspected By",
+      "Category",
+      "Item",
+      "Status",
+      "Remarks",
+      "Overall Condition"
     ];
 
-    // Add each inspection
-    filteredInspections.forEach(inspection => {
-      const goodItems = inspection.items.filter(item => item.status === "good").length;
-      const badItems = inspection.items.filter(item => item.status === "bad").length;
-      const totalItems = inspection.items.length;
+    // Initialize rows array with headers
+    const rows = [headers];
+
+    // Add each inspection as rows
+    filteredInspections.forEach((inspection, index) => {
+      // Get all items based on substation type
+      const isSecondary = inspection.substationType === 'secondary' ||
+                          (inspection.transformer && inspection.transformer.length > 0) ||
+                          (inspection.areaFuse && inspection.areaFuse.length > 0) ||
+                          (inspection.arrestors && inspection.arrestors.length > 0) ||
+                          (inspection.switchgear && inspection.switchgear.length > 0) ||
+                          (inspection.paintWork && inspection.paintWork.length > 0);
+
+      const items = isSecondary
+        ? [
+            ...(inspection.siteCondition || []).map(item => ({ ...item, category: "Site Condition" })),
+            ...(inspection.transformer || []).map(item => ({ ...item, category: "Transformer" })),
+            ...(inspection.areaFuse || []).map(item => ({ ...item, category: "Area Fuse" })),
+            ...(inspection.arrestors || []).map(item => ({ ...item, category: "Arrestors" })),
+            ...(inspection.switchgear || []).map(item => ({ ...item, category: "Switchgear" })),
+            ...(inspection.paintWork || []).map(item => ({ ...item, category: "Paint Work" }))
+          ]
+        : [
+            ...(inspection.siteCondition || []).map(item => ({ ...item, category: "Site Condition" })),
+            ...(inspection.generalBuilding || []).map(item => ({ ...item, category: "General Building" })),
+            ...(inspection.controlEquipment || []).map(item => ({ ...item, category: "Control Equipment" })),
+            ...(inspection.basement || []).map(item => ({ ...item, category: "Basement" })),
+            ...(inspection.powerTransformer || []).map(item => ({ ...item, category: "Power Transformer" })),
+            ...(inspection.outdoorEquipment || []).map(item => ({ ...item, category: "Outdoor Equipment" }))
+          ];
+
+      // Calculate overall condition
+      const goodItems = items.filter(item => item?.status === "good").length;
+      const totalItems = items.length;
       const percentageGood = totalItems > 0 ? (goodItems / totalItems) * 100 : 0;
+      const overallCondition = percentageGood >= 80 ? "Excellent" : percentageGood >= 60 ? "Good" : "Needs Attention";
 
-      csvContent.push([
-        formatDate(inspection.date),
-        inspection.substationNo,
-        inspection.substationName || "Not specified",
-        inspection.region,
-        inspection.district,
-        inspection.type,
-        inspection.createdBy || "Unknown",
-        inspection.createdAt ? new Date(inspection.createdAt).toLocaleString() : "Unknown",
-        goodItems.toString(),
-        badItems.toString(),
-        totalItems.toString(),
-        percentageGood.toFixed(1) + "%"
-      ]);
-
-      // Add checklist items
-      csvContent.push([]);
-      csvContent.push(["Checklist Items"]);
-      csvContent.push(["Category", "Item Name", "Status", "Remarks"]);
-      
-      inspection.items.forEach(item => {
-        csvContent.push([
-          item.category,
-          item.name,
-          item.status,
-          item.remarks || ""
-        ]);
+      // Add a row for each item
+      items.forEach(item => {
+        if (item && item.name) {
+          rows.push([
+            (index + 1).toString(),
+            formatDate(inspection.date),
+            inspection.substationNo,
+            inspection.substationName || "Not specified",
+            inspection.region,
+            inspection.district,
+            inspection.type,
+            inspection.substationType || (isSecondary ? 'secondary' : 'primary'),
+            inspection.location || "Not specified",
+            inspection.gpsLocation || "Not specified",
+            inspection.voltageLevel || "Not specified",
+            inspection.inspectedBy || "Not specified",
+            item.category,
+            item.name,
+            item.status || "Not specified",
+            item.remarks || "",
+            overallCondition
+          ]);
+        }
       });
 
-      csvContent.push([]);
+      // If there are no items, add at least one row with basic information
+      if (items.length === 0) {
+        rows.push([
+          (index + 1).toString(),
+          formatDate(inspection.date),
+          inspection.substationNo,
+          inspection.substationName || "Not specified",
+          inspection.region,
+          inspection.district,
+          inspection.type,
+          inspection.substationType || (isSecondary ? 'secondary' : 'primary'),
+          inspection.location || "Not specified",
+          inspection.gpsLocation || "Not specified",
+          inspection.voltageLevel || "Not specified",
+          inspection.inspectedBy || "Not specified",
+          "No Items",
+          "No Items",
+          "Not specified",
+          inspection.remarks || "",
+          "Not specified"
+        ]);
+      }
     });
 
+    // Calculate summary statistics
+    const totalInspections = filteredInspections.length;
+    const totalItems = filteredInspections.reduce((sum, inspection) => {
+      const isSecondary = inspection.substationType === 'secondary' ||
+                          (inspection.transformer && inspection.transformer.length > 0) ||
+                          (inspection.areaFuse && inspection.areaFuse.length > 0) ||
+                          (inspection.arrestors && inspection.arrestors.length > 0) ||
+                          (inspection.switchgear && inspection.switchgear.length > 0) ||
+                          (inspection.paintWork && inspection.paintWork.length > 0);
+
+      const items = isSecondary
+        ? [...(inspection.siteCondition || []), ...(inspection.transformer || []),
+           ...(inspection.areaFuse || []), ...(inspection.arrestors || []),
+           ...(inspection.switchgear || []), ...(inspection.paintWork || [])]
+        : [...(inspection.siteCondition || []), ...(inspection.generalBuilding || []),
+           ...(inspection.controlEquipment || []), ...(inspection.basement || []),
+           ...(inspection.powerTransformer || []), ...(inspection.outdoorEquipment || [])];
+      return sum + items.length;
+    }, 0);
+
+    const totalGoodItems = filteredInspections.reduce((sum, inspection) => {
+      const isSecondary = inspection.substationType === 'secondary' ||
+                          (inspection.transformer && inspection.transformer.length > 0) ||
+                          (inspection.areaFuse && inspection.areaFuse.length > 0) ||
+                          (inspection.arrestors && inspection.arrestors.length > 0) ||
+                          (inspection.switchgear && inspection.switchgear.length > 0) ||
+                          (inspection.paintWork && inspection.paintWork.length > 0);
+
+      const items = isSecondary
+        ? [...(inspection.siteCondition || []), ...(inspection.transformer || []),
+           ...(inspection.areaFuse || []), ...(inspection.arrestors || []),
+           ...(inspection.switchgear || []), ...(inspection.paintWork || [])]
+        : [...(inspection.siteCondition || []), ...(inspection.generalBuilding || []),
+           ...(inspection.controlEquipment || []), ...(inspection.basement || []),
+           ...(inspection.powerTransformer || []), ...(inspection.outdoorEquipment || [])];
+      return sum + items.filter(item => item?.status === "good").length;
+    }, 0);
+
+    const totalBadItems = totalItems - totalGoodItems;
+    const overallPercentageGood = totalItems > 0 ? (totalGoodItems / totalItems) * 100 : 0;
+
+    // Add summary rows
+    rows.push(
+      ["SUMMARY STATISTICS", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+      ["Total Inspections", totalInspections.toString(), "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+      ["Total Items Checked", totalItems.toString(), "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+      ["Items in Good Condition", `${totalGoodItems} (${overallPercentageGood.toFixed(1)}%)`, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+      ["Items Requiring Attention", `${totalBadItems} (${(100 - overallPercentageGood).toFixed(1)}%)`, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+      ["Overall Condition", overallPercentageGood >= 80 ? "Excellent" : overallPercentageGood >= 60 ? "Good" : "Needs Attention", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+    );
+
     // Convert to CSV string
-    const csvString = csvContent.map(row => row.join(",")).join("\n");
+    const csvString = rows.map(row => 
+      row.map(cell => {
+        const stringCell = String(cell);
+        // Enclose fields with commas, double quotes, or newlines in double quotes
+        if (stringCell.includes(',') || stringCell.includes('"') || stringCell.includes('\n')) {
+          // Escape double quotes within the field by doubling them
+          return `"${stringCell.replace(/"/g, '""')}"`;
+        }
+        return stringCell;
+      }).join(',')
+    ).join('\n');
     
     // Create and download file
     const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
@@ -611,12 +810,18 @@ export default function InspectionManagementPage() {
       <div className="container mx-auto py-8">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-3xl font-bold tracking-tight">Substation Inspections</h1>
-          <div className="flex space-x-4">
+          <div className="flex space-x-4 md:space-x-4 flex-wrap justify-end">
             <Button 
               onClick={() => navigate("/asset-management/substation-inspection")}
               variant="default"
             >
               New Inspection
+            </Button>
+            <Button
+              onClick={handleExportAllToCSV}
+              variant="outline"
+            >
+              Export All to CSV
             </Button>
           </div>
         </div>
@@ -690,12 +895,33 @@ export default function InspectionManagementPage() {
           )}
         </div>
 
+        {/* Substation Type Filter */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div className="space-y-2">
+            <Label>Substation Type</Label>
+            <div className="w-full">
+              <Select
+                value={selectedSubstationType}
+                onValueChange={setSelectedSubstationType}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="primary">Primary</SelectItem>
+                  <SelectItem value="secondary">Secondary</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </div>
+        
         {/* Reset Filters Button */}
         <div className="flex justify-end mb-4">
           <Button
             variant="outline"
             onClick={handleResetFilters}
-            disabled={!selectedDate && !selectedMonth && !selectedRegion && !selectedDistrict && !searchTerm}
+            disabled={!selectedDate && !selectedMonth && !selectedRegion && !selectedDistrict && !searchTerm && !selectedSubstationType}
           >
             Reset Filters
           </Button>
@@ -725,6 +951,7 @@ export default function InspectionManagementPage() {
                 <TableHead>Region</TableHead>
                 <TableHead>District</TableHead>
                 <TableHead>Type</TableHead>
+                <TableHead>Substation Type</TableHead>
                 <TableHead>Status Summary</TableHead>
                 <TableHead>Sync Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -770,6 +997,15 @@ export default function InspectionManagementPage() {
                       <TableCell>{inspection.region}</TableCell>
                       <TableCell>{inspection.district}</TableCell>
                       <TableCell className="capitalize">{inspection.type}</TableCell>
+                      <TableCell className="capitalize">
+                        {inspection.substationType === 'secondary' ||
+                         (inspection.transformer && inspection.transformer.length > 0) ||
+                         (inspection.areaFuse && inspection.areaFuse.length > 0) ||
+                         (inspection.arrestors && inspection.arrestors.length > 0) ||
+                         (inspection.switchgear && inspection.switchgear.length > 0) ||
+                         (inspection.paintWork && inspection.paintWork.length > 0) ?
+                         'secondary' : 'primary'}
+                      </TableCell>
                       <TableCell>{statusSummary}</TableCell>
                       <TableCell>{syncStatus}</TableCell>
                       <TableCell className="text-right actions-cell">
@@ -830,7 +1066,7 @@ export default function InspectionManagementPage() {
         </div>
 
         {/* Pagination Controls */}
-        <div className="flex items-center justify-between mt-4">
+        <div className="flex items-center justify-between mt-4 flex-wrap">
           <div className="text-sm text-muted-foreground">
             Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredInspections.length)} of {filteredInspections.length} inspections
           </div>

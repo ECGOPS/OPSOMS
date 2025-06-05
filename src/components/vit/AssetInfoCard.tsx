@@ -67,6 +67,10 @@ export const AssetInfoCard = ({ asset, getRegionName, getDistrictName }: AssetIn
               <p>{asset.district}</p>
             </div>
             <div>
+              <h3 className="font-semibold">Feeder Name</h3>
+              <p>{asset.feederName || "Not specified"}</p>
+            </div>
+            <div>
               <h3 className="font-semibold">Voltage Level</h3>
               <p>{asset.voltageLevel}</p>
             </div>

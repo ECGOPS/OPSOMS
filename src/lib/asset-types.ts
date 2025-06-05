@@ -112,6 +112,7 @@ export interface SubstationInspection {
   substationNo: string;
   substationName?: string;
   type: "indoor" | "outdoor";
+  substationType: "primary" | "secondary";
   items: InspectionItem[];
   generalBuilding: InspectionItem[];
   controlEquipment: InspectionItem[];
@@ -120,6 +121,7 @@ export interface SubstationInspection {
   siteCondition: InspectionItem[];
   basement: InspectionItem[];
   location?: string;
+  gpsLocation?: string;
   voltageLevel?: string;
   status?: string;
   remarks?: string;
@@ -148,4 +150,37 @@ export interface SubstationInspection {
   noCorrosion?: string;
   silicaGelCondition?: string;
   correctLabelling?: string;
+  images?: string[];
+}
+
+export interface SecondarySubstationInspection {
+  id: string;
+  firestoreId?: string;
+  region: string;
+  regionId: string;
+  district: string;
+  districtId: string;
+  date: string;
+  inspectionDate?: string;
+  substationNo: string;
+  substationName?: string;
+  type: "secondary";
+  location?: string;
+  gpsLocation?: string;
+  voltageLevel?: string;
+  status?: string;
+  remarks?: string;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+  inspectedBy?: string;
+  syncStatus?: 'pending' | 'synced' | 'failed';
+  originalOfflineId?: string;
+  siteCondition: InspectionItem[];
+  transformer: InspectionItem[];
+  areaFuse: InspectionItem[];
+  arrestors: InspectionItem[];
+  switchgear: InspectionItem[];
+  paintWork: InspectionItem[];
+  images?: string[];
 }

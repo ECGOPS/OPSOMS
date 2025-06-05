@@ -15,7 +15,9 @@
     "android": "npx cap open android",
     "sync:ios": "npx cap sync ios",
     "sync:android": "npx cap sync android",
-    "dev:secure": "local-ssl-proxy --source 5174 --target 5173"
+    "dev:secure": "local-ssl-proxy --source 5174 --target 5173",
+    "setup:demo": "node scripts/setup-demo.js",
+    "dev:demo": "npm run setup:demo && npm run dev -- --mode demo"
   },
   "dependencies": {
     "@ant-design/icons": "^6.0.0",

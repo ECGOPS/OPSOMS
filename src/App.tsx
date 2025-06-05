@@ -45,6 +45,7 @@ import DistrictPopulationPage from './pages/DistrictPopulationPage';
 import UserProfilePage from "./pages/UserProfilePage";
 import EditVITAssetPage from "./pages/asset-management/EditVITAssetPage";
 import UserLogsPage from "@/pages/UserLogsPage";
+import SecondarySubstationInspectionPage from "./pages/asset-management/SecondarySubstationInspectionPage";
 
 const queryClient = new QueryClient();
 
@@ -145,6 +146,18 @@ function App() {
                 <Route path="/asset-management/substation-inspection" element={
                   <ProtectedRoute requiredFeature="substation_inspection">
                     <SubstationInspectionPage />
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/asset-management/secondary-substation-inspection" element={
+                  <ProtectedRoute requiredFeature="substation_inspection">
+                    <SecondarySubstationInspectionPage />
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/asset-management/secondary-substation-inspection/:id" element={
+                  <ProtectedRoute requiredFeature="substation_inspection">
+                    <SecondarySubstationInspectionPage />
                   </ProtectedRoute>
                 } />
 

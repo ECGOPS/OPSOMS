@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Layout } from "@/components/layout/Layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,15 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { SubstationInspectionService } from "@/services/SubstationInspectionService";
-import { ChevronLeft, ChevronRight, ChevronRightIcon } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronRightIcon, Camera, Upload, X } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import Webcam from "react-webcam";
 
 interface Category {
   id: string;
@@ -41,12 +49,19 @@ export default function SubstationInspectionPage() {
   const [regionId, setRegionId] = useState<string>("");
   const [districtId, setDistrictId] = useState<string>("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [capturedImages, setCapturedImages] = useState<string[]>([]);
+  const [showFullImage, setShowFullImage] = useState<string | null>(null);
+  const webcamRef = useRef<Webcam>(null);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
     inspectionDate: new Date().toISOString().split('T')[0],
     substationNo: "",
     substationName: "",
     type: "indoor" as "indoor" | "outdoor",
+    substationType: "primary" as "primary" | "secondary",
     location: "",
     voltageLevel: "",
     status: "Pending",
@@ -80,9 +95,137 @@ export default function SubstationInspectionPage() {
     basement: [],
     powerTransformer: [],
     outdoorEquipment: [],
-    siteCondition: []
+    siteCondition: [],
+    gpsLocation: ""
   });
   const [categories, setCategories] = useState<Category[]>([]);
+
+  // Add video constraints
+  const videoConstraints = {
+    facingMode: "environment",
+    width: { ideal: 1280 },
+    height: { ideal: 720 }
+  };
+
+  // Check if device is mobile
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(/iPhone|iPad|iPod|Android/i.test(navigator.userAgent));
+    };
+    checkMobile();
+  }, []);
+
+  // Handle camera error
+  const handleCameraError = (error: string | DOMException) => {
+    console.error('Camera error:', error);
+    setCameraError(error.toString());
+    toast.error("Failed to access camera. Please check your camera permissions.");
+  };
+
+  // Capture image from webcam
+  const captureImage = () => {
+    if (webcamRef.current) {
+      const imageSrc = webcamRef.current.getScreenshot();
+      if (imageSrc) {
+        setCapturedImages(prev => [...prev, imageSrc]);
+        setIsCapturing(false);
+        setCameraError(null);
+      }
+    }
+  };
+
+  // Handle file upload
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files) {
+      Array.from(files).forEach(file => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setCapturedImages(prev => [...prev, reader.result as string]);
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+  };
+
+  // Remove image
+  const removeImage = (index: number) => {
+    setCapturedImages(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // Update formData when capturedImages changes
+  useEffect(() => {
+    setFormData(prev => ({
+      ...prev,
+      images: capturedImages
+    }));
+  }, [capturedImages]);
+
+  // Add the photo section to the form
+  const renderPhotoSection = () => (
+    <Card>
+      <CardHeader>
+        <CardTitle>Photos</CardTitle>
+        <CardDescription>Take or upload photos of the inspection</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsCapturing(true)}
+              className="w-full sm:flex-1"
+            >
+              <Camera className="mr-2 h-4 w-4" />
+              Take Photo
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full sm:flex-1"
+              onClick={() => document.getElementById('file-upload')?.click()}
+            >
+              <Upload className="mr-2 h-4 w-4" />
+              Upload Photos
+              <input
+                id="file-upload"
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={handleFileUpload}
+              />
+            </Button>
+          </div>
+
+          {capturedImages.length > 0 && (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {capturedImages.map((image, index) => (
+                <div key={index} className="relative group">
+                  <img
+                    src={image}
+                    alt={`Inspection image ${index + 1}`}
+                    className="w-full h-32 object-cover rounded-lg cursor-pointer"
+                    onClick={() => setShowFullImage(image)}
+                  />
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="icon"
+                    className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={() => removeImage(index)}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
 
   // Update item status
   const updateItemStatus = (categoryIndex: number, itemIndex: number, status: ConditionStatus) => {
@@ -252,6 +395,7 @@ export default function SubstationInspectionPage() {
           substationNo: inspection.substationNo || "",
           substationName: inspection.substationName || "",
           type: inspection.type || "indoor",
+          substationType: inspection.substationType || "primary",
           location: inspection.location || "",
           voltageLevel: inspection.voltageLevel || "",
           status: inspection.status || "Pending",
@@ -285,7 +429,8 @@ export default function SubstationInspectionPage() {
           basement: inspection.basement || [],
           powerTransformer: inspection.powerTransformer || [],
           outdoorEquipment: inspection.outdoorEquipment || [],
-          siteCondition: inspection.siteCondition || []
+          siteCondition: inspection.siteCondition || [],
+          gpsLocation: inspection.gpsLocation || ""
         });
 
         // Set region and district IDs
@@ -378,7 +523,8 @@ export default function SubstationInspectionPage() {
           basement: categoriesFromInspection.find(c => c.id === 'basement')?.items || [],
           powerTransformer: categoriesFromInspection.find(c => c.id === 'power-transformer')?.items || [],
           outdoorEquipment: categoriesFromInspection.find(c => c.id === 'outdoor-equipment')?.items || [],
-          remarks: inspection.remarks || ""
+          remarks: inspection.remarks || "",
+          gpsLocation: inspection.gpsLocation || ""
         }));
       }
     } else {
@@ -411,7 +557,7 @@ export default function SubstationInspectionPage() {
             { id: `gb-water-${uuidv4()}`, name: "Water flow/ availability", status: undefined, remarks: "", category: "general building" },
             { id: `gb-ac-${uuidv4()}`, name: "AC Unit working", status: undefined, remarks: "", category: "general building" },
             { id: `gb-lighting-${uuidv4()}`, name: "Inside Lighting", status: undefined, remarks: "", category: "general building" },
-            { id: `gb-fire-${uuidv4()}`, name: "Fire Extinguisher available/In good condition", status: undefined, remarks: "", category: "general building" },
+            { id: `gb-fire-${uuidv4()}`, name: "Fire Extinguisher available", status: undefined, remarks: "", category: "general building" },
             { id: `gb-logo-${uuidv4()}`, name: "Logo and signboard available and on equipment", status: undefined, remarks: "", category: "general building" },
           ],
         },
@@ -455,7 +601,7 @@ export default function SubstationInspectionPage() {
             { id: `pt-oil-leak-${uuidv4()}`, name: "Oil leakage", status: undefined, remarks: "", category: "power transformer" },
             { id: `pt-thermometer-${uuidv4()}`, name: "Themometer", status: undefined, remarks: "", category: "power transformer" },
             { id: `pt-gas-pressure-${uuidv4()}`, name: "Gas presure indicator working", status: undefined, remarks: "", category: "power transformer" },
-            { id: `pt-silica-${uuidv4()}`, name: "Silica gel OK", status: undefined, remarks: "", category: "power transformer" },
+            { id: `pt-silica-${uuidv4()}`, name: "Silica gel", status: undefined, remarks: "", category: "power transformer" },
             { id: `pt-body-ground-${uuidv4()}`, name: "Trafo body earthed/grounded", status: undefined, remarks: "", category: "power transformer" },
             { id: `pt-neutral-ground-${uuidv4()}`, name: "Neutral point earthed/grounded", status: undefined, remarks: "", category: "power transformer" },
             { id: `pt-fans-${uuidv4()}`, name: "Fans operating correctly", status: undefined, remarks: "", category: "power transformer" },
@@ -576,6 +722,7 @@ export default function SubstationInspectionPage() {
         substationNo: formData.substationNo,
         substationName: formData.substationName || "",
         type: formData.type || "indoor",
+        substationType: formData.substationType || "primary",
         items: [
           ...inspectionItems.siteCondition.map(item => ({
             id: item.id || uuidv4(),
@@ -689,7 +836,9 @@ export default function SubstationInspectionPage() {
         ptFuseLinkIntact: formData.ptFuseLinkIntact,
         noCorrosion: formData.noCorrosion,
         silicaGelCondition: formData.silicaGelCondition,
-        correctLabelling: formData.correctLabelling
+        correctLabelling: formData.correctLabelling,
+        gpsLocation: formData.gpsLocation || "",
+        images: capturedImages
       };
 
       // Log the inspection data before saving
@@ -729,6 +878,27 @@ export default function SubstationInspectionPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="substationType">Substation Type</Label>
+                  <Select
+                    value="primary"
+                    onValueChange={(value) => {
+                      if (value === "secondary") {
+                        // Navigate to the secondary substation inspection form
+                        navigate("/asset-management/secondary-substation-inspection");
+                      }
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select substation type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="primary">Primary</SelectItem>
+                      <SelectItem value="secondary">Secondary</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="region">Region</Label>
                   <Select
@@ -793,30 +963,121 @@ export default function SubstationInspectionPage() {
                   />
                 </div>
 
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="substationName">Substation Name (Optional)</Label>
+                    <Input
+                      id="substationName"
+                      type="text"
+                      value={formData.substationName || ''}
+                      onChange={(e) => handleInputChange('substationName', e.target.value)}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="type">Type</Label>
+                    <Select
+                      value={formData.type}
+                      onValueChange={(value) => handleInputChange("type", value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="indoor">Indoor</SelectItem>
+                        <SelectItem value="outdoor">Outdoor</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
                 <div className="space-y-2">
-                  <Label htmlFor="substationName">Substation Name (Optional)</Label>
+                  <Label htmlFor="location">Location</Label>
                   <Input
-                    id="substationName"
+                    id="location"
                     type="text"
-                    value={formData.substationName || ''}
-                    onChange={(e) => handleInputChange('substationName', e.target.value)}
+                    value={formData.location || ''}
+                    onChange={(e) => handleInputChange('location', e.target.value)}
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="type">Type</Label>
-                  <Select
-                    value={formData.type}
-                    onValueChange={(value) => handleInputChange("type", value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="indoor">Indoor</SelectItem>
-                      <SelectItem value="outdoor">Outdoor</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Label htmlFor="gpsLocation">GPS Location</Label>
+                  <div className="flex flex-col gap-2">
+                    <div className="flex gap-2">
+                      <Input
+                        id="gpsLocation"
+                        type="text"
+                        value={formData.gpsLocation || ''}
+                        onChange={(e) => handleInputChange('gpsLocation', e.target.value)}
+                        placeholder="Latitude, Longitude"
+                        readOnly
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          if (navigator.geolocation) {
+                            toast.info("Getting location... This may take a few moments.");
+                            const options = {
+                              enableHighAccuracy: true,
+                              timeout: 30000, // Increased timeout to 30 seconds
+                              maximumAge: 0
+                            };
+                            navigator.geolocation.getCurrentPosition(
+                              (position) => {
+                                const { latitude, longitude, accuracy } = position.coords;
+                                const preciseLat = latitude.toFixed(6);
+                                const preciseLong = longitude.toFixed(6);
+                                handleInputChange('gpsLocation', `${preciseLat}, ${preciseLong}`);
+                                if (accuracy > 20) {
+                                  toast.warning(`GPS accuracy is poor (±${accuracy.toFixed(1)} meters). Please try again for a better reading.`);
+                                } else {
+                                  toast.success(`Location captured! Accuracy: ±${accuracy.toFixed(1)} meters`);
+                                }
+                              },
+                              (error) => {
+                                let errorMessage = 'Error getting location: ';
+                                switch (error.code) {
+                                  case error.TIMEOUT:
+                                    errorMessage += 'Location request timed out. Please try again.';
+                                    break;
+                                  case error.POSITION_UNAVAILABLE:
+                                    errorMessage += 'Location information is unavailable. Please check your device settings.';
+                                    break;
+                                  case error.PERMISSION_DENIED:
+                                    errorMessage += 'Location permission denied. Please enable location services.';
+                                    break;
+                                  default:
+                                    errorMessage += error.message;
+                                }
+                                toast.error(errorMessage);
+                              },
+                              options
+                            );
+                          } else {
+                            toast.error('Geolocation is not supported by your browser');
+                          }
+                        }}
+                      >
+                        Get Location
+                      </Button>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Click "Get Location" to capture GPS coordinates. The accuracy will be shown in meters. If the first attempt fails, try again.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="voltageLevel">Voltage Level</Label>
+                  <Input
+                    id="voltageLevel"
+                    type="text"
+                    value={formData.voltageLevel || ''}
+                    onChange={(e) => handleInputChange('voltageLevel', e.target.value)}
+                    required
+                  />
                 </div>
               </div>
             </CardContent>
@@ -1162,6 +1423,8 @@ export default function SubstationInspectionPage() {
     }
   };
 
+  const totalPages = 8;
+
   return (
     <Layout>
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-7xl">
@@ -1190,7 +1453,7 @@ export default function SubstationInspectionPage() {
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {renderPage(currentPage)}
-
+          {currentPage === 8 && renderPhotoSection()}
           <div className="flex justify-between items-center mt-8">
             <Button
               type="button"
@@ -1202,12 +1465,15 @@ export default function SubstationInspectionPage() {
               Previous
             </Button>
             <span className="text-sm text-muted-foreground">
-              Page {currentPage} of 8
+              Page {currentPage} of {totalPages}
             </span>
-            {currentPage < 8 ? (
+            {currentPage < totalPages ? (
               <Button
                 type="button"
-                onClick={() => setCurrentPage(prev => Math.min(8, prev + 1))}
+                onClick={(e) => {
+                  e.preventDefault();
+                  setCurrentPage(prev => Math.min(totalPages, prev + 1));
+                }}
               >
                 Next
                 <ChevronRight className="ml-2 h-4 w-4" />
@@ -1217,13 +1483,78 @@ export default function SubstationInspectionPage() {
                 <Button type="button" variant="outline" onClick={() => navigate(-1)}>
                   Cancel
                 </Button>
-                <Button type="submit" size="lg">
-                  Save Inspection
+                <Button type="submit" size="lg" disabled={isSubmitting}>
+                  {isSubmitting ? "Saving..." : "Save Inspection"}
                 </Button>
               </div>
             )}
           </div>
         </form>
+
+        {/* Camera Dialog */}
+        <Dialog open={isCapturing} onOpenChange={(open) => {
+          if (!open) {
+            setCameraError(null);
+          }
+          setIsCapturing(open);
+        }}>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Take Photo</DialogTitle>
+              <DialogDescription>
+                Take a photo of the inspection. Make sure the area is clearly visible and well-lit.
+              </DialogDescription>
+              {cameraError && (
+                <p className="text-sm text-red-500 mt-2">
+                  Error: {cameraError}
+                </p>
+              )}
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="relative aspect-video bg-black">
+                <Webcam
+                  audio={false}
+                  ref={webcamRef}
+                  screenshotFormat="image/jpeg"
+                  videoConstraints={videoConstraints}
+                  onUserMediaError={handleCameraError}
+                  className="w-full h-full rounded-md object-cover"
+                  mirrored={!isMobile}
+                  imageSmoothing={true}
+                />
+              </div>
+              <div className="flex justify-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsCapturing(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={captureImage}
+                  disabled={!!cameraError}
+                >
+                  Capture
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Full Image Dialog */}
+        <Dialog open={!!showFullImage} onOpenChange={(open) => !open && setShowFullImage(null)}>
+          <DialogContent className="max-w-4xl">
+            {showFullImage && (
+              <img
+                src={showFullImage}
+                alt="Full size inspection image"
+                className="w-full h-auto rounded-lg"
+              />
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </Layout>
   );

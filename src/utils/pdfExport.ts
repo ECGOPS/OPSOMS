@@ -132,15 +132,27 @@ export const exportInspectionToPDF = async (inspection: VITInspectionChecklist, 
 
     // Add header with company logo and title
     const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    const regularFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+
+    // Draw header background
+    page.drawRectangle({
+      x: 0,
+      y: height - 100,
+      width: width,
+      height: 100,
+      color: rgb(0.1, 0.4, 0.6),
+    });
+
+    // Add title
     page.drawText('VIT INSPECTION REPORT', {
       x: 50,
-      y: height - 50,
+      y: height - 60,
       size: 24,
-      color: rgb(0, 0.2, 0.4),
+      color: rgb(1, 1, 1),
       font: boldFont,
     });
 
-    // Add report metadata
+    // Add report metadata in header
     let formattedDate = 'Not specified';
     try {
       if (inspection.inspectionDate) {
@@ -154,66 +166,100 @@ export const exportInspectionToPDF = async (inspection: VITInspectionChecklist, 
     }
 
     page.drawText(`Report Date: ${formattedDate}`, {
-      x: 50,
-      y: height - 80,
+      x: width - 200,
+      y: height - 60,
       size: 12,
-      color: rgb(0.2, 0.2, 0.2),
+      color: rgb(1, 1, 1),
+      font: regularFont,
     });
 
     page.drawText(`Inspector: ${inspection.inspectedBy || 'Not specified'}`, {
-      x: 50,
-      y: height - 100,
+      x: width - 200,
+      y: height - 80,
       size: 12,
-      color: rgb(0.2, 0.2, 0.2),
+      color: rgb(1, 1, 1),
+      font: regularFont,
     });
 
-    // Add asset information section
+    // Add asset information section with background
+    const sectionY = height - 150;
+    page.drawRectangle({
+      x: 40,
+      y: sectionY - 140,
+      width: width - 80,
+      height: 140,
+      color: rgb(0.95, 0.95, 0.95),
+      borderColor: rgb(0.8, 0.8, 0.8),
+      borderWidth: 1,
+    });
+
     page.drawText('Asset Information', {
       x: 50,
-      y: height - 150,
+      y: sectionY - 25,
       size: 16,
-      color: rgb(0, 0.2, 0.4),
+      color: rgb(0.1, 0.4, 0.6),
       font: boldFont,
     });
 
-    // Draw asset info table
+    // Add asset details in two columns
     const assetInfo = [
-      ['Serial Number', asset.serialNumber || 'Not specified'],
-      ['Type of Unit', asset.typeOfUnit || 'Not specified'],
-      ['Voltage Level', asset.voltageLevel || 'Not specified'],
-      ['Region', region],
-      ['District', district],
-      ['Location', asset.location || 'Not specified'],
-      ['Status', asset.status || 'Not specified'],
+      ['Serial Number:', asset.serialNumber],
+      ['Type of Unit:', asset.typeOfUnit],
+      ['Voltage Level:', asset.voltageLevel],
+      ['Region:', region],
+      ['District:', district],
+      ['Location:', asset.location],
+      ['Feeder Name:', asset.feederName],
+      ['GPS Coordinates:', asset.gpsCoordinates],
     ];
 
-    let y = height - 180;
-    assetInfo.forEach(([label, value]) => {
-      page.drawText(`${label}:`, {
-        x: 50,
-        y,
-        size: 12,
+    let yPosition = sectionY - 50;
+    const columnWidth = (width - 100) / 2;
+    const rowHeight = 16;
+    
+    assetInfo.forEach(([label, value], index) => {
+      const column = index % 2;
+      const x = 50 + (column * columnWidth);
+      
+      page.drawText(label, {
+        x,
+        y: yPosition,
+        size: 10,
+        color: rgb(0.4, 0.4, 0.4),
+        font: regularFont,
+      });
+      
+      // Truncate long values if needed
+      const maxValueLength = 25;
+      const displayValue = value || 'Not specified';
+      const truncatedValue = displayValue.length > maxValueLength 
+        ? displayValue.substring(0, maxValueLength) + '...' 
+        : displayValue;
+      
+      page.drawText(truncatedValue, {
+        x: x + 100,
+        y: yPosition,
+        size: 10,
         color: rgb(0.2, 0.2, 0.2),
+        font: boldFont,
       });
-      page.drawText(value, {
-        x: 200,
-        y,
-        size: 12,
-        color: rgb(0, 0, 0),
-      });
-      y -= 20;
+
+      if (column === 1) {
+        yPosition -= rowHeight;
+      }
     });
 
-    // Add inspection summary
-    page.drawText('Inspection Summary', {
+    // Add inspection checklist section
+    yPosition -= 40;
+    page.drawText('Inspection Checklist', {
       x: 50,
-      y: y - 30,
+      y: yPosition,
       size: 16,
-      color: rgb(0, 0.2, 0.4),
+      color: rgb(0.1, 0.4, 0.6),
       font: boldFont,
     });
 
-    // Calculate summary statistics
+    // Add inspection items in a table format
     const inspectionItems = [
       { name: 'Rodent/Termite Encroachment', status: inspection.rodentTermiteEncroachment || 'Not specified' },
       { name: 'Clean and Dust Free', status: inspection.cleanDustFree || 'Not specified' },
@@ -237,100 +283,173 @@ export const exportInspectionToPDF = async (inspection: VITInspectionChecklist, 
       { name: 'Correct Labelling', status: inspection.correctLabelling || 'Not specified' },
     ];
 
-    const totalItems = inspectionItems.length;
-    const goodItems = inspectionItems.filter(item => item.status === 'Yes' || item.status === 'Good').length;
-    const badItems = totalItems - goodItems;
-    const goodPercentage = ((goodItems / totalItems) * 100).toFixed(1);
-
-    const summaryInfo = [
-      ['Total Items Inspected', totalItems.toString()],
-      ['Items in Good Condition', `${goodItems} (${goodPercentage}%)`],
-      ['Items Requiring Attention', badItems.toString()],
-    ];
-
-    y -= 60;
-    summaryInfo.forEach(([label, value]) => {
-      page.drawText(`${label}:`, {
-        x: 50,
-        y,
-        size: 12,
-        color: rgb(0.2, 0.2, 0.2),
-      });
-      page.drawText(value, {
-        x: 200,
-        y,
-        size: 12,
-        color: rgb(0, 0, 0),
-      });
-      y -= 20;
-    });
-
-    // Add detailed inspection results
-    const resultsPage = pdfDoc.addPage([595.28, 841.89]);
-    resultsPage.drawText('Detailed Inspection Results', {
-      x: 50,
-      y: height - 50,
-      size: 16,
-      color: rgb(0, 0.2, 0.4),
-      font: boldFont,
-    });
-
-    // Draw inspection items table
-    y = height - 80;
-    inspectionItems.forEach((item, index) => {
-      if (y < 100) {
-        // Add new page if running out of space
-        const newPage = pdfDoc.addPage([595.28, 841.89]);
-        y = height - 50;
-        resultsPage.drawText('Detailed Inspection Results (Continued)', {
-          x: 50,
-          y,
-          size: 16,
-          color: rgb(0, 0.2, 0.4),
-          font: boldFont,
-        });
-        y -= 30;
+    yPosition -= 20;
+    let currentPage = page;
+    inspectionItems.forEach(({ name, status }, index) => {
+      // Check if we need a new page
+      if (yPosition < 100) {
+        currentPage = pdfDoc.addPage([595.28, 841.89]);
+        yPosition = height - 50;
       }
 
-      // Draw item details
-      resultsPage.drawText(`${index + 1}. ${item.name}`, {
-        x: 50,
-        y,
-        size: 12,
-        color: rgb(0, 0, 0),
+      // Draw row background
+      currentPage.drawRectangle({
+        x: 40,
+        y: yPosition - 15,
+        width: width - 80,
+        height: 20,
+        color: index % 2 === 0 ? rgb(0.98, 0.98, 0.98) : rgb(1, 1, 1),
       });
 
-      const statusText = item.status === 'Yes' || item.status === 'Good' ? '[OK] Good' : '[X] Requires Attention';
-      const statusColor = item.status === 'Yes' || item.status === 'Good' ? rgb(0, 0.5, 0) : rgb(0.8, 0, 0);
+      // Draw item name
+      currentPage.drawText(name, {
+        x: 50,
+        y: yPosition,
+        size: 10,
+        color: rgb(0.2, 0.2, 0.2),
+        font: regularFont,
+      });
 
-      resultsPage.drawText(`Status: ${statusText}`, {
-        x: 300,
-        y,
-        size: 12,
+      // Draw status with color coding
+      const statusColor = status === 'Yes' || status === 'Good' ? rgb(0, 0.6, 0) : rgb(0.8, 0, 0);
+      currentPage.drawText(status, {
+        x: width - 150,
+        y: yPosition,
+        size: 10,
         color: statusColor,
-      });
-
-      y -= 30;
-    });
-
-    // Add remarks if any
-    if (inspection.remarks) {
-      const remarksPage = pdfDoc.addPage([595.28, 841.89]);
-      remarksPage.drawText('Additional Remarks', {
-        x: 50,
-        y: height - 50,
-        size: 16,
-        color: rgb(0, 0.2, 0.4),
         font: boldFont,
       });
 
-      remarksPage.drawText(inspection.remarks, {
+      yPosition -= 20;
+    });
+
+    // Add remarks section if any
+    if (inspection.remarks) {
+      // Check if we need a new page
+      if (yPosition < 150) {
+        currentPage = pdfDoc.addPage([595.28, 841.89]);
+        yPosition = height - 50;
+      }
+
+      yPosition -= 40;
+      currentPage.drawText('Remarks', {
         x: 50,
-        y: height - 100,
-        size: 12,
-        color: rgb(0.3, 0.3, 0.3),
+        y: yPosition,
+        size: 16,
+        color: rgb(0.1, 0.4, 0.6),
+        font: boldFont,
+      });
+
+      // Draw remarks box
+      currentPage.drawRectangle({
+        x: 40,
+        y: yPosition - 100,
+        width: width - 80,
+        height: 80,
+        color: rgb(0.95, 0.95, 0.95),
+        borderColor: rgb(0.8, 0.8, 0.8),
+        borderWidth: 1,
+      });
+
+      currentPage.drawText(inspection.remarks, {
+        x: 50,
+        y: yPosition - 30,
+        size: 10,
+        color: rgb(0.2, 0.2, 0.2),
+        font: regularFont,
         maxWidth: width - 100,
       });
+    }
+
+    // Add photos section if there are any photos
+    if (inspection.photoUrls && inspection.photoUrls.length > 0) {
+      // Check if we need a new page
+      if (yPosition < 150) {
+        currentPage = pdfDoc.addPage([595.28, 841.89]);
+        yPosition = height - 50;
+      }
+
+      // Add photos header
+      currentPage.drawRectangle({
+        x: 0,
+        y: height - 60,
+        width: width,
+        height: 60,
+        color: rgb(0.1, 0.4, 0.6),
+      });
+
+      currentPage.drawText('Inspection Photos', {
+        x: 50,
+        y: height - 35,
+        size: 20,
+        color: rgb(1, 1, 1),
+        font: boldFont,
+      });
+
+      let photoY = height - 100;
+      const photoWidth = 250;
+      const photoHeight = 180;
+      const margin = 30;
+
+      for (const photoUrl of inspection.photoUrls) {
+        try {
+          // Check if we need a new page for the next photo
+          if (photoY < 150) {
+            currentPage = pdfDoc.addPage([595.28, 841.89]);
+            photoY = height - 50;
+          }
+
+          // Convert base64 to Uint8Array
+          const base64Data = photoUrl.split(',')[1];
+          const imageBytes = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+          
+          // Embed the image
+          const image = await pdfDoc.embedJpg(imageBytes);
+          
+          // Calculate dimensions to maintain aspect ratio
+          const aspectRatio = image.width / image.height;
+          let finalWidth = photoWidth;
+          let finalHeight = photoWidth / aspectRatio;
+          
+          if (finalHeight > photoHeight) {
+            finalHeight = photoHeight;
+            finalWidth = photoHeight * aspectRatio;
+          }
+
+          // Draw photo frame
+          currentPage.drawRectangle({
+            x: 40,
+            y: photoY - finalHeight - 10,
+            width: finalWidth + 20,
+            height: finalHeight + 20,
+            color: rgb(1, 1, 1),
+            borderColor: rgb(0.8, 0.8, 0.8),
+            borderWidth: 1,
+          });
+
+          // Draw the image
+          currentPage.drawImage(image, {
+            x: 50,
+            y: photoY - finalHeight,
+            width: finalWidth,
+            height: finalHeight,
+          });
+
+          // Add photo caption
+          currentPage.drawText(`Photo ${inspection.photoUrls.indexOf(photoUrl) + 1}`, {
+            x: 50,
+            y: photoY - finalHeight - 20,
+            size: 10,
+            color: rgb(0.4, 0.4, 0.4),
+            font: regularFont,
+          });
+
+          // Update Y position for next photo
+          photoY -= finalHeight + margin + 30;
+        } catch (error) {
+          console.error('Error embedding photo:', error);
+        }
+      }
     }
 
     // Add footer with page numbers
@@ -341,6 +460,7 @@ export const exportInspectionToPDF = async (inspection: VITInspectionChecklist, 
         y: 30,
         size: 10,
         color: rgb(0.5, 0.5, 0.5),
+        font: regularFont,
       });
     });
 
@@ -397,9 +517,10 @@ export const exportSubstationInspectionToPDF = async (inspection: SubstationInsp
     const sectionSpacing = 30;
     
     let currentY = height - margin;
+    let currentPage = page;
     
     // Add header
-    page.drawText('SUBSTATION INSPECTION REPORT', {
+    currentPage.drawText('SUBSTATION INSPECTION REPORT', {
       x: margin,
       y: currentY,
       size: 24,
@@ -421,7 +542,7 @@ export const exportSubstationInspectionToPDF = async (inspection: SubstationInsp
       console.warn('Error formatting inspection date:', error);
     }
 
-    page.drawText(`Report Date: ${formattedDate}`, {
+    currentPage.drawText(`Report Date: ${formattedDate}`, {
       x: margin,
       y: currentY,
       size: 12,
@@ -430,7 +551,7 @@ export const exportSubstationInspectionToPDF = async (inspection: SubstationInsp
     });
     currentY -= lineHeight;
 
-    page.drawText(`Created By: ${inspection.createdBy || 'Not specified'}`, {
+    currentPage.drawText(`Created By: ${inspection.createdBy || 'Not specified'}`, {
       x: margin,
       y: currentY,
       size: 12,
@@ -440,7 +561,7 @@ export const exportSubstationInspectionToPDF = async (inspection: SubstationInsp
     currentY -= lineHeight;
 
     // Add substation information
-    page.drawText('Substation Information:', {
+    currentPage.drawText('Substation Information:', {
       x: margin,
       y: currentY,
       size: 14,
@@ -450,17 +571,18 @@ export const exportSubstationInspectionToPDF = async (inspection: SubstationInsp
     currentY -= lineHeight;
 
     const substationInfo = [
-      ['Substation No', inspection.substationNo],
-      ['Region', inspection.region],
-      ['District', inspection.district],
-      ['Type', inspection.type],
-      ['Location', inspection.location || 'Not specified'],
-      ['Voltage Level', inspection.voltageLevel || 'Not specified'],
-      ['Status', inspection.status || 'Not specified'],
+      { label: "Region", value: inspection.region },
+      { label: "District", value: inspection.district },
+      { label: "Date", value: inspection.date },
+      { label: "Substation Number", value: inspection.substationNo },
+      { label: "Substation Name", value: inspection.substationName || "Not specified" },
+      { label: "Type", value: inspection.type },
+      { label: "Location", value: inspection.location || "Not specified" },
+      { label: "GPS Location", value: inspection.gpsLocation || "Not specified" }
     ];
 
-    substationInfo.forEach(([label, value]) => {
-      page.drawText(`${label}: ${value}`, {
+    substationInfo.forEach(({ label, value }) => {
+      currentPage.drawText(`${label}: ${value}`, {
         x: margin,
         y: currentY,
         size: 12,
@@ -472,7 +594,7 @@ export const exportSubstationInspectionToPDF = async (inspection: SubstationInsp
 
     // Add inspection details
     currentY -= sectionSpacing;
-    page.drawText('Inspection Details:', {
+    currentPage.drawText('Inspection Details:', {
       x: margin,
       y: currentY,
       size: 14,
@@ -481,141 +603,138 @@ export const exportSubstationInspectionToPDF = async (inspection: SubstationInsp
     });
     currentY -= lineHeight;
 
-    // Group items by category
-    const categories = [
+    // Define categories based on inspection type
+    const categories = inspection.substationType === 'primary' ? [
       { 
-        title: 'General Building Information', 
-        key: 'general building',
+        title: 'Site Condition', 
+        key: 'siteCondition',
+        description: 'This section covers the inspection of the substation site and surrounding area.'
+      },
+      { 
+        title: 'General Building', 
+        key: 'generalBuilding',
         description: 'This section covers the general condition and maintenance of the substation building.'
       },
       { 
         title: 'Control Equipment', 
-        key: 'control equipment',
+        key: 'controlEquipment',
         description: 'This section covers the inspection of control panels, relays, and other control equipment.'
-      },
-      { 
-        title: 'Power Transformer', 
-        key: 'power transformer',
-        description: 'This section covers the inspection of transformers, cooling systems, and related equipment.'
-      },
-      { 
-        title: 'Outdoor Equipment', 
-        key: 'outdoor equipment',
-        description: 'This section covers the inspection of outdoor equipment, switchgear, and related components.'
-      },
-      { 
-        title: 'Site Condition', 
-        key: 'site condition',
-        description: 'This section covers the inspection of the substation site and surrounding area.'
       },
       { 
         title: 'Basement', 
         key: 'basement',
         description: 'This section covers the inspection of the substation basement and related equipment.'
+      },
+      { 
+        title: 'Power Transformer', 
+        key: 'powerTransformer',
+        description: 'This section covers the inspection of transformers, cooling systems, and related equipment.'
+      },
+      { 
+        title: 'Outdoor Equipment', 
+        key: 'outdoorEquipment',
+        description: 'This section covers the inspection of outdoor equipment, switchgear, and related components.'
+      }
+    ] : [
+      {
+        title: 'Site Condition',
+        key: 'siteCondition',
+        description: 'This section covers the inspection of the substation site and surrounding area.'
+      },
+      {
+        title: 'Transformer',
+        key: 'transformer',
+        description: 'This section covers the inspection of transformers and related equipment.'
+      },
+      {
+        title: 'Area Fuse',
+        key: 'areaFuse',
+        description: 'This section covers the inspection of area fuses and related components.'
+      },
+      {
+        title: 'Arrestors',
+        key: 'arrestors',
+        description: 'This section covers the inspection of arrestors and related equipment.'
+      },
+      {
+        title: 'Switchgear',
+        key: 'switchgear',
+        description: 'This section covers the inspection of switchgear and related components.'
+      },
+      {
+        title: 'Paint Work',
+        key: 'paintWork',
+        description: 'This section covers the inspection of paint work and general appearance.'
       }
     ];
 
-    let currentPage = page;
-
-    categories.forEach(category => {
-      // Check if we need a new page
-      if (currentY < margin + lineHeight * 5) {
+    // Add each category
+    for (const category of categories) {
+      if (currentY < margin + lineHeight * 3) {
         currentPage = pdfDoc.addPage([595.28, 841.89]);
         currentY = height - margin;
       }
 
-      // Add section title
-      currentY -= sectionSpacing;
       currentPage.drawText(category.title, {
         x: margin,
         y: currentY,
-        size: 16,
+        size: 14,
         color: rgb(0, 0.2, 0.4),
         font: boldFont,
       });
       currentY -= lineHeight;
 
-      // Add section description
-      currentPage.drawText(category.description, {
-        x: margin,
-        y: currentY,
-        size: 10,
-        color: rgb(0.3, 0.3, 0.3),
-        font: regularFont,
-      });
-      currentY -= lineHeight * 1.5;
-
       // Get items for this category
-      const categoryItems = inspection.items?.filter(item => 
-        item.category.toLowerCase() === category.key.toLowerCase()
-      ) || [];
+      const items = (inspection as any)[category.key] || [];
+      console.log(`Processing category ${category.key}:`, items); // Debug log
 
-      if (categoryItems.length > 0) {
-        categoryItems.forEach(item => {
+      if (items.length === 0) {
+        currentPage.drawText('No items in this category', {
+          x: margin + 20,
+          y: currentY,
+          size: 12,
+          color: rgb(0.4, 0.4, 0.4),
+          font: regularFont,
+        });
+        currentY -= lineHeight;
+      } else {
+        for (const item of items) {
           if (currentY < margin + lineHeight * 3) {
             currentPage = pdfDoc.addPage([595.28, 841.89]);
             currentY = height - margin;
           }
 
-          // Draw item name
-          currentPage.drawText(`• ${item.name}`, {
-            x: margin,
+          currentPage.drawText(`• ${item.name}: ${item.status || 'Not specified'}`, {
+            x: margin + 20,
             y: currentY,
             size: 12,
             color: rgb(0.2, 0.2, 0.2),
             font: regularFont,
           });
-
-          // Draw status with color coding
-          const statusText = item.status || 'Not specified';
-          const statusColor = statusText.toLowerCase() === 'good' ? rgb(0, 0.5, 0) : 
-                            statusText.toLowerCase() === 'bad' ? rgb(0.8, 0, 0) : 
-                            rgb(0.5, 0.5, 0.5);
-
-          currentPage.drawText(`Status: ${statusText}`, {
-            x: width - margin - 150,
-            y: currentY,
-            size: 12,
-            color: statusColor,
-            font: regularFont,
-          });
-
           currentY -= lineHeight;
 
-          // Add remarks if available
           if (item.remarks) {
             if (currentY < margin + lineHeight * 3) {
               currentPage = pdfDoc.addPage([595.28, 841.89]);
               currentY = height - margin;
             }
 
-            currentPage.drawText(`Remarks: ${item.remarks}`, {
-              x: margin + 20,
+            currentPage.drawText(`  Remarks: ${item.remarks}`, {
+              x: margin + 40,
               y: currentY,
-              size: 10,
-              color: rgb(0.3, 0.3, 0.3),
+              size: 12,
+              color: rgb(0.4, 0.4, 0.4),
               font: regularFont,
             });
             currentY -= lineHeight;
           }
-
-          currentY -= lineHeight * 0.5;
-        });
-      } else {
-        currentPage.drawText('No items recorded for this section', {
-          x: margin,
-          y: currentY,
-          size: 12,
-          color: rgb(0.5, 0.5, 0.5),
-          font: regularFont,
-        });
-        currentY -= lineHeight;
+        }
       }
-    });
+      currentY -= sectionSpacing;
+    }
 
     // Add remarks if available
     if (inspection.remarks) {
-      currentY -= sectionSpacing;
       if (currentY < margin + lineHeight * 3) {
         currentPage = pdfDoc.addPage([595.28, 841.89]);
         currentY = height - margin;
@@ -646,6 +765,76 @@ export const exportSubstationInspectionToPDF = async (inspection: SubstationInsp
         });
         currentY -= lineHeight;
       });
+    }
+
+    // Add photos if available
+    if (inspection.images && inspection.images.length > 0) {
+      if (currentY < margin + lineHeight * 3) {
+        currentPage = pdfDoc.addPage([595.28, 841.89]);
+        currentY = height - margin;
+      }
+
+      currentPage.drawText('Inspection Photos:', {
+        x: margin,
+        y: currentY,
+        size: 14,
+        color: rgb(0, 0.2, 0.4),
+        font: boldFont,
+      });
+      currentY -= lineHeight * 2;
+
+      // Process each image
+      for (const imageUrl of inspection.images) {
+        try {
+          // Fetch the image
+          const response = await fetch(imageUrl);
+          const imageBytes = await response.arrayBuffer();
+          
+          // Embed the image in the PDF
+          const image = await pdfDoc.embedJpg(imageBytes);
+          
+          // Calculate image dimensions to fit the page width while maintaining aspect ratio
+          const maxWidth = width - (margin * 2);
+          const maxHeight = 300; // Maximum height for each image
+          const imageWidth = image.width;
+          const imageHeight = image.height;
+          
+          let scaledWidth = imageWidth;
+          let scaledHeight = imageHeight;
+          
+          if (scaledWidth > maxWidth) {
+            const ratio = maxWidth / scaledWidth;
+            scaledWidth = maxWidth;
+            scaledHeight = scaledHeight * ratio;
+          }
+          
+          if (scaledHeight > maxHeight) {
+            const ratio = maxHeight / scaledHeight;
+            scaledHeight = maxHeight;
+            scaledWidth = scaledWidth * ratio;
+          }
+
+          // Check if we need a new page
+          if (currentY - scaledHeight < margin + lineHeight * 3) {
+            currentPage = pdfDoc.addPage([595.28, 841.89]);
+            currentY = height - margin;
+          }
+
+          // Draw the image
+          currentPage.drawImage(image, {
+            x: margin,
+            y: currentY - scaledHeight,
+            width: scaledWidth,
+            height: scaledHeight,
+          });
+
+          currentY -= scaledHeight + lineHeight;
+        } catch (error) {
+          console.error('Error processing image:', error);
+          // Continue with the next image if one fails
+          continue;
+        }
+      }
     }
 
     // Add footer with page numbers

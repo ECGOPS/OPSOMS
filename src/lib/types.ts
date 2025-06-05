@@ -254,6 +254,7 @@ export type VITAsset = {
   type: 'VIT';
   region: string;
   district: string;
+  feederName: string;
   voltageLevel: VoltageLevel;
   typeOfUnit: string;
   serialNumber: string;
@@ -269,13 +270,15 @@ export type VITAsset = {
   syncStatus?: 'pending' | 'synced' | 'deleted' | 'created' | 'updated'; // Added for offline sync
 };
 
-export type VITInspectionChecklist = {
+export interface VITInspectionChecklist {
   id: string;
   vitAssetId: string;
   region: string;
   district: string;
   inspectionDate: string;
   inspectedBy: string;
+  remarks: string;
+  photoUrls: string[];
   rodentTermiteEncroachment: YesNoOption;
   cleanDustFree: YesNoOption;
   protectionButtonEnabled: YesNoOption;
@@ -296,18 +299,17 @@ export type VITInspectionChecklist = {
   noCorrosion: YesNoOption;
   silicaGelCondition: GoodBadOption;
   correctLabelling: YesNoOption;
-  remarks: string;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
-};
+}
 
 // Updated to match with asset-types
 export interface InspectionItem {
   id: string;
   category: string;
   name: string;
-  status: ConditionStatus;
+  status: string | undefined;
   remarks?: string;
 }
 

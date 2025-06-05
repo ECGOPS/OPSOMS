@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Layout } from "@/components/layout/Layout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,8 +20,10 @@ import { ConditionStatus, InspectionItem } from "@/lib/types";
 import { SubstationInspection } from "@/lib/asset-types";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Camera, Upload, X } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import Webcam from "react-webcam";
 
 // Hook to detect if screen is mobile size (you might need to define breakpoints based on your project's needs)
 const useIsMobile = (breakpoint = 768) => {
@@ -54,6 +56,19 @@ export default function EditInspectionPage() {
   });
   const [loading, setLoading] = useState(true);
   const isMobile = useIsMobile();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [capturedImages, setCapturedImages] = useState<string[]>([]);
+  const [showFullImage, setShowFullImage] = useState<string | null>(null);
+  const webcamRef = useRef<Webcam>(null);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+
+  // Add video constraints
+  const videoConstraints = {
+    facingMode: "environment",
+    width: { ideal: 1280 },
+    height: { ideal: 720 }
+  };
 
   useEffect(() => {
     if (id) {
@@ -74,6 +89,7 @@ export default function EditInspectionPage() {
           outdoorEquipment: inspection.outdoorEquipment || [],
           basement: inspection.basement || [],
           remarks: inspection.remarks || "", // This is used for additional notes
+          images: inspection.images || [], // Add images to formData
           // Combine items for backward compatibility
           items: [
             ...(inspection.siteCondition || []),
@@ -85,6 +101,7 @@ export default function EditInspectionPage() {
           ]
         });
         setLoading(false);
+        setCapturedImages(inspection.images || []);
       } else {
         toast.error("Inspection not found");
         navigate("/asset-management/inspection-management");
@@ -229,8 +246,55 @@ export default function EditInspectionPage() {
     return formData.items?.filter(item => item.category.toLowerCase() === categoryMap[category].toLowerCase()) || [];
   };
 
+  // Handle camera error
+  const handleCameraError = (error: string | DOMException) => {
+    console.error('Camera error:', error);
+    setCameraError(error.toString());
+    toast.error("Failed to access camera. Please check your camera permissions.");
+  };
+
+  // Capture image from webcam
+  const captureImage = () => {
+    if (webcamRef.current) {
+      const imageSrc = webcamRef.current.getScreenshot();
+      if (imageSrc) {
+        setCapturedImages(prev => [...prev, imageSrc]);
+        setIsCapturing(false);
+        setCameraError(null);
+      }
+    }
+  };
+
+  // Handle file upload
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files) {
+      Array.from(files).forEach(file => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setCapturedImages(prev => [...prev, reader.result as string]);
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+  };
+
+  // Remove image
+  const removeImage = (index: number) => {
+    setCapturedImages(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // Update formData when capturedImages changes
+  useEffect(() => {
+    // Sync capturedImages with formData.images
+    setFormData(prev => ({
+      ...prev,
+      images: capturedImages
+    }));
+  }, [capturedImages]);
+
   // Handle form submission
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!formData.region || !formData.district || !formData.date || !formData.substationNo) {
@@ -249,6 +313,7 @@ export default function EditInspectionPage() {
         outdoorEquipment: formData.outdoorEquipment || [],
         basement: formData.basement || [],
         remarks: formData.remarks || "",
+        images: capturedImages, // Use capturedImages state for the latest images
         // Update the combined items array to match category-specific arrays
         items: [
           ...(formData.siteCondition || []),
@@ -262,15 +327,17 @@ export default function EditInspectionPage() {
       
       console.log('Submitting inspection data:', updatedData);
       
-      updateSubstationInspection(id, updatedData)
-        .then(() => {
-          toast.success("Inspection updated successfully");
-          navigate("/asset-management/inspection-management");
-        })
-        .catch((error) => {
-          console.error("Error updating inspection:", error);
-          toast.error("Failed to update inspection");
-        });
+      setIsSubmitting(true);
+      try {
+        await updateSubstationInspection(id, updatedData);
+        toast.success("Inspection updated successfully");
+        navigate(`/asset-management/inspection-details/${id}`);
+      } catch (error) {
+        console.error("Error updating inspection:", error);
+        toast.error("Failed to update inspection");
+      } finally {
+        setIsSubmitting(false);
+      }
     }
   };
 
@@ -399,6 +466,70 @@ export default function EditInspectionPage() {
                       </SelectContent>
                     </Select>
                   </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Photos Section */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Photos</CardTitle>
+                <CardDescription>Take or upload photos of the inspection</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setIsCapturing(true)}
+                      className="w-full sm:flex-1"
+                    >
+                      <Camera className="mr-2 h-4 w-4" />
+                      Take Photo
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full sm:flex-1"
+                      onClick={() => document.getElementById('file-upload')?.click()}
+                    >
+                      <Upload className="mr-2 h-4 w-4" />
+                      Upload Photos
+                      <input
+                        id="file-upload"
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        className="hidden"
+                        onChange={handleFileUpload}
+                      />
+                    </Button>
+                  </div>
+
+                  {capturedImages.length > 0 && (
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                      {capturedImages.map((image, index) => (
+                        <div key={index} className="relative group">
+                          <img
+                            src={image}
+                            alt={`Inspection image ${index + 1}`}
+                            className="w-full h-32 object-cover rounded-lg cursor-pointer"
+                            onClick={() => setShowFullImage(image)}
+                          />
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="icon"
+                            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => removeImage(index)}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -687,12 +818,77 @@ export default function EditInspectionPage() {
               >
                 Cancel
               </Button>
-              <Button type="submit" size="lg" className="w-full sm:w-auto">
-                Save Changes
+              <Button type="submit" size="lg" className="w-full sm:w-auto" disabled={isSubmitting}>
+                {isSubmitting ? "Saving..." : "Save Changes"}
               </Button>
             </div>
           </div>
         </form>
+
+        {/* Camera Dialog */}
+        <Dialog open={isCapturing} onOpenChange={(open) => {
+          if (!open) {
+            setCameraError(null);
+          }
+          setIsCapturing(open);
+        }}>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Take Photo</DialogTitle>
+              <DialogDescription>
+                Take a photo of the inspection. Make sure the area is clearly visible and well-lit.
+              </DialogDescription>
+              {cameraError && (
+                <p className="text-sm text-red-500 mt-2">
+                  Error: {cameraError}
+                </p>
+              )}
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="relative aspect-video bg-black">
+                <Webcam
+                  audio={false}
+                  ref={webcamRef}
+                  screenshotFormat="image/jpeg"
+                  videoConstraints={videoConstraints}
+                  onUserMediaError={handleCameraError}
+                  className="w-full h-full rounded-md object-cover"
+                  mirrored={!isMobile}
+                  imageSmoothing={true}
+                />
+              </div>
+              <div className="flex justify-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsCapturing(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={captureImage}
+                  disabled={!!cameraError}
+                >
+                  Capture
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Full Image Dialog */}
+        <Dialog open={!!showFullImage} onOpenChange={(open) => !open && setShowFullImage(null)}>
+          <DialogContent className="max-w-4xl">
+            {showFullImage && (
+              <img
+                src={showFullImage}
+                alt="Full size inspection image"
+                className="w-full h-auto rounded-lg"
+              />
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </Layout>
   );
