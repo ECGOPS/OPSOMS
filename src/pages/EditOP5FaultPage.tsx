@@ -848,7 +848,7 @@ export default function EditOP5FaultPage() {
                       <Select
                         value={formData.regionId || ''} 
                         onValueChange={(value) => handleSelectChange('regionId', value)}
-                        disabled={user?.role === "district_engineer" || user?.role === "regional_engineer"}
+                        disabled={user?.role === "district_engineer" || user?.role === "regional_engineer" || user?.role === "technician" || user?.role === "regional_general_manager"}
                       >
                         <SelectTrigger id="region" className="h-10">
                           <SelectValue placeholder="Select region" />
@@ -868,7 +868,7 @@ export default function EditOP5FaultPage() {
                       <Select 
                         value={formData.districtId || ''} 
                         onValueChange={(value) => handleSelectChange('districtId', value)}
-                        disabled={user?.role === "district_engineer" || !formData.regionId}
+                        disabled={user?.role === "district_engineer" || user?.role === "technician" || !formData.regionId}
                       >
                         <SelectTrigger id="district" className="h-10">
                           <SelectValue placeholder="Select district" />

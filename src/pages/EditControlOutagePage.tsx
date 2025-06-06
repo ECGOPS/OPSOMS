@@ -294,14 +294,14 @@ export default function EditControlOutagePage() {
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
                      <div className="space-y-2">
                        <Label htmlFor="regionId">Region</Label>
-                       <Select value={formData.regionId || ''} onValueChange={(value) => handleSelectChange('regionId', value)} disabled={user?.role === "district_engineer" || user?.role === "regional_engineer" || user?.role === "regional_general_manager"}> 
+                       <Select value={formData.regionId || ''} onValueChange={(value) => handleSelectChange('regionId', value)} disabled={user?.role === "district_engineer" || user?.role === "regional_engineer" || user?.role === "technician" || user?.role === "regional_general_manager"}> 
                          <SelectTrigger className="h-10"><SelectValue placeholder="Select region" /></SelectTrigger>
                          <SelectContent>{regions.map(r => (<SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>))}</SelectContent>
                        </Select>
                      </div>
                      <div className="space-y-2">
                        <Label htmlFor="districtId">District</Label>
-                       <Select value={formData.districtId || ''} onValueChange={(value) => handleSelectChange('districtId', value)} disabled={user?.role === "district_engineer" || !formData.regionId}>
+                       <Select value={formData.districtId || ''} onValueChange={(value) => handleSelectChange('districtId', value)} disabled={user?.role === "district_engineer" || user?.role === "technician" || !formData.regionId}>
                          <SelectTrigger className="h-10"><SelectValue placeholder="Select district" /></SelectTrigger>
                          <SelectContent>{filteredDistricts.map(d => (<SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>))}</SelectContent>
                        </Select>
