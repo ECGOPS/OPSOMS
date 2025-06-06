@@ -70,11 +70,11 @@ export default function DashboardPage() {
   // Advanced filter states
   const [filterFaultType, setFilterFaultType] = useState<string>("all");
   const [dateRange, setDateRange] = useState<DateRange>({ from: undefined, to: undefined });
-  const [selectedDay, setSelectedDay] = useState<Date | undefined>(undefined);
+  const [selectedDay, setSelectedDay] = useState<Date | undefined>(new Date());
   const [selectedMonth, setSelectedMonth] = useState<number | undefined>(undefined);
   const [selectedMonthYear, setSelectedMonthYear] = useState<number | undefined>(undefined);
   const [selectedYear, setSelectedYear] = useState<number | undefined>(undefined);
-  const [dateFilterType, setDateFilterType] = useState<"range" | "day" | "month" | "year">("range");
+  const [dateFilterType, setDateFilterType] = useState<"range" | "day" | "month" | "year">("day");
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);

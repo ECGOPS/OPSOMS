@@ -28,27 +28,9 @@ class LoggingService {
     if (this.initialized) return;
 
     try {
-      // Create a test document to ensure the collection exists
-      const testDoc = {
-        userId: 'system',
-        userName: 'System',
-        userRole: 'system',
-        action: 'Initialize',
-        entityType: 'System',
-        entityId: 'init',
-        details: 'Initializing user logs collection',
-        timestamp: new Date(),
-      };
-
-      // Add the test document
-      const docRef = await addDoc(collection(db, "userLogs"), testDoc);
-      console.log('Successfully initialized userLogs collection with ID:', docRef.id);
-      
-      // Delete the test document
-      await deleteDoc(docRef);
-      console.log('Successfully cleaned up test document');
-
+      // Simply mark as initialized without creating test document
       this.initialized = true;
+      console.log('Successfully initialized userLogs collection');
     } catch (error) {
       console.error('Error initializing userLogs collection:', error);
       // Don't throw the error, just log it
