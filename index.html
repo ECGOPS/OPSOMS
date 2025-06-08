@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ECG Outage Management System - Power Distribution Management</title>
+    
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#000000" />
+    <meta name="description" content="ECG OMS - Asset Management and Inspection System" />
+    <meta name="author" content="ECG" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/ecg-images/ecg-logo.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="apple-mobile-web-app-title" content="ECG Outage Management System" />
+
+    <!-- Open Graph Meta Tags -->
+    <meta property="og:title" content="ECG OMS" />
+    <meta property="og:description" content="Comprehensive asset management and inspection system for ECG's electrical infrastructure" />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="/ecg-images/ecg-logo.png" />
+    <meta property="og:url" content="https://ecg-oms.com" />
+
+    <!-- Twitter Meta Tags -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@ECGhana" />
+    <meta name="twitter:title" content="ECG OMS" />
+    <meta name="twitter:description" content="Comprehensive asset management and inspection system for ECG's electrical infrastructure" />
+    <meta name="twitter:image" content="/ecg-images/ecg-logo.png" />
+    
+    <link rel="icon" type="image/png" href="/ecg-images/ecg-logo.png">
+  </head>
+
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+
+    <!-- Service Worker Registration -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then(registration => {
+              console.log('ServiceWorker registration successful');
+            })
+            .catch(err => {
+              console.log('ServiceWorker registration failed: ', err);
+            });
+        });
+      }
+    </script>
+  </body>
+</html>
