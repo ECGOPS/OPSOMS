@@ -29,13 +29,12 @@ jobs:
 
       - name: Remove sensitive files
         run: |
-          git rm -f .env
-          git rm -f .env.local
-          git rm -f .env.development
-          git rm -f .env.production
-          git rm -f .env.demo
-          git rm -f serviceAccountKey.json
-          git rm -f firebase-config.json
+          # Remove files if they exist
+          for file in .env .env.local .env.development .env.production .env.demo serviceAccountKey.json firebase-config.json; do
+            if [ -f "$file" ]; then
+              git rm -f "$file"
+            fi
+          done
 
       - name: Commit changes
         run: |
