@@ -137,3 +137,7 @@ Proprietary - All rights reserved
 For support and inquiries, please contact:
 - Email: afiifi@ecggh.com
 - Phone: +233245003731
+
+# OPSOMS
+
+Test sync with OMSDEMO repository.
