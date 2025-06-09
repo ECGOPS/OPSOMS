@@ -9,7 +9,9 @@ import {
   onAuthStateChanged,
   User as FirebaseUser,
   sendPasswordResetEmail,
-  updatePassword
+  updatePassword,
+  setPersistence,
+  browserLocalPersistence
 } from "firebase/auth";
 import {
   collection,
@@ -29,6 +31,7 @@ import { StaffIdEntry } from "@/components/user-management/StaffIdManagement";
 import { httpsCallable } from "firebase/functions";
 import { securityMonitoringService, EVENT_TYPES } from "@/services/SecurityMonitoringService";
 import LoggingService from "@/services/LoggingService";
+import { resetFirestoreConnection } from '../utils/firestore';
 
 // Export the interface
 export interface AuthContextType {
@@ -58,6 +61,18 @@ export interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export { AuthContext };
+
+// Add this function before the AuthProvider component
+const handleFirestoreError = (error: any) => {
+  console.error('Firestore error:', error);
+  if (error.code === 'permission-denied') {
+    throw new Error('You do not have permission to perform this action');
+  } else if (error.code === 'unavailable') {
+    throw new Error('The service is currently unavailable. Please try again later');
+  } else {
+    throw new Error('An error occurred while accessing the database');
+  }
+};
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -142,11 +157,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               displayName: userData.name || "",
               name: userData.name || "",
               role: userData.role,
-              staffId: userData.staffId || "",
               region: userData.region,
               regionId: userData.regionId,
               district: userData.district,
               districtId: userData.districtId,
+              staffId: userData.staffId || "",
               disabled: userData.disabled,
               mustChangePassword: userData.mustChangePassword,
               photoURL: userData.photoURL
@@ -434,7 +449,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       // Set user state
-      setUser({
+      const userState: User = {
         id: user.uid,
         uid: user.uid,
         email: user.email || "",
@@ -448,7 +463,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         staffId: staffId || "",
         disabled: false,
         mustChangePassword: false
-      });
+      };
+      setUser(userState);
 
       toast.success("Account created successfully");
     } catch (error: any) {
@@ -680,9 +696,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           userName: user.name,
           userRole: user.role,
           id: userRef.id,
-          userName: userData.name,
-          userEmail: userData.email,
-          userRole: userData.role,
+          targetUserName: userData.name,
+          targetUserEmail: userData.email,
+          targetUserRole: userData.role,
           region: userData.region,
           district: userData.district
         });

@@ -9,7 +9,10 @@ import {
   query, 
   where,
   Timestamp,
-  serverTimestamp
+  serverTimestamp,
+  getFirestore,
+  disableNetwork,
+  enableNetwork
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
@@ -116,4 +119,19 @@ export async function getPendingSyncItems() {
 export async function clearPendingSyncItem(id: string) {
   const docRef = doc(db, COLLECTIONS.PENDING_SYNC, id);
   await updateDoc(docRef, { status: 'completed' });
+}
+
+// Reset Firestore connection
+export async function resetFirestoreConnection() {
+  try {
+    const db = getFirestore();
+    // First disable the network
+    await disableNetwork(db);
+    // Then enable it again
+    await enableNetwork(db);
+    console.log('Firestore connection reset successfully');
+  } catch (error) {
+    console.error('Error resetting Firestore connection:', error);
+    throw error;
+  }
 } 
