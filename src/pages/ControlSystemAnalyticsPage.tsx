@@ -78,6 +78,7 @@ export default function ControlSystemAnalyticsPage() {
   const [chartType, setChartType] = useState<'bar' | 'line' | 'pie'>('bar');
   const [outageType, setOutageType] = useState<'all' | 'sustained' | 'momentary'>('all');
   const [filterFaultType, setFilterFaultType] = useState<string>("all");
+  const [filterSpecificFaultType, setFilterSpecificFaultType] = useState<string>("all");
   const [minTripCount, setMinTripCount] = useState<number>(1); // Changed default to 1
   const [view, setView] = useState<'charts' | 'table'>('charts');
   const [sortField, setSortField] = useState<string>('occurrenceDate');
@@ -145,22 +146,17 @@ export default function ControlSystemAnalyticsPage() {
 
   // Add clear filters function
   const clearFilters = () => {
-    setFilterRegion(undefined);
-    setFilterDistrict(undefined);
+    setFilterRegion("all");
+    setFilterDistrict("all");
     setDateRange("all");
     setStartDate(undefined);
     setEndDate(undefined);
     setSelectedWeek(undefined);
-    setSelectedMonth(undefined);
-    setSelectedYear(undefined);
     setSelectedWeekYear(undefined);
-    setSelectedMonthYear(undefined);
     setOutageType("all");
     setFilterFaultType("all");
-    setMinTripCount(1); // Reset minimum trip count
-    setSearchQuery("");
-    setSortField("occurrenceDate");
-    setSortDirection("desc");
+    setFilterSpecificFaultType("all");
+    setMinTripCount(1);
     setCurrentPage(1);
     loadData(true);
   };
@@ -482,6 +478,26 @@ export default function ControlSystemAnalyticsPage() {
     "GridCo Outages"
   ];
 
+  // Define specific fault types
+  const specificFaultTypes = [
+    "JUMPER CUT",
+    "CONDUCTOR CUT",
+    "MERGED CONDUCTOR",
+    "HV/LV LINE CONTACT",
+    "VEGETATION",
+    "CABLE FAULT",
+    "TERMINATION FAILURE",
+    "BROKEN POLES",
+    "BURNT POLE",
+    "FAULTY ARRESTER/INSULATOR",
+    "EQIPMENT FAILURE",
+    "PUNCTURED CABLE",
+    "ANIMAL INTERRUPTION",
+    "BAD WEATHER",
+    "TRANSIENT FAULTS",
+    "OTHERS"
+  ];
+
   // Filter outages based on selected criteria
   const filteredOutages = controlSystemOutages?.filter(outage => {
     // Apply region filter
@@ -494,8 +510,13 @@ export default function ControlSystemAnalyticsPage() {
       return false;
     }
 
-    // Apply fault type filter - this should work independently
+    // Apply fault type filter
     if (filterFaultType && filterFaultType !== "all" && outage.faultType !== filterFaultType) {
+      return false;
+    }
+
+    // Apply specific fault type filter
+    if (filterSpecificFaultType && filterSpecificFaultType !== "all" && outage.specificFaultType !== filterSpecificFaultType) {
       return false;
     }
     
@@ -1876,6 +1897,26 @@ export default function ControlSystemAnalyticsPage() {
                     <SelectContent>
                       <SelectItem value="all">All Fault Types</SelectItem>
                       {faultTypes.map(type => (
+                        <SelectItem key={type} value={type}>
+                          {type}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Specific Fault Type</Label>
+                  <Select 
+                    value={filterSpecificFaultType} 
+                    onValueChange={setFilterSpecificFaultType}
+                    disabled={filterFaultType === "all" || filterFaultType === "Planned" || filterFaultType === "ECG Load Shedding" || filterFaultType === "GridCo Outages"}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select specific fault type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Specific Types</SelectItem>
+                      {specificFaultTypes.map(type => (
                         <SelectItem key={type} value={type}>
                           {type}
                         </SelectItem>

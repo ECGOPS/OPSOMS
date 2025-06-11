@@ -1,5 +1,6 @@
 import * as React from "react";
 import { Input } from "@/components/ui/input";
+import { format } from "date-fns";
 
 interface DatePickerProps {
   value: Date | null;
@@ -14,11 +15,19 @@ export function DatePicker({ value, onChange, picker = "date", className }: Date
     onChange(date);
   };
 
+  const formatValue = (date: Date | null) => {
+    if (!date) return '';
+    if (picker === "month") {
+      return format(date, "yyyy-MM");
+    }
+    return format(date, "yyyy-MM-dd");
+  };
+
   return (
     <div className={className}>
       <Input
         type={picker === "month" ? "month" : "date"}
-        value={value ? value.toISOString().split('T')[0] : ''}
+        value={formatValue(value)}
         onChange={handleChange}
         className="w-full"
       />

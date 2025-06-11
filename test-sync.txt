@@ -1,2 +1,0 @@
-This is a test file to verify the automatic sync between OPSOMS and OMSDEMO repositories.
-Created at: 2024-03-19 

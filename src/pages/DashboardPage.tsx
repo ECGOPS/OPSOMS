@@ -418,10 +418,14 @@ export default function DashboardPage() {
           </div>
         )}
         
-        <StatsOverview 
-          op5Faults={faults.op5Faults} 
-          controlOutages={faults.controlOutages} 
-        />
+        <div className="space-y-6">
+          <StatsOverview 
+            op5Faults={faults.op5Faults} 
+            controlOutages={faults.controlOutages}
+            filterRegion={filterRegion}
+            filterDistrict={filterDistrict}
+          />
+        </div>
         
         <div className="mt-8">
           <PendingFaultsList />

@@ -4,6 +4,7 @@ import path from "path";
 import { VitePWA } from 'vite-plugin-pwa';
 import { securityConfig } from './src/config/security';
 import fs from 'fs';
+import imagemin from 'vite-plugin-imagemin';
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
@@ -27,6 +28,13 @@ export default defineConfig(({ mode }) => {
     });
   }
 
+  // Check for properly formatted environment variables
+  Object.entries(env).forEach(([key, value]) => {
+    if (key.startsWith('VITE_') && !value) {
+      console.warn(`Warning: Environment variable ${key} is not properly formatted. It should start with VITE_ and contain a value.`);
+    }
+  });
+
   return {
     server: {
       host: true,
@@ -48,72 +56,101 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [
       react(),
+      imagemin({
+        gifsicle: {
+          optimizationLevel: 7,
+          interlaced: false,
+        },
+        optipng: {
+          optimizationLevel: 7,
+        },
+        mozjpeg: {
+          quality: 80,
+        },
+        pngquant: {
+          quality: [0.8, 0.9],
+          speed: 4,
+        },
+        svgo: {
+          plugins: [
+            {
+              name: 'removeViewBox',
+            },
+            {
+              name: 'removeEmptyAttrs',
+              active: false,
+            },
+          ],
+        },
+        webp: {
+          quality: 80,
+        },
+      }),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['ecg-images/ecg-logo.png'],
+        includeAssets: ['favicon.ico', 'robots.txt', 'apple-touch-icon.png'],
         manifest: {
-          name: 'ECG Outage Management System',
-          short_name: 'ECG OMS',
-          description: 'Outage Management System for ECG',
+          name: 'FaultMaster',
+          short_name: 'FaultMaster',
+          description: 'FaultMaster - Fault Management System',
           theme_color: '#ffffff',
-          background_color: '#ffffff',
-          display: 'standalone',
           icons: [
             {
-              src: '/ecg-images/ecg-logo.png',
+              src: 'pwa-192x192.png',
               sizes: '192x192',
               type: 'image/png'
             },
             {
-              src: '/ecg-images/ecg-logo.png',
+              src: 'pwa-512x512.png',
               sizes: '512x512',
               type: 'image/png'
-            },
-            {
-              src: '/ecg-images/ecg-logo.png',
-              sizes: '512x512',
-              type: 'image/png',
-              purpose: 'any maskable'
             }
-          ],
-          start_url: '/',
-          orientation: 'portrait',
-          scope: '/',
-          id: '/',
-          prefer_related_applications: false
+          ]
         },
         workbox: {
-          cleanupOutdatedCaches: true,
-          sourcemap: true,
-          globPatterns: ['**/*.{js,css,html,ico,png,svg,json}'],
-          maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5MB limit
+          globPatterns: ['**/*.{js,css,html,ico,png,svg,webp}'],
           runtimeCaching: [
             {
-              urlPattern: /^https:\/\/.*\.(png|jpg|jpeg|svg|gif)$/,
+              urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'google-fonts-cache',
+                expiration: {
+                  maxEntries: 10,
+                  maxAgeSeconds: 60 * 60 * 24 * 365 // 1 year
+                },
+                cacheableResponse: {
+                  statuses: [0, 200]
+                }
+              }
+            },
+            {
+              urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'gstatic-fonts-cache',
+                expiration: {
+                  maxEntries: 10,
+                  maxAgeSeconds: 60 * 60 * 24 * 365 // 1 year
+                },
+                cacheableResponse: {
+                  statuses: [0, 200]
+                }
+              }
+            },
+            {
+              urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp)$/,
               handler: 'CacheFirst',
               options: {
                 cacheName: 'images-cache',
                 expiration: {
-                  maxEntries: 10,
-                  maxAgeSeconds: 60 * 60 * 24 * 7 // 7 days
+                  maxEntries: 60,
+                  maxAgeSeconds: 60 * 60 * 24 * 30 // 30 days
                 }
               }
             }
           ]
-        },
-        devOptions: {
-          enabled: false,
-          type: 'module',
-          navigateFallback: 'index.html'
-        },
-        strategies: 'generateSW',
-        injectRegister: false,
-        minify: true,
-        includeManifestIcons: false,
-        injectManifest: {
-          injectionPoint: undefined
-        },
-        mode: 'production'
+        }
       })
     ].filter(Boolean),
     resolve: {
@@ -123,15 +160,87 @@ export default defineConfig(({ mode }) => {
     },
     optimizeDeps: {
       exclude: ['crypto'],
+      include: [
+        'react',
+        'react-dom',
+        '@mui/material',
+        '@mui/icons-material',
+        'date-fns',
+        'moment',
+        'lodash',
+        'react-hook-form',
+        '@hookform/resolvers',
+        'zod',
+        'recharts',
+        '@react-google-maps/api',
+        '@googlemaps/adv-markers-utils'
+      ]
     },
     build: {
-      commonjsOptions: {
-        include: [/node_modules/],
-        transformMixedEsModules: true,
+      minify: 'terser',
+      terserOptions: {
+        compress: {
+          drop_console: true,
+          drop_debugger: true,
+          pure_funcs: ['console.log', 'console.info', 'console.debug'],
+          passes: 2
+        },
+        mangle: {
+          safari10: true
+        },
+        format: {
+          comments: false
+        }
       },
       rollupOptions: {
         external: ['crypto'],
+        output: {
+          manualChunks: {
+            'vendor': ['react', 'react-dom'],
+            'ui': ['@mui/material', '@mui/icons-material', 'antd'],
+            'utils': ['date-fns', 'moment', 'lodash'],
+            'forms': ['react-hook-form', '@hookform/resolvers', 'zod'],
+            'charts': ['recharts'],
+            'maps': ['@react-google-maps/api', '@googlemaps/adv-markers-utils'],
+            'firebase': ['firebase/app', 'firebase/auth', 'firebase/firestore', 'firebase/storage'],
+            'routing': ['react-router-dom', 'react-router'],
+            'pdf': ['jspdf', 'jspdf-autotable'],
+            'ui-components': [
+              '@/components/ui/button',
+              '@/components/ui/card',
+              '@/components/ui/dialog',
+              '@/components/ui/select',
+              '@/components/ui/dropdown-menu',
+              '@/components/ui/tabs',
+              '@/components/ui/accordion',
+              '@/components/ui/table',
+              '@/components/ui/input',
+              '@/components/ui/textarea',
+              '@/components/ui/checkbox',
+              '@/components/ui/radio-group',
+              '@/components/ui/avatar',
+              '@/components/ui/badge',
+              '@/components/ui/label',
+              '@/components/ui/alert',
+              '@/components/ui/scroll-area',
+              '@/components/ui/pagination'
+            ]
+          },
+          chunkFileNames: 'assets/[name]-[hash].js',
+          entryFileNames: 'assets/[name]-[hash].js',
+          assetFileNames: 'assets/[name]-[hash].[ext]'
+        }
       },
-    },
+      chunkSizeWarningLimit: 1000,
+      sourcemap: false,
+      cssCodeSplit: true,
+      assetsInlineLimit: 4096,
+      target: 'es2015',
+      modulePreload: {
+        polyfill: true
+      },
+      reportCompressedSize: false,
+      cssMinify: true
+    }
   };
 });

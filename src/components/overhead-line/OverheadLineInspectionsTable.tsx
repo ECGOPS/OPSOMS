@@ -218,7 +218,6 @@ export function OverheadLineInspectionsTable({
       ['Burnt Lugs:', inspection.conductorCondition?.burntLugs ? 'Yes' : 'No'],
       ['Sagged Line:', inspection.conductorCondition?.saggedLine ? 'Yes' : 'No'],
       ['Undersized:', inspection.conductorCondition?.undersized ? 'Yes' : 'No'],
-      ['Linked:', inspection.conductorCondition?.linked ? 'Yes' : 'No'],
       ['Notes:', inspection.conductorCondition?.notes || 'None'],
     ];
     
@@ -235,7 +234,6 @@ export function OverheadLineInspectionsTable({
     const lightningArresterCondition = [
       ['Broken/Cracked:', inspection.lightningArresterCondition?.brokenOrCracked ? 'Yes' : 'No'],
       ['Flash over:', inspection.lightningArresterCondition?.flashOver ? 'Yes' : 'No'],
-      ['Missing:', inspection.lightningArresterCondition?.missing ? 'Yes' : 'No'],
       ['No Earthing:', inspection.lightningArresterCondition?.noEarthing ? 'Yes' : 'No'],
       ['By-passed:', inspection.lightningArresterCondition?.bypassed ? 'Yes' : 'No'],
       ['No Arrester:', inspection.lightningArresterCondition?.noArrester ? 'Yes' : 'No'],
@@ -365,10 +363,24 @@ export function OverheadLineInspectionsTable({
   const exportToCSV = (inspection: OverheadLineInspection) => {
     const headers = [
       'Region', 'District', 'Feeder Name', 'Voltage Level', 'Reference Pole',
-      'Status', 'Date', 'Pole ID', 'Pole Height', 'Pole Type', 'Pole Location'
+      'Status', 'Date', 'Pole ID', 'Pole Height', 'Pole Type', 'Pole Location',
+      'GPS Location',
+      // Pole Condition
+      'Pole Tilted', 'Pole Rotten', 'Pole Burnt', 'Pole Substandard', 'Pole Conflict with LV', 'Pole Condition Notes',
+      // Stay Condition
+      'Stay Required but Not Available', 'Stay Cut', 'Stay Misaligned', 'Stay Defective', 'Stay Condition Notes',
+      // Cross Arm Condition
+      'Cross Arm Misaligned', 'Cross Arm Bend', 'Cross Arm Corroded', 'Cross Arm Substandard', 'Cross Arm Others', 'Cross Arm Notes',
+      // Insulator Condition
+      'Insulator Broken/Cracked', 'Insulator Burnt/Flash Over', 'Insulator Shattered', 'Insulator Defective Binding', 'Insulator Notes',
+      // Conductor Condition
+      'Conductor Loose Connectors', 'Conductor Weak Jumpers', 'Conductor Burnt Lugs', 'Conductor Sagged Line', 'Conductor Undersized', 'Conductor Notes',
+      // Lightning Arrester Condition
+      'Arrester Broken/Cracked', 'Arrester Flash Over', 'Arrester No Earthing', 'Arrester Bypassed', 'Arrester No Arrester', 'Arrester Notes',
+      'Inspector Name'
     ];
     
-    const data = [
+    const csvRows = inspections.map(inspection => [
       inspection.region || 'Unknown',
       inspection.district || 'Unknown',
       inspection.feederName,
@@ -379,12 +391,61 @@ export function OverheadLineInspectionsTable({
       inspection.poleId,
       inspection.poleHeight,
       inspection.poleType,
-      inspection.poleLocation
-    ];
+      inspection.poleLocation,
+      `${inspection.latitude}, ${inspection.longitude}`,
+      // Pole Condition
+      inspection.poleCondition?.tilted ? 'Yes' : 'No',
+      inspection.poleCondition?.rotten ? 'Yes' : 'No',
+      inspection.poleCondition?.burnt ? 'Yes' : 'No',
+      inspection.poleCondition?.substandard ? 'Yes' : 'No',
+      inspection.poleCondition?.conflictWithLV ? 'Yes' : 'No',
+      inspection.poleCondition?.notes || 'N/A',
+      // Stay Condition
+      inspection.stayCondition?.requiredButNotAvailable ? 'Yes' : 'No',
+      inspection.stayCondition?.cut ? 'Yes' : 'No',
+      inspection.stayCondition?.misaligned ? 'Yes' : 'No',
+      inspection.stayCondition?.defectiveStay ? 'Yes' : 'No',
+      inspection.stayCondition?.notes || 'N/A',
+      // Cross Arm Condition
+      inspection.crossArmCondition?.misaligned ? 'Yes' : 'No',
+      inspection.crossArmCondition?.bend ? 'Yes' : 'No',
+      inspection.crossArmCondition?.corroded ? 'Yes' : 'No',
+      inspection.crossArmCondition?.substandard ? 'Yes' : 'No',
+      inspection.crossArmCondition?.others ? 'Yes' : 'No',
+      inspection.crossArmCondition?.notes || 'N/A',
+      // Insulator Condition
+      inspection.insulatorCondition?.brokenOrCracked ? 'Yes' : 'No',
+      inspection.insulatorCondition?.burntOrFlashOver ? 'Yes' : 'No',
+      inspection.insulatorCondition?.shattered ? 'Yes' : 'No',
+      inspection.insulatorCondition?.defectiveBinding ? 'Yes' : 'No',
+      inspection.insulatorCondition?.notes || 'N/A',
+      // Conductor Condition
+      inspection.conductorCondition?.looseConnectors ? 'Yes' : 'No',
+      inspection.conductorCondition?.weakJumpers ? 'Yes' : 'No',
+      inspection.conductorCondition?.burntLugs ? 'Yes' : 'No',
+      inspection.conductorCondition?.saggedLine ? 'Yes' : 'No',
+      inspection.conductorCondition?.undersized ? 'Yes' : 'No',
+      inspection.conductorCondition?.notes || 'N/A',
+      // Lightning Arrester Condition
+      inspection.lightningArresterCondition?.brokenOrCracked ? 'Yes' : 'No',
+      inspection.lightningArresterCondition?.flashOver ? 'Yes' : 'No',
+      inspection.lightningArresterCondition?.noEarthing ? 'Yes' : 'No',
+      inspection.lightningArresterCondition?.bypassed ? 'Yes' : 'No',
+      inspection.lightningArresterCondition?.noArrester ? 'Yes' : 'No',
+      inspection.lightningArresterCondition?.notes || 'N/A',
+      inspection.inspector.name
+    ]);
     
     const csvContent = [
       headers.join(','),
-      data.join(',')
+      ...csvRows.map(row => row.map(cell => {
+        // Escape commas and quotes in cell values
+        const stringCell = String(cell);
+        if (stringCell.includes(',') || stringCell.includes('"') || stringCell.includes('\n')) {
+          return `"${stringCell.replace(/"/g, '""')}"`;
+        }
+        return stringCell;
+      }).join(','))
     ].join('\n');
     
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -397,26 +458,89 @@ export function OverheadLineInspectionsTable({
   const exportAllToCSV = () => {
     const headers = [
       'Region', 'District', 'Feeder Name', 'Voltage Level', 'Reference Pole',
-      'Status', 'Date', 'Pole ID', 'Pole Height', 'Pole Type', 'Pole Location'
+      'Status', 'Date', 'Pole ID', 'Pole Height', 'Pole Type', 'Pole Location',
+      'GPS Location',
+      // Pole Condition
+      'Pole Tilted', 'Pole Rotten', 'Pole Burnt', 'Pole Substandard', 'Pole Conflict with LV', 'Pole Condition Notes',
+      // Stay Condition
+      'Stay Required but Not Available', 'Stay Cut', 'Stay Misaligned', 'Stay Defective', 'Stay Condition Notes',
+      // Cross Arm Condition
+      'Cross Arm Misaligned', 'Cross Arm Bend', 'Cross Arm Corroded', 'Cross Arm Substandard', 'Cross Arm Others', 'Cross Arm Notes',
+      // Insulator Condition
+      'Insulator Broken/Cracked', 'Insulator Burnt/Flash Over', 'Insulator Shattered', 'Insulator Defective Binding', 'Insulator Notes',
+      // Conductor Condition
+      'Conductor Loose Connectors', 'Conductor Weak Jumpers', 'Conductor Burnt Lugs', 'Conductor Sagged Line', 'Conductor Undersized', 'Conductor Notes',
+      // Lightning Arrester Condition
+      'Arrester Broken/Cracked', 'Arrester Flash Over', 'Arrester No Earthing', 'Arrester Bypassed', 'Arrester No Arrester', 'Arrester Notes',
+      'Inspector Name'
     ];
     
     const csvRows = inspections.map(inspection => [
       inspection.region || 'Unknown',
       inspection.district || 'Unknown',
-          inspection.feederName,
-          inspection.voltageLevel,
-          inspection.referencePole,
+      inspection.feederName,
+      inspection.voltageLevel,
+      inspection.referencePole,
       inspection.status,
       inspection.date || format(new Date(), 'dd/MM/yyyy'),
       inspection.poleId,
       inspection.poleHeight,
       inspection.poleType,
-      inspection.poleLocation
+      inspection.poleLocation,
+      `${inspection.latitude}, ${inspection.longitude}`,
+      // Pole Condition
+      inspection.poleCondition?.tilted ? 'Yes' : 'No',
+      inspection.poleCondition?.rotten ? 'Yes' : 'No',
+      inspection.poleCondition?.burnt ? 'Yes' : 'No',
+      inspection.poleCondition?.substandard ? 'Yes' : 'No',
+      inspection.poleCondition?.conflictWithLV ? 'Yes' : 'No',
+      inspection.poleCondition?.notes || 'N/A',
+      // Stay Condition
+      inspection.stayCondition?.requiredButNotAvailable ? 'Yes' : 'No',
+      inspection.stayCondition?.cut ? 'Yes' : 'No',
+      inspection.stayCondition?.misaligned ? 'Yes' : 'No',
+      inspection.stayCondition?.defectiveStay ? 'Yes' : 'No',
+      inspection.stayCondition?.notes || 'N/A',
+      // Cross Arm Condition
+      inspection.crossArmCondition?.misaligned ? 'Yes' : 'No',
+      inspection.crossArmCondition?.bend ? 'Yes' : 'No',
+      inspection.crossArmCondition?.corroded ? 'Yes' : 'No',
+      inspection.crossArmCondition?.substandard ? 'Yes' : 'No',
+      inspection.crossArmCondition?.others ? 'Yes' : 'No',
+      inspection.crossArmCondition?.notes || 'N/A',
+      // Insulator Condition
+      inspection.insulatorCondition?.brokenOrCracked ? 'Yes' : 'No',
+      inspection.insulatorCondition?.burntOrFlashOver ? 'Yes' : 'No',
+      inspection.insulatorCondition?.shattered ? 'Yes' : 'No',
+      inspection.insulatorCondition?.defectiveBinding ? 'Yes' : 'No',
+      inspection.insulatorCondition?.notes || 'N/A',
+      // Conductor Condition
+      inspection.conductorCondition?.looseConnectors ? 'Yes' : 'No',
+      inspection.conductorCondition?.weakJumpers ? 'Yes' : 'No',
+      inspection.conductorCondition?.burntLugs ? 'Yes' : 'No',
+      inspection.conductorCondition?.saggedLine ? 'Yes' : 'No',
+      inspection.conductorCondition?.undersized ? 'Yes' : 'No',
+      inspection.conductorCondition?.notes || 'N/A',
+      // Lightning Arrester Condition
+      inspection.lightningArresterCondition?.brokenOrCracked ? 'Yes' : 'No',
+      inspection.lightningArresterCondition?.flashOver ? 'Yes' : 'No',
+      inspection.lightningArresterCondition?.noEarthing ? 'Yes' : 'No',
+      inspection.lightningArresterCondition?.bypassed ? 'Yes' : 'No',
+      inspection.lightningArresterCondition?.noArrester ? 'Yes' : 'No',
+      inspection.lightningArresterCondition?.notes || 'N/A',
+      inspection.inspector.name
     ]);
     
     const csvContent = [
       headers.join(','),
-      ...csvRows.map(row => row.join(','))
+      ...csvRows.map(row => row.map(cell => {
+        // Escape commas and quotes in cell values
+        const stringCell = String(cell);
+        if (stringCell.includes(',') || stringCell.includes('"') || stringCell.includes('\n')) {
+          return `"${stringCell.replace(/"/g, '""')}"`;
+        }
+        return stringCell;
+      }).join(','))
     ].join('\n');
     
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });

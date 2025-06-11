@@ -2,7 +2,7 @@ import { Layout } from "@/components/layout/Layout";
 import { MusicManager } from "@/components/admin/MusicManager";
 import { PageHeader } from "@/components/ui/page-header";
 
-export function MusicManagementPage() {
+export default function MusicManagementPage() {
   return (
     <Layout>
       <PageHeader

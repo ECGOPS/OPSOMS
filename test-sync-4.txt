@@ -1,2 +1,0 @@
-This is a fourth test file to verify the automatic sync is working with the new Ed25519 SSH key.
-Created at: 2024-03-19 

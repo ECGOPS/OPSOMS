@@ -55,7 +55,7 @@ export default function HomePage() {
               Power Distribution Fault Management System
             </h1>
             <p className="text-xl">
-              A comprehensive solution for the Electricity Company of Ghana to manage power distribution faults efficiently across the country.
+              A comprehensive solution for the Electricity Company of Ghana to manage power distribution faults efficiently across ECG operational areas.
             </p>
             <div className="flex flex-wrap gap-4">
               <Button asChild size="lg" className="bg-ecg-gold text-black hover:bg-ecg-gold/90">

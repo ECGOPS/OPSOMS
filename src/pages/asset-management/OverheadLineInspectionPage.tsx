@@ -125,7 +125,10 @@ export default function OverheadLineInspectionPage() {
     
     // Apply region filter (for global engineer and admin)
     if (selectedRegion && (user?.role === 'global_engineer' || user?.role === 'system_admin')) {
-      filtered = filtered.filter(inspection => inspection.region === selectedRegion);
+      const selectedRegionName = regions.find(r => r.id === selectedRegion)?.name;
+      if (selectedRegionName) {
+        filtered = filtered.filter(inspection => inspection.region === selectedRegionName);
+      }
     }
     
     // Apply district filter (for regional engineer and above)
@@ -133,11 +136,14 @@ export default function OverheadLineInspectionPage() {
         (user?.role === 'global_engineer' || 
          user?.role === 'system_admin' || 
          user?.role === 'regional_engineer')) {
-      filtered = filtered.filter(inspection => inspection.district === selectedDistrict);
+      const selectedDistrictName = districts.find(d => d.id === selectedDistrict)?.name;
+      if (selectedDistrictName) {
+        filtered = filtered.filter(inspection => inspection.district === selectedDistrictName);
+      }
     }
     
     return filtered;
-  }, [overheadLineInspections, offlineInspections, user, selectedDate, selectedMonth, selectedRegion, selectedDistrict]);
+  }, [overheadLineInspections, offlineInspections, user, selectedDate, selectedMonth, selectedRegion, selectedDistrict, regions, districts]);
 
   // Calculate pagination
   const totalPages = Math.ceil(filteredInspections.length / pageSize);
