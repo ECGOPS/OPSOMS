@@ -478,9 +478,9 @@ export function OverheadLineInspectionsTable({
     const csvRows = inspections.map(inspection => [
       inspection.region || 'Unknown',
       inspection.district || 'Unknown',
-      inspection.feederName,
-      inspection.voltageLevel,
-      inspection.referencePole,
+          inspection.feederName,
+          inspection.voltageLevel,
+          inspection.referencePole,
       inspection.status,
       inspection.date || format(new Date(), 'dd/MM/yyyy'),
       inspection.poleId,

@@ -332,37 +332,29 @@ export default function OverheadLineInspectionPage() {
               />
               {/* Pagination Controls */}
               {totalPages > 1 && (
-                <Pagination className="mt-4">
-                  <PaginationContent>
-                    <PaginationItem>
-                      <PaginationPrevious
-                        href="#"
-                        onClick={e => { e.preventDefault(); setCurrentPage(p => Math.max(1, p - 1)); }}
-                        aria-disabled={currentPage === 1}
-                        className={currentPage === 1 ? 'pointer-events-none opacity-50' : ''}
-                      />
-                    </PaginationItem>
-                    {Array.from({ length: totalPages }, (_, i) => (
-                      <PaginationItem key={i}>
-                        <PaginationLink
-                          href="#"
-                          isActive={currentPage === i + 1}
-                          onClick={e => { e.preventDefault(); setCurrentPage(i + 1); }}
-                        >
-                          {i + 1}
-                        </PaginationLink>
-                      </PaginationItem>
-                    ))}
-                    <PaginationItem>
-                      <PaginationNext
-                        href="#"
-                        onClick={e => { e.preventDefault(); setCurrentPage(p => Math.min(totalPages, p + 1)); }}
-                        aria-disabled={currentPage === totalPages}
-                        className={currentPage === totalPages ? 'pointer-events-none opacity-50' : ''}
-                      />
-                    </PaginationItem>
-                  </PaginationContent>
-                </Pagination>
+                <div className="flex items-center justify-between px-4 py-3 border-t">
+                  <div className="flex-1 text-sm text-muted-foreground">
+                    Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, filteredInspections.length)} of {filteredInspections.length} results
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                      disabled={currentPage === 1}
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                      disabled={currentPage === totalPages}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
               )}
             </TabsContent>
           </Tabs>
